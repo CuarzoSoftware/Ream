@@ -1,0 +1,35 @@
+#ifndef REGLPROCS_H
+#define REGLPROCS_H
+
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+
+namespace CZ
+{
+    struct REGLInstanceProcs
+    {
+        PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
+        PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT;
+        PFNEGLQUERYDEVICESTRINGEXTPROC eglQueryDeviceStringEXT;
+        PFNEGLQUERYDISPLAYATTRIBEXTPROC eglQueryDisplayAttribEXT;
+        PFNEGLDEBUGMESSAGECONTROLKHRPROC eglDebugMessageControlKHR;
+    };
+
+    struct REGLDeviceFunctions
+    {
+        PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR;
+        PFNEGLDESTROYIMAGEKHRPROC eglDestroyImageKHR;
+        PFNEGLQUERYDMABUFFORMATSEXTPROC eglQueryDmaBufFormatsEXT;
+        PFNEGLQUERYDMABUFMODIFIERSEXTPROC eglQueryDmaBufModifiersEXT;
+        PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
+        PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC glEGLImageTargetRenderbufferStorageOES;
+        PFNEGLCREATESYNCKHRPROC eglCreateSyncKHR;
+        PFNEGLDESTROYSYNCKHRPROC eglDestroySyncKHR;
+        PFNEGLWAITSYNCKHRPROC eglWaitSyncKHR;
+        PFNEGLDUPNATIVEFENCEFDANDROIDPROC eglDupNativeFenceFDANDROID;
+    };
+};
+
+#endif // REGLPROCS_H
