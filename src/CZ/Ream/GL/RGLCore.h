@@ -8,17 +8,23 @@
 class CZ::RGLCore : public RCore
 {
 public:
-    const REGLInstanceExtensions &instanceEGLExtensions() const noexcept { return m_instanceEGLExtensions; }
-    const REGLInstanceProcs &instanceEGLProcs() const noexcept { return m_instanceEGLProcs; }
+    ~RGLCore();
+    void bindDevice(RDevice *device = nullptr) noexcept override;
+    const std::vector<RGLDevice*> &devices() const noexcept { return (const std::vector<RGLDevice*>&)m_devices; }
+    RGLDevice *mainDevice() const noexcept { return (RGLDevice*)m_mainDevice; }
+    RGLDevice *boundDevice() const noexcept { return (RGLDevice*)m_boundDevice; }
+    const REGLClientExtensions &clientEGLExtensions() const noexcept { return m_clientEGLExtensions; }
+    const REGLClientProcs &clientEGLProcs() const noexcept { return m_clientEGLProcs; }
 private:
     friend class RCore;
     bool init() noexcept override;
-    bool initInstanceEGLExtensions() noexcept;
-    bool initInstanceEGLProcs() noexcept;
-    RGLCore(const Options &options) noexcept;
+    bool initClientEGLExtensions() noexcept;
+    bool initDevices() noexcept;
 
-    REGLInstanceExtensions m_instanceEGLExtensions {};
-    REGLInstanceProcs m_instanceEGLProcs {};
+    void unitDevices() noexcept;
+    RGLCore(const Options &options) noexcept;
+    REGLClientExtensions m_clientEGLExtensions {};
+    REGLClientProcs m_clientEGLProcs {};
 };
 
 #endif // RGLCORE_H

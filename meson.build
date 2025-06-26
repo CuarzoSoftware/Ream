@@ -21,7 +21,11 @@ cpp = meson.get_compiler('cpp')
 pkg = import('pkgconfig')
 deps = [
     dependency('cz-core'),
-    dependency('egl', version: '>= 1.5')
+    dependency('cz-skia'),
+    dependency('egl', version: '>= 1.5'),
+    dependency('glesv2', version: '>= 3.2'),
+    dependency('libdrm', version: '>= 2.4.113'),
+    dependency('gbm', version: '>= 23.2.1')
 ]
 
 # -------------- HEADERS --------------

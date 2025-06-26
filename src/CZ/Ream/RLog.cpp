@@ -109,7 +109,7 @@ void CZ::RWarning(const std::source_location location, const char *format, ...) 
         va_start(args, format);
         vprintf(format, args);
         va_end(args);
-        fprintf(stderr, " %s %s(%d:%d) %s", location.function_name(), location.file_name(), location.line(), location.column(), BRELN);
+        fprintf(stdout, " %s %s(%d:%d) %s", location.function_name(), location.file_name(), location.line(), location.column(), BRELN);
     }
 }
 
@@ -135,7 +135,7 @@ void CZ::RDebug(const std::source_location location, const char *format, ...) no
         va_start(args, format);
         vprintf(format, args);
         va_end(args);
-        fprintf(stderr, " %s %s(%d:%d) %s", location.function_name(), location.file_name(), location.line(), location.column(), BRELN);
+        fprintf(stdout, " %s %s(%d:%d) %s", location.function_name(), location.file_name(), location.line(), location.column(), BRELN);
     }
 }
 

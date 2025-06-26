@@ -21,6 +21,12 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
         return nullptr;
     }
 
+    if (!options.platformHandle)
+    {
+        RError(RLINE, "Missing Options::platformHandle.");
+        goto fail;
+    }
+
     if (options.graphicsAPI == RGraphicsAPI::Vk)
     {
         RError(RLINE, "Vulkan API not supported.");

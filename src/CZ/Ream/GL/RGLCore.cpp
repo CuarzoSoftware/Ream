@@ -1,62 +1,28 @@
-#include "CZ/Ream/GL/EGL/REGLString.h"
+#include <CZ/Ream/GL/EGL/REGLString.h>
 #include <CZ/Ream/GL/RGLCore.h>
+#include <CZ/Ream/GL/RGLDevice.h>
+
+#include <CZ/Ream/WL/RWLPlatformHandle.h>
+
 #include <CZ/Ream/RLog.h>
 
 #include <CZ/Utils/CZStringUtils.h>
 
+#include <drm/drm_fourcc.h>
+
 #include <EGL/egl.h>
+#include <fcntl.h>
+#include <gbm.h>
 
 using namespace CZ;
 
 bool RGLCore::init() noexcept
 {
-    if (initInstanceEGLExtensions() &&
-        initInstanceEGLProcs())
+    if (initClientEGLExtensions() &&
+        initDevices())
         return true;
 
     return false;
-}
-
-bool RGLCore::initInstanceEGLExtensions() noexcept
-{
-    if (eglBindAPI(EGL_OPENGL_ES_API) == EGL_FALSE)
-    {
-        RError(RLINE, "Failed to bind OpenGL ES API.");
-        return false;
-    }
-
-    const char *extensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
-
-    if (!extensions)
-    {
-        RError(RLINE, "Failed to query instance EGL extensions.");
-        return false;
-    }
-
-    m_instanceEGLExtensions.EXT_platform_base = CZStringUtils::CheckExtension(extensions, "EGL_EXT_platform_base");
-
-    if (!m_instanceEGLExtensions.EXT_platform_base)
-    {
-        RError(RLINE, "EGL_EXT_platform_base not supported.");
-        return false;
-    }
-
-    m_instanceEGLExtensions.KHR_platform_gbm = CZStringUtils::CheckExtension(extensions, "EGL_KHR_platform_gbm");
-    m_instanceEGLExtensions.MESA_platform_gbm = CZStringUtils::CheckExtension(extensions, "EGL_MESA_platform_gbm");
-
-    if (!m_instanceEGLExtensions.KHR_platform_gbm && !m_instanceEGLExtensions.MESA_platform_gbm)
-    {
-        RError(RLINE, "EGL_KHR_platform_gbm not supported.");
-        return false;
-    }
-
-    m_instanceEGLExtensions.EXT_platform_device = CZStringUtils::CheckExtension(extensions, "EGL_EXT_platform_device");
-    m_instanceEGLExtensions.KHR_display_reference = CZStringUtils::CheckExtension(extensions, "EGL_KHR_display_reference");
-    m_instanceEGLExtensions.EXT_device_base = CZStringUtils::CheckExtension(extensions, "EGL_EXT_device_base");
-    m_instanceEGLExtensions.EXT_device_enumeration = CZStringUtils::CheckExtension(extensions, "EGL_EXT_device_enumeration");
-    m_instanceEGLExtensions.EXT_device_query = CZStringUtils::CheckExtension(extensions, "EGL_EXT_device_query");
-    m_instanceEGLExtensions.KHR_debug = CZStringUtils::CheckExtension(extensions, "EGL_KHR_debug");
-    return true;
 }
 
 static void EGLLog(EGLenum error, const char *command, EGLint type, EGLLabelKHR thread, EGLLabelKHR obj, const char *msg)
@@ -86,23 +52,70 @@ static void EGLLog(EGLenum error, const char *command, EGLint type, EGLLabelKHR 
     }
 }
 
-bool RGLCore::initInstanceEGLProcs() noexcept
+bool RGLCore::initClientEGLExtensions() noexcept
 {
-    m_instanceEGLProcs.eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC) eglGetProcAddress("eglGetPlatformDisplayEXT");
-
-    if (m_instanceEGLExtensions.EXT_device_base || m_instanceEGLExtensions.EXT_device_enumeration)
-        m_instanceEGLProcs.eglQueryDevicesEXT = (PFNEGLQUERYDEVICESEXTPROC) eglGetProcAddress("eglQueryDevicesEXT");
-
-    if (m_instanceEGLExtensions.EXT_device_base || m_instanceEGLExtensions.EXT_device_query)
+    if (eglBindAPI(EGL_OPENGL_ES_API) == EGL_FALSE)
     {
-        m_instanceEGLExtensions.EXT_device_query = 1;
-        m_instanceEGLProcs.eglQueryDeviceStringEXT = (PFNEGLQUERYDEVICESTRINGEXTPROC) eglGetProcAddress("eglQueryDeviceStringEXT");
-        m_instanceEGLProcs.eglQueryDisplayAttribEXT = (PFNEGLQUERYDISPLAYATTRIBEXTPROC) eglGetProcAddress("eglQueryDisplayAttribEXT");
+        RError(RLINE, "Failed to bind OpenGL ES API.");
+        return false;
     }
 
-    if (m_instanceEGLExtensions.KHR_debug)
+    const char *extensions = eglQueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+
+    if (!extensions)
     {
-        m_instanceEGLProcs.eglDebugMessageControlKHR = (PFNEGLDEBUGMESSAGECONTROLKHRPROC) eglGetProcAddress("eglDebugMessageControlKHR");
+        if (eglGetError() == EGL_BAD_DISPLAY)
+            RError(RLINE, "EGL_EXT_client_extensions not supported. Required to query its existence without a display.");
+        else
+            RError(RLINE, "Failed to query EGL client extensions");
+
+        return false;
+    }
+
+    auto &exts { m_clientEGLExtensions };
+    auto &procs { m_clientEGLProcs };
+
+    exts.EXT_platform_base = CZStringUtils::CheckExtension(extensions, "EGL_EXT_platform_base");
+
+    if (!exts.EXT_platform_base)
+    {
+        RError(RLINE, "EGL_EXT_platform_base not supported.");
+        return false;
+    }
+
+    procs.eglGetPlatformDisplayEXT = (PFNEGLGETPLATFORMDISPLAYEXTPROC) eglGetProcAddress("eglGetPlatformDisplayEXT");
+    exts.KHR_platform_gbm = CZStringUtils::CheckExtension(extensions, "EGL_KHR_platform_gbm");
+    exts.MESA_platform_gbm = CZStringUtils::CheckExtension(extensions, "EGL_MESA_platform_gbm");
+
+    if (m_options.platformHandle->platform() == RPlatform::DRM && !exts.KHR_platform_gbm && !exts.MESA_platform_gbm)
+    {
+        RError(RLINE, "EGL_KHR_platform_gbm not supported and is required by the DRM platform.");
+        return false;
+    }
+
+    exts.KHR_platform_wayland = CZStringUtils::CheckExtension(extensions, "EGL_KHR_platform_wayland");
+
+    if (m_options.platformHandle->platform() == RPlatform::Wayland && !exts.KHR_platform_wayland)
+    {
+        RError(RLINE, "EGL_KHR_platform_wayland not supported.");
+        return false;
+    }
+
+    exts.EXT_device_base = CZStringUtils::CheckExtension(extensions, "EGL_EXT_device_base");
+    exts.EXT_device_query = CZStringUtils::CheckExtension(extensions, "EGL_EXT_device_query");
+
+    if (exts.EXT_device_base || exts.EXT_device_query)
+    {
+        exts.EXT_device_query = true;
+        procs.eglQueryDeviceStringEXT = (PFNEGLQUERYDEVICESTRINGEXTPROC) eglGetProcAddress("eglQueryDeviceStringEXT");
+        procs.eglQueryDisplayAttribEXT = (PFNEGLQUERYDISPLAYATTRIBEXTPROC) eglGetProcAddress("eglQueryDisplayAttribEXT");
+    }
+
+    exts.KHR_debug = CZStringUtils::CheckExtension(extensions, "EGL_KHR_debug");
+
+    if (exts.KHR_debug)
+    {
+        procs.eglDebugMessageControlKHR = (PFNEGLDEBUGMESSAGECONTROLKHRPROC) eglGetProcAddress("eglDebugMessageControlKHR");
 
         const int level { REGLLogLevel() };
 
@@ -115,13 +128,49 @@ bool RGLCore::initInstanceEGLProcs() noexcept
             EGL_NONE,
         };
 
-        m_instanceEGLProcs.eglDebugMessageControlKHR(EGLLog, debugAttribs);
+        procs.eglDebugMessageControlKHR(EGLLog, debugAttribs);
+    }
+    return true;
+}
+
+bool RGLCore::initDevices() noexcept
+{
+    if (platform() == RPlatform::Wayland)
+    {
+        m_mainDevice = RGLDevice::Make(*this, -1);
+
+        if (m_mainDevice)
+            m_devices.emplace_back(m_mainDevice);
     }
 
-    return true;
+    return !m_devices.empty();
+}
+
+void RGLCore::unitDevices() noexcept
+{
+    while (!devices().empty())
+    {
+        delete devices().back();
+        m_devices.pop_back();
+    }
 }
 
 RGLCore::RGLCore(const Options &options) noexcept : RCore(options)
 {
     m_options.graphicsAPI = RGraphicsAPI::GL;
+}
+
+RGLCore::~RGLCore()
+{
+    unitDevices();
+}
+
+void RGLCore::bindDevice(RDevice *device) noexcept
+{
+    for (auto *dev : devices())
+        eglMakeCurrent(dev->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+
+    m_boundDevice = device;
+    if (!device) return;
+    eglMakeCurrent(boundDevice()->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, boundDevice()->eglContext());
 }

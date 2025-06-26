@@ -8,16 +8,15 @@
 
 namespace CZ
 {
-    struct REGLInstanceProcs
+    struct REGLClientProcs
     {
         PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
-        PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT;
         PFNEGLQUERYDEVICESTRINGEXTPROC eglQueryDeviceStringEXT;
         PFNEGLQUERYDISPLAYATTRIBEXTPROC eglQueryDisplayAttribEXT;
         PFNEGLDEBUGMESSAGECONTROLKHRPROC eglDebugMessageControlKHR;
     };
 
-    struct REGLDeviceFunctions
+    struct REGLDisplayProcs
     {
         PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR;
         PFNEGLDESTROYIMAGEKHRPROC eglDestroyImageKHR;
