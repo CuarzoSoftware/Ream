@@ -3,6 +3,7 @@
 
 #include <CZ/Ream/RObject.h>
 #include <CZ/CZWeak.h>
+#include <memory>
 #include <string>
 
 namespace CZ
@@ -30,7 +31,10 @@ public:
 
     RCore &core() const noexcept { return m_core; }
     RGLDevice *asGL() noexcept;
+
 protected:
+    friend class RSurface;
+    virtual RPainter *painter() const noexcept = 0;
     RDevice(RCore &core) noexcept :
         m_core(core) {};
     RCore &m_core;
@@ -38,6 +42,7 @@ protected:
     std::string m_drmNode;
     gbm_device *m_gbmDevice { nullptr };
     CZWeak<SRMDevice> m_srmDevice;
+    std::shared_ptr<RGLPainter> m_painter;
 };
 
 #endif // RDEVICE_H

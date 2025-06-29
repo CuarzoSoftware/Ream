@@ -4,7 +4,7 @@
 
 using namespace CZ;
 
-std::shared_ptr<RImage> RImage::MakeFromPixels(const MakeFromPixelsParams &params, RDevice *allocator) noexcept
+std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &params, RDevice *allocator) noexcept
 {
     auto core { RCore::Get() };
 
@@ -14,6 +14,11 @@ std::shared_ptr<RImage> RImage::MakeFromPixels(const MakeFromPixelsParams &param
         return RGLImage::MakeFromPixels(params, (RGLDevice*)allocator);
 
     return {};
+}
+
+std::shared_ptr<RGLImage> RImage::asGL() const noexcept
+{
+    return std::dynamic_pointer_cast<RGLImage>(m_self.lock());
 }
 
 RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RDRMFormat &format) noexcept :

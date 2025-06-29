@@ -1,7 +1,8 @@
-#include "Utils/CZStringUtils.h"
+#include <Utils/CZStringUtils.h>
 #include <CZ/Ream/WL/RWLPlatformHandle.h>
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <CZ/Ream/GL/RGLCore.h>
+#include <CZ/Ream/GL/RGLPainter.h>
 #include <CZ/Ream/RLog.h>
 #include <fcntl.h>
 #include <gbm.h>
@@ -70,7 +71,8 @@ bool RGLDevice::initWL() noexcept
         initEGLDisplayExtensions() &&
         initEGLContext() &&
         initGLExtensions() &&
-        initEGLDisplayProcs())
+        initEGLDisplayProcs() &&
+        initPainter())
         return true;
 
     return false;
@@ -287,4 +289,15 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
     }
 
     return true;
+}
+
+bool RGLDevice::initPainter() noexcept
+{
+    m_painter = RGLPainter::Make(this);
+    return m_painter != nullptr;
+}
+
+RPainter *RGLDevice::painter() const noexcept
+{
+    return m_painter.get();
 }

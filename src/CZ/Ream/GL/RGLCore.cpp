@@ -1,4 +1,4 @@
-#include <CZ/Ream/GL/EGL/REGLString.h>
+#include <CZ/Ream/GL/RGLStrings.h>
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLDevice.h>
 
@@ -35,19 +35,19 @@ static void EGLLog(EGLenum error, const char *command, EGLint type, EGLLabelKHR 
     switch (type)
     {
     case EGL_DEBUG_MSG_CRITICAL_KHR:
-        RFatal(format, command, REGLString::Error(error), error, msg);
+        RFatal(format, command, RGLStrings::EGLError(error), error, msg);
         break;
     case EGL_DEBUG_MSG_ERROR_KHR:
-        RError(format, command, REGLString::Error(error), error, msg);
+        RError(format, command, RGLStrings::EGLError(error), error, msg);
         break;
     case EGL_DEBUG_MSG_WARN_KHR:
-        RWarning(format, command, REGLString::Error(error), error, msg);
+        RWarning(format, command, RGLStrings::EGLError(error), error, msg);
         break;
     case EGL_DEBUG_MSG_INFO_KHR:
-        RDebug(format, command, REGLString::Error(error), error, msg);
+        RDebug(format, command, RGLStrings::EGLError(error), error, msg);
         break;
     default:
-        RDebug(format, command, REGLString::Error(error), error, msg);
+        RDebug(format, command, RGLStrings::EGLError(error), error, msg);
         break;
     }
 }
@@ -165,12 +165,8 @@ RGLCore::~RGLCore()
     unitDevices();
 }
 
-void RGLCore::bindDevice(RDevice *device) noexcept
+void RGLCore::unbindCurrentThread() noexcept
 {
-    for (auto *dev : devices())
-        eglMakeCurrent(dev->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-
-    m_boundDevice = device;
-    if (!device) return;
-    eglMakeCurrent(boundDevice()->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, boundDevice()->eglContext());
+    for (auto *device : devices())
+        eglMakeCurrent(device->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 }

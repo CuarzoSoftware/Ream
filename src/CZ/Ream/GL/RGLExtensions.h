@@ -1,8 +1,10 @@
-#ifndef REGLEXTENSIONS_H
-#define REGLEXTENSIONS_H
+#ifndef RGLEXTENSIONS_H
+#define RGLEXTENSIONS_H
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 namespace CZ
 {
@@ -50,6 +52,28 @@ namespace CZ
         bool OES_EGL_sync;
         bool OES_surfaceless_context;
     };
+
+    struct REGLClientProcs
+    {
+        PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
+        PFNEGLQUERYDEVICESTRINGEXTPROC eglQueryDeviceStringEXT;
+        PFNEGLQUERYDISPLAYATTRIBEXTPROC eglQueryDisplayAttribEXT;
+        PFNEGLDEBUGMESSAGECONTROLKHRPROC eglDebugMessageControlKHR;
+    };
+
+    struct REGLDisplayProcs
+    {
+        PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR;
+        PFNEGLDESTROYIMAGEKHRPROC eglDestroyImageKHR;
+        PFNEGLQUERYDMABUFFORMATSEXTPROC eglQueryDmaBufFormatsEXT;
+        PFNEGLQUERYDMABUFMODIFIERSEXTPROC eglQueryDmaBufModifiersEXT;
+        PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
+        PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC glEGLImageTargetRenderbufferStorageOES;
+        PFNEGLCREATESYNCKHRPROC eglCreateSyncKHR;
+        PFNEGLDESTROYSYNCKHRPROC eglDestroySyncKHR;
+        PFNEGLWAITSYNCKHRPROC eglWaitSyncKHR;
+        PFNEGLDUPNATIVEFENCEFDANDROIDPROC eglDupNativeFenceFDANDROID;
+    };
 };
 
-#endif // REGLEXTENSIONS_H
+#endif // RGLEXTENSIONS_H

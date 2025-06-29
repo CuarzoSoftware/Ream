@@ -1,8 +1,10 @@
-#include <CZ/Ream/GL/EGL/REGLString.h>
+#include <CZ/Ream/GL/RGLStrings.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
-const char *REGLString::Error(EGLint error) noexcept
+using namespace CZ;
+
+const char *RGLStrings::EGLError(EGLint error) noexcept
 {
     switch (error)
     {

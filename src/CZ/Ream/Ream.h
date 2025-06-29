@@ -7,11 +7,15 @@ namespace CZ
 {
     /**
      * @brief DRM Four Characters Code Format.
+     *
+     * @see <drm_fourcc.h>
      */
     using RFormat = UInt32;
 
     /**
      * @brief DRM Four Characters Code Modifier.
+     *
+     * @see <drm_fourcc.h>
      */
     using RModifier = UInt64;
 
@@ -23,10 +27,15 @@ namespace CZ
     class RCore;
     class RDevice;
     class RImage;
+    class RSurface;
+    class RPainter;
 
     class RGLCore;
     class RGLDevice;
     class RGLImage;
+    class RGLPainter;
+    class RGLStrings;
+    class RGLMakeCurrent;
 
     enum class RGraphicsAPI
     {
@@ -39,6 +48,12 @@ namespace CZ
     {
         DRM,
         Wayland
+    };
+
+    enum class RFilterMode
+    {
+        Nearest,
+        Linear
     };
 }
 

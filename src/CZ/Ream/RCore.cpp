@@ -37,12 +37,22 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
         auto core { std::shared_ptr<RCore>(new RGLCore(options)) };
 
         if (core->init())
+        {
+            s_core = core;
             return core;
+        }
     }
 
 fail:
     RFatal(RLINE, "Failed to create RCore.");
     return nullptr;
+}
+
+std::shared_ptr<RGLCore> RCore::asGL() noexcept
+{
+    if (graphicsAPI() == RGraphicsAPI::GL)
+        return std::static_pointer_cast<RGLCore>(s_core.lock());
+    return {};
 }
 
 std::shared_ptr<CZ::RCore> RCore::Get() noexcept

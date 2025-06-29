@@ -1,8 +1,7 @@
 #ifndef RGLDEVICE_H
 #define RGLDEVICE_H
 
-#include <CZ/Ream/GL/EGL/REGLProcs.h>
-#include <CZ/Ream/GL/EGL/REGLExtensions.h>
+#include <CZ/Ream/GL/RGLExtensions.h>
 #include <CZ/Ream/RDevice.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -18,7 +17,6 @@ public:
     const REGLDisplayExtensions &eglDisplayExtensions() const noexcept { return m_eglDisplayExtensions; }
     const REGLDeviceExtensions &eglDeviceExtensions() const noexcept { return m_eglDeviceExtensions; }
     const RGLExtensions &glExtensions() const noexcept { return m_glExtensions; }
-
 private:
     friend class RGLCore;
     static RGLDevice *Make(RGLCore &core, int drmFd) noexcept;
@@ -31,6 +29,9 @@ private:
     bool initEGLContext() noexcept;
     bool initGLExtensions() noexcept;
     bool initEGLDisplayProcs() noexcept;
+    bool initPainter() noexcept;
+
+    RPainter *painter() const noexcept override;
 
     EGLDisplay m_eglDisplay { EGL_NO_DISPLAY };
     EGLDeviceEXT m_eglDevice { EGL_NO_DEVICE_EXT };

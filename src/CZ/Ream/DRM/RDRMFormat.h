@@ -2,6 +2,7 @@
 #define RDRMFORMAT_H
 
 #include <CZ/Ream/Ream.h>
+#include <CZ/Utils/CZMathUtils.h>
 
 namespace CZ
 {
@@ -53,6 +54,56 @@ namespace CZ
          * @brief `true` if the format includes an alpha channel.
          */
         bool alpha;
+
+        /**
+         * @brief Returns the total number of pixels covered by a single block.
+         *
+         * This is calculated as blockWidth × blockHeight.
+         */
+        constexpr UInt32 pixelsPerBlock() const noexcept
+        {
+            return blockWidth * blockHeight;
+        }
+
+        /**
+         * @brief Computes the number of blocks required to cover a given image width.
+         *
+         * This uses ceiling division to ensure partial blocks are counted.
+         * Important for compressed formats where data is grouped in blocks of multiple pixels.
+         *
+         * @param width Image width in pixels.
+         * @return Number of horizontal blocks needed to cover the width.
+         */
+        constexpr UInt32 blocksPerRow(UInt32 width) const noexcept
+        {
+            return CZMathUtils::DivCeil(width, blockWidth);
+        }
+
+        /**
+         * @brief Calculates the minimum required stride (in bytes) for a given image width.
+         *
+         * The stride must be at least this value to ensure a full row of image data can be represented in memory.
+         * This value is based on the number of blocks per row and the number of bytes per block.
+         *
+         * @param width Image width in pixels.
+         * @return Minimum stride in bytes needed to accommodate the image width.
+         */
+        constexpr UInt32 minStride(UInt32 width) const noexcept
+        {
+            return blocksPerRow(width) * bytesPerBlock;
+        }
+
+        /**
+         * @brief Validates whether the provided stride matches the alignment and is sufficient for the image width.
+         *
+         * @param width Image width in pixels.
+         * @param stride Stride in bytes.
+         * @return `true` if stride is valid; `false` otherwise.
+         */
+        constexpr bool validateStride(UInt32 width, UInt32 stride) const noexcept
+        {
+            return (stride % bytesPerBlock) == 0 && stride >= minStride(width);
+        }
     };
 
     struct RDRMFormat

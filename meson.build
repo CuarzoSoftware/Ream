@@ -19,13 +19,18 @@ HEADERS_INSTALL_PATH = join_paths(get_option('prefix'), get_option('includedir')
 
 cpp = meson.get_compiler('cpp')
 pkg = import('pkgconfig')
+drm_dep = dependency('libdrm', version: '>= 2.4.113')
+drm_headers_dep = drm_dep.partial_dependency(compile_args: true, includes: true)
+egl_dep = dependency('egl', version: '>= 1.5')
+gles2_dep = dependency('glesv2', version: '>= 3.2')
+skia_dep = dependency('cz-skia')
 deps = [
     dependency('cz-core'),
-    dependency('cz-skia'),
-    dependency('egl', version: '>= 1.5'),
-    dependency('glesv2', version: '>= 3.2'),
-    dependency('libdrm', version: '>= 2.4.113'),
-    dependency('gbm', version: '>= 23.2.1')
+    dependency('gbm', version: '>= 23.2.1'),
+    skia_dep,
+    gles2_dep,
+    egl_dep,
+    drm_dep
 ]
 
 # -------------- HEADERS --------------
@@ -50,7 +55,7 @@ cz_ream = library(
     install : true)
 
 cz_ream_dep = declare_dependency(
-    dependencies: [],
+    dependencies: [drm_headers_dep],
     include_directories : ['src', 'src/CZ/Ream'],
     link_with : cz_ream)
 

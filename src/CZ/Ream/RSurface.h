@@ -1,0 +1,40 @@
+#ifndef RSURFACE_H
+#define RSURFACE_H
+
+#include <CZ/CZTransform.h>
+#include <CZ/skia/core/SkRect.h>
+#include <CZ/Ream/RObject.h>
+#include <memory>
+
+class CZ::RSurface : public RObject
+{
+public:
+    static std::shared_ptr<RSurface> WrapImage(std::shared_ptr<RImage> image, Int32 scale = 1) noexcept;
+
+    RPainter *painter(RDevice *device = nullptr) const noexcept;
+    std::shared_ptr<RImage> image() const noexcept { return m_image; }
+
+    // Size (may differ from the image size if scale != 1 or the transform contains a 90° rotation)
+    SkISize size() const noexcept { return m_size; }
+
+    // Image scale factor
+    Int32 scale() const noexcept { return m_scale; }
+
+    // Position of the surface in the world
+    SkIPoint pos() const noexcept {return m_pos; }
+
+    // Transform
+    CZTransform transform() const noexcept { return m_transform; }
+private:
+    RSurface(std::shared_ptr<RImage> image, Int32 scale) noexcept :
+        m_image(image), m_scale(scale) {};
+    void calculateSizeFromImage() noexcept;
+    std::shared_ptr<RImage> m_image;
+    SkIPoint m_pos {};
+    SkISize m_size {};
+    Int32 m_scale { 1 };
+    CZTransform m_transform { CZTransform::Normal };
+    std::weak_ptr<RSurface> m_self;
+};
+
+#endif // RSURFACE_H

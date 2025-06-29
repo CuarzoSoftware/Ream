@@ -13,26 +13,62 @@ namespace CZ
         GLuint id;
         GLenum target;
     };
+
+    struct RGLFramebufferInfo
+    {
+        GLuint id;
+        SkISize size {};
+        RFormat format;
+    };
 }
 
 class CZ::RGLImage : public RImage
 {
 public:
-    static std::shared_ptr<RGLImage> MakeFromPixels(const MakeFromPixelsParams &params, RGLDevice *allocator = nullptr) noexcept;
+    /**
+     * @brief Returns the OpenGL texture id and target for the current device.
+     *
+     * @returns {0, 0} if no device is bound or the image couldn't be imported.
+     */
+    RGLTexture texture(RGLDevice *device = nullptr) const noexcept;
+    std::optional<GLuint> framebuffer(RGLDevice *device = nullptr) const noexcept;
+
+    static std::shared_ptr<RGLImage> MakeFromPixels(const RPixelBufferInfo &params, RGLDevice *allocator = nullptr) noexcept;
+    static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
+
+    bool writePixels(const RPixelBufferRegion &region) noexcept override;
+
+    RGLDevice *allocator() const noexcept
+    {
+        return (RGLDevice*)m_allocator;
+    }
 
 private:
     struct DeviceData
     {
         RGLTexture texture {};
-        GLuint rbo;
-        GLuint fb;
+        CZOwnership textureOwnership { CZOwnership::Borrow };
+
+        GLuint rbo { 0 };
+        CZOwnership rboOwnership { CZOwnership::Borrow };
+
+        GLuint fb { 0 };
+        CZOwnership fbOwnership { CZOwnership::Borrow };
+        bool hasFb { false };
+
         EGLImage image { EGL_NO_IMAGE };
-        RGLDevice *device;
+        RGLDevice *device { nullptr };
     };
 
-    RGLImage();
+    struct DeviceDataMap : public std::unordered_map<RGLDevice*, DeviceData>
+    {
+        ~DeviceDataMap() noexcept;
+    };
+
+    RGLImage(std::shared_ptr<RCore> core, RGLDevice *device, SkISize size, const RDRMFormat &format) noexcept
+        : RImage(core, (RDevice*)device, size, format) {}
     RGLFormat m_glFormat;
-    std::unordered_map<RGLDevice*, DeviceData> m_devicesData;
+    DeviceDataMap m_devicesMap;
 };
 
 #endif // RGLIMAGE_H

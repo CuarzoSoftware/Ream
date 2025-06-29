@@ -17,28 +17,26 @@ public:
     static std::shared_ptr<RCore> Make(const Options &options) noexcept;
     static std::shared_ptr<RCore> Get() noexcept;
 
-    virtual void bindDevice(RDevice *device = nullptr) = 0;
-
     const std::vector<RDevice*> &devices() const noexcept { return m_devices; }
     RDevice *mainDevice() const noexcept { return m_mainDevice; }
-    RDevice *boundDevice() const noexcept { return m_boundDevice; }
     RGraphicsAPI graphicsAPI() const noexcept { return options().graphicsAPI; }
     RPlatform platform() const noexcept { return options().platformHandle->platform(); }
     const Options &options() const noexcept { return m_options; }
 
-    RGLCore *asGL() noexcept
-    {
-        if (graphicsAPI() == RGraphicsAPI::GL)
-            return (RGLCore*)this;
-        return nullptr;
-    }
+    virtual void unbindCurrentThread() noexcept = 0;
 
+    /**
+     * @brief Attempts to cast this RCore instance to an RGLCore.
+     *
+     * @return A shared pointer to RGLCore if this object is an instance of RGLCore,
+     *         or `nullptr` otherwise.
+     */
+    std::shared_ptr<RGLCore> asGL() noexcept;
 protected:
     RCore(const Options &options) noexcept;
     virtual bool init() noexcept = 0;
     Options m_options;
     RDevice *m_mainDevice { nullptr };
-    RDevice *m_boundDevice { nullptr };
     std::vector<RDevice*> m_devices;
 };
 
