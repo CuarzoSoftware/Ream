@@ -7,7 +7,7 @@ std::shared_ptr<RWLPlatformHandle> RWLPlatformHandle::Make(wl_display *wlDisplay
 {
     if (!wlDisplay)
     {
-        RError(RLINE, "Invalid wl_display handle.");
+        RError(CZLN, "Invalid wl_display handle.");
         return nullptr;
     }
 

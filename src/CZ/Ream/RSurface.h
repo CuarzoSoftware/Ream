@@ -25,9 +25,10 @@ public:
 
     // Transform
     CZTransform transform() const noexcept { return m_transform; }
+
+    ~RSurface() noexcept;
 private:
-    RSurface(std::shared_ptr<RImage> image, Int32 scale) noexcept :
-        m_image(image), m_scale(scale) {};
+    RSurface(std::shared_ptr<RImage> image, Int32 scale) noexcept;;
     void calculateSizeFromImage() noexcept;
     std::shared_ptr<RImage> m_image;
     SkIPoint m_pos {};

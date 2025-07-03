@@ -3,18 +3,23 @@
 
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/GL/RGLExtensions.h>
+#include <thread>
 
 class CZ::RGLCore : public RCore
 {
 public:
-    ~RGLCore();
-    void unbindCurrentThread() noexcept override;
+    ~RGLCore();        
     const std::vector<RGLDevice*> &devices() const noexcept { return (const std::vector<RGLDevice*>&)m_devices; }
     RGLDevice *mainDevice() const noexcept { return (RGLDevice*)m_mainDevice; }
     const REGLClientExtensions &clientEGLExtensions() const noexcept { return m_clientEGLExtensions; }
     const REGLClientProcs &clientEGLProcs() const noexcept { return m_clientEGLProcs; }
+
+    void clearGarbage() noexcept override;
+    void freeThread() noexcept;
 private:
     friend class RCore;
+    friend struct RGLThreadDataManager;
+    friend class RGLContextDataManager;
     bool init() noexcept override;
     bool initClientEGLExtensions() noexcept;
     bool initDevices() noexcept;
@@ -23,6 +28,8 @@ private:
     RGLCore(const Options &options) noexcept;
     REGLClientExtensions m_clientEGLExtensions {};
     REGLClientProcs m_clientEGLProcs {};
+    std::unordered_map<std::thread::id, RGLThreadDataManager*> m_threadDataManagers;
+    std::vector<RGLContextDataManager*> m_contextDataManagers;
 };
 
 #endif // RGLCORE_H

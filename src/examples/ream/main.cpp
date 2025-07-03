@@ -34,9 +34,16 @@ struct Window
 {
     Window() noexcept;
     void update() noexcept;
+    ~Window() noexcept
+    {
+        xdg_toplevel_destroy(xdgToplevel);
+        xdg_surface_destroy(xdgSurface);
+        wl_egl_window_destroy(wlEGLWindow);
+        wl_surface_destroy(wlSurface);
+    }
 
 
-    wl_callback *wlCallback { nullptr };
+    //wl_callback *wlCallback { nullptr };
     wl_surface *wlSurface;
     xdg_surface *xdgSurface;
     xdg_toplevel *xdgToplevel;
@@ -47,8 +54,12 @@ struct Window
     SkISize bufferSize;
     int32_t scale { 1 };
     bool needsNewSurface { true };
+    bool ready { false };
 
     std::shared_ptr<RSurface> surf;
+    std::thread::id thread { std::this_thread::get_id() };
+
+
 };
 
 static wl_surface_listener wlSurfaceLis
@@ -74,7 +85,8 @@ static xdg_surface_listener xdgSurfaceLis
     {
         Window &window { *static_cast<Window*>(data) };
         xdg_surface_ack_configure(xdgSurface, serial);
-        window.update();
+        //window.update();
+        window.ready = true;
     }
 };
 
@@ -113,19 +125,25 @@ static wl_callback_listener wlCallbackLis
 {
     .done = [](void *data, wl_callback *wlCallback, uint32_t)
     {
+        /*
         Window &window { *static_cast<Window*>(data) };
         window.wlCallback = nullptr;
         window.update();
-        wl_callback_destroy(wlCallback);
+        wl_callback_destroy(wlCallback);*/
     }
 };
 
 void Window::update() noexcept
 {
+    if (!ready)
+        return;
+
     auto core { RGLCore::Get()->asGL() };
     auto dev { core->mainDevice() };
 
     bufferSize = { size.width() * scale, size.height() * scale };
+
+    auto current1 = RGLMakeCurrent::FromDevice(dev, false);
 
     if (!wlEGLWindow)
     {
@@ -136,7 +154,7 @@ void Window::update() noexcept
         eglSwapInterval(dev->eglDisplay(), 0);
     }
 
-    eglMakeCurrent(dev->eglDisplay(), eglSurface, eglSurface, dev->eglContext());
+    auto current = RGLMakeCurrent(dev->eglDisplay(), eglSurface, eglSurface, dev->eglContext());
 
     if (needsNewSurface)
     {
@@ -201,12 +219,13 @@ void Window::update() noexcept
     else
         RError("NO SURF");
 
+        /*
     if (!wlCallback)
     {
         //std::cout << "wl_surface::frame" << std::endl;
         wlCallback = wl_surface_frame(wlSurface);
         wl_callback_add_listener(wlCallback, &wlCallbackLis ,this);
-    }
+    }*/
 
     eglSwapBuffers(dev->eglDisplay(), eglSurface);
 }
@@ -257,6 +276,16 @@ static void initEGL() noexcept
 }
 
 static std::mutex mutex;
+/*
+struct Test
+{
+    ~Test() {
+
+        printf("WEAK %d\n", self.expired());
+    }
+
+    std::weak_ptr<Test> self;
+};*/
 
 int main()
 {
@@ -267,7 +296,7 @@ int main()
 
     if (!app.wlDisplay)
     {
-        RFatal(RLINE, "Failed to create wl_display.");
+        RFatal(CZLN, "Failed to create wl_display.");
         return EXIT_FAILURE;
     }
 
@@ -339,30 +368,45 @@ int main()
     info.pixels = buff.data();
 
     testImage = RImage::MakeFromPixels(info);
+    //wl_event_queue *queue = wl_display_create_queue(app.wlDisplay);
 
-    auto thread = std::thread([&core]{
+    std::thread([core]{
+
+         //usleep(3000);
         Window win {};
-        while (true)
+
+        //wl_proxy_set_queue((wl_proxy*)win.wlSurface, queue);
+
+        for (int i = 0; i < 50; i++)
         {
             mutex.lock();
+            //std::cout << "A" << std::endl;
+            //wl_display_dispatch_queue(app.wlDisplay, queue);
             wl_display_dispatch(app.wlDisplay);
-            core->unbindCurrentThread();
+            win.update();
+            core->clearGarbage();
             mutex.unlock();
+            usleep(50000);
         }
-    });
+    }).detach();
 
-    auto thread2 = std::thread([]{
+    /*
+    std::thread([]{
         usleep(3000000);
         abort();
-    });
+    }).detach();*/
 
-    while (true)
+    for (int i = 0; i < 100; i++)
     {
         mutex.lock();
+        //std::cout << "B" << std::endl;
         wl_display_dispatch(app.wlDisplay);
-        core->unbindCurrentThread();
+        win.update();
+        core->clearGarbage();
         mutex.unlock();
+        usleep(50000);
     }
 
+    core->asGL()->freeThread();
     return 0;
 }

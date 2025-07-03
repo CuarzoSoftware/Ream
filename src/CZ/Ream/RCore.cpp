@@ -7,7 +7,10 @@ using namespace CZ;
 
 static std::weak_ptr<RCore> s_core;
 
-RCore::RCore(const Options &options) noexcept : m_options(options) {}
+RCore::RCore(const Options &options) noexcept : m_options(options)
+{
+    RDebug("+ (1) RCore.");
+}
 
 std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
 {
@@ -17,34 +20,32 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
 
     if (instance)
     {
-        RWarning(RLINE, "Trying to create an RCore twice. Use RCore::Get() to retreive the current instance instead.");
+        RWarning(CZLN, "Trying to create an RCore twice. Use RCore::Get() to retreive the current instance instead.");
         return nullptr;
     }
 
     if (!options.platformHandle)
     {
-        RError(RLINE, "Missing Options::platformHandle.");
+        RError(CZLN, "Missing Options::platformHandle.");
         goto fail;
     }
 
     if (options.graphicsAPI == RGraphicsAPI::Vk)
     {
-        RError(RLINE, "Vulkan API not supported.");
+        RError(CZLN, "Vulkan API not supported.");
         goto fail;
     }
 
     {
         auto core { std::shared_ptr<RCore>(new RGLCore(options)) };
+        s_core = core;
 
         if (core->init())
-        {
-            s_core = core;
             return core;
-        }
     }
 
 fail:
-    RFatal(RLINE, "Failed to create RCore.");
+    RFatal(CZLN, "Failed to create RCore.");
     return nullptr;
 }
 
@@ -53,6 +54,11 @@ std::shared_ptr<RGLCore> RCore::asGL() noexcept
     if (graphicsAPI() == RGraphicsAPI::GL)
         return std::static_pointer_cast<RGLCore>(s_core.lock());
     return {};
+}
+
+RCore::~RCore() noexcept
+{
+    RDebug("- (0) RCore.");
 }
 
 std::shared_ptr<CZ::RCore> RCore::Get() noexcept

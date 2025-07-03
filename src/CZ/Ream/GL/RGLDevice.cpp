@@ -28,10 +28,10 @@ RGLDevice::RGLDevice(RGLCore &core, int drmFd) noexcept :
 
 RGLDevice::~RGLDevice()
 {
-    if (eglContext() != EGL_NO_CONTEXT)
+    if (m_eglContext != EGL_NO_CONTEXT)
     {
         eglMakeCurrent(eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-        eglDestroyContext(eglDisplay(), eglContext());
+        eglDestroyContext(eglDisplay(), m_eglContext);
         m_eglContext = EGL_NO_CONTEXT;
     }
 
@@ -85,7 +85,7 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
     if (eglDisplay() == EGL_NO_DISPLAY)
     {
-        RError(RLINE, "Failed to get EGL display.");
+        RError(CZLN, "Failed to get EGL display.");
         return false;
     }
 
@@ -93,7 +93,7 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
     if (!eglInitialize(eglDisplay(), &minor, &major))
     {
-        RError(RLINE, "Failed to initialize EGL display.");
+        RError(CZLN, "Failed to initialize EGL display.");
         m_eglDisplay = EGL_NO_DISPLAY;
         return false;
     }
@@ -102,7 +102,7 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
     if (!core().clientEGLExtensions().EXT_device_query)
     {
-        RWarning(RLINE, "EGL_EXT_device_query extension not available. GBM allocator disabled.");
+        RWarning(CZLN, "EGL_EXT_device_query extension not available. GBM allocator disabled.");
         return true;
     }
 
@@ -110,7 +110,7 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
     if (!core().clientEGLProcs().eglQueryDisplayAttribEXT(eglDisplay(), EGL_DEVICE_EXT, &deviceAttrib))
     {
-        RWarning(RLINE, "Failed to get EGLDevice from EGLDisplay. GBM allocator disabled.");
+        RWarning(CZLN, "Failed to get EGLDevice from EGLDisplay. GBM allocator disabled.");
         return true;
     }
 
@@ -121,7 +121,7 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
     if (!eglDeviceExtensions().EXT_device_drm_render_node)
     {
-        RWarning(RLINE, "EGL_EXT_device_drm_render_node extension not available. GBM allocator disabled.");
+        RWarning(CZLN, "EGL_EXT_device_drm_render_node extension not available. GBM allocator disabled.");
         return true;
     }
 
@@ -129,7 +129,7 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
     if (!nodeName)
     {
-        RWarning(RLINE, "Failed to get DRM node name. GBM allocator disabled.");
+        RWarning(CZLN, "Failed to get DRM node name. GBM allocator disabled.");
         return true;
     }
 
@@ -137,7 +137,7 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
     if (drmFd < 0)
     {
-        RWarning(RLINE, "Failed to open DRM node %s. GBM allocator disabled.", nodeName);
+        RWarning(CZLN, "Failed to open DRM node %s. GBM allocator disabled.", nodeName);
         return true;
     }
 
@@ -145,7 +145,7 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
     if (!gbm)
     {
-        RWarning(RLINE, "Failed to create gbm_device from DRM node %s. GBM allocator disabled.", nodeName);
+        RWarning(CZLN, "Failed to create gbm_device from DRM node %s. GBM allocator disabled.", nodeName);
         goto failGBM;
     }
 
@@ -164,7 +164,7 @@ bool RGLDevice::initEGLDisplayExtensions() noexcept
 
     if (!extensions)
     {
-        RError(RLINE, "Failed to query EGL display extensions.");
+        RError(CZLN, "Failed to query EGL display extensions.");
         return false;
     }
 
@@ -175,7 +175,7 @@ bool RGLDevice::initEGLDisplayExtensions() noexcept
 
     if (!exts.KHR_no_config_context && !exts.MESA_configless_context)
     {
-        RError(RLINE, "Required EGL extensions EGL_KHR_no_config_context and EGL_MESA_configless_context are not available.");
+        RError(CZLN, "Required EGL extensions EGL_KHR_no_config_context and EGL_MESA_configless_context are not available.");
         return false;
     }
 
@@ -183,7 +183,7 @@ bool RGLDevice::initEGLDisplayExtensions() noexcept
 
     if (!exts.KHR_surfaceless_context)
     {
-        RError(RLINE, "Required EGL extension KHR_surfaceless_context is not available.");
+        RError(CZLN, "Required EGL extension KHR_surfaceless_context is not available.");
         return false;
     }
 
@@ -205,7 +205,7 @@ bool RGLDevice::initEGLContext() noexcept
 {
     if (!eglBindAPI(EGL_OPENGL_ES_API))
     {
-        RError(RLINE, "Failed to bind OpenGL ES API.");
+        RError(CZLN, "Failed to bind OpenGL ES API.");
         return false;
     }
 
@@ -224,13 +224,13 @@ bool RGLDevice::initEGLContext() noexcept
 
     m_eglContext = eglCreateContext(eglDisplay(), EGL_NO_CONFIG_KHR, EGL_NO_CONTEXT, attribs);
 
-    if (eglContext() == EGL_NO_CONTEXT)
+    if (m_eglContext == EGL_NO_CONTEXT)
     {
-        RError(RLINE, "Failed to create shared EGL context.");
+        RError(CZLN, "Failed to create shared EGL context.");
         return 0;
     }
 
-    eglMakeCurrent(eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, eglContext());
+    eglMakeCurrent(eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, m_eglContext);
     return true;
 }
 
@@ -293,11 +293,20 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
 
 bool RGLDevice::initPainter() noexcept
 {
-    m_painter = RGLPainter::Make(this);
-    return m_painter != nullptr;
+    m_threadData = RGLContextDataManager::Make([](RGLDevice *device) -> RGLContextData *
+    {
+        return new ThreadData(device);
+    });
+
+    return painter() != nullptr;
 }
 
 RPainter *RGLDevice::painter() const noexcept
 {
-    return m_painter.get();
+    return static_cast<ThreadData*>(m_threadData->getData((RGLDevice*)this))->painter.get();
+}
+
+RGLDevice::ThreadData::ThreadData(RGLDevice *device) noexcept
+{
+    painter = RGLPainter::Make(device);
 }

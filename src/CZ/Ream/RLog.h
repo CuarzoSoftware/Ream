@@ -1,7 +1,7 @@
 #ifndef RLOG_H
 #define RLOG_H
 
-#include <CZ/Ream/Ream.h>
+#include <CZ/CZ.h>
 #include <source_location>
 
 #if DOXYGEN
@@ -11,8 +11,6 @@
 #define FORMAT_CHECK __attribute__((format(printf, 1, 2)))
 #define FORMAT_CHECK2 __attribute__((format(printf, 2, 3)))
 #endif
-
-#define RLINE std::source_location::current()
 
 namespace CZ
 {

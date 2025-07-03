@@ -115,6 +115,8 @@ public:
 
     std::shared_ptr<RGLImage> asGL() const noexcept;
 
+    ~RImage() noexcept;
+
 protected:
     RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RDRMFormat &format) noexcept;
     SkISize m_size;

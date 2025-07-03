@@ -3,7 +3,6 @@
 
 #include <CZ/Ream/RObject.h>
 #include <CZ/CZWeak.h>
-#include <memory>
 #include <string>
 
 namespace CZ
@@ -42,7 +41,6 @@ protected:
     std::string m_drmNode;
     gbm_device *m_gbmDevice { nullptr };
     CZWeak<SRMDevice> m_srmDevice;
-    std::shared_ptr<RGLPainter> m_painter;
 };
 
 #endif // RDEVICE_H

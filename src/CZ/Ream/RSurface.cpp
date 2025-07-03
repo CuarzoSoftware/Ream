@@ -1,3 +1,4 @@
+#include "CZ/Ream/RLog.h"
 #include <CZ/Ream/RSurface.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RDevice.h>
@@ -5,6 +6,8 @@
 #include <CZ/Ream/RImage.h>
 
 using namespace CZ;
+
+static UInt32 count { 0 };
 
 std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image, Int32 scale) noexcept
 {
@@ -24,6 +27,17 @@ RPainter *RSurface::painter(RDevice *device) const noexcept
 
     device->painter()->m_surface = m_self.lock();
     return device->painter();
+}
+
+RSurface::~RSurface() noexcept
+{
+    RDebug("- (%d) RSurface.", --count);
+}
+
+RSurface::RSurface(std::shared_ptr<RImage> image, Int32 scale) noexcept :
+    m_image(image), m_scale(scale)
+{
+    RDebug("+ (%d) RSurface.", ++count);
 }
 
 void RSurface::calculateSizeFromImage() noexcept

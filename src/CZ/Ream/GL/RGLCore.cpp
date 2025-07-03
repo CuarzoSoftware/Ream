@@ -16,15 +16,6 @@
 
 using namespace CZ;
 
-bool RGLCore::init() noexcept
-{
-    if (initClientEGLExtensions() &&
-        initDevices())
-        return true;
-
-    return false;
-}
-
 static void EGLLog(EGLenum error, const char *command, EGLint type, EGLLabelKHR thread, EGLLabelKHR obj, const char *msg)
 {
     CZ_UNUSED(thread);
@@ -56,7 +47,7 @@ bool RGLCore::initClientEGLExtensions() noexcept
 {
     if (eglBindAPI(EGL_OPENGL_ES_API) == EGL_FALSE)
     {
-        RError(RLINE, "Failed to bind OpenGL ES API.");
+        RError(CZLN, "Failed to bind OpenGL ES API.");
         return false;
     }
 
@@ -65,9 +56,9 @@ bool RGLCore::initClientEGLExtensions() noexcept
     if (!extensions)
     {
         if (eglGetError() == EGL_BAD_DISPLAY)
-            RError(RLINE, "EGL_EXT_client_extensions not supported. Required to query its existence without a display.");
+            RError(CZLN, "EGL_EXT_client_extensions not supported. Required to query its existence without a display.");
         else
-            RError(RLINE, "Failed to query EGL client extensions");
+            RError(CZLN, "Failed to query EGL client extensions");
 
         return false;
     }
@@ -79,7 +70,7 @@ bool RGLCore::initClientEGLExtensions() noexcept
 
     if (!exts.EXT_platform_base)
     {
-        RError(RLINE, "EGL_EXT_platform_base not supported.");
+        RError(CZLN, "EGL_EXT_platform_base not supported.");
         return false;
     }
 
@@ -89,7 +80,7 @@ bool RGLCore::initClientEGLExtensions() noexcept
 
     if (m_options.platformHandle->platform() == RPlatform::DRM && !exts.KHR_platform_gbm && !exts.MESA_platform_gbm)
     {
-        RError(RLINE, "EGL_KHR_platform_gbm not supported and is required by the DRM platform.");
+        RError(CZLN, "EGL_KHR_platform_gbm not supported and is required by the DRM platform.");
         return false;
     }
 
@@ -97,7 +88,7 @@ bool RGLCore::initClientEGLExtensions() noexcept
 
     if (m_options.platformHandle->platform() == RPlatform::Wayland && !exts.KHR_platform_wayland)
     {
-        RError(RLINE, "EGL_KHR_platform_wayland not supported.");
+        RError(CZLN, "EGL_KHR_platform_wayland not supported.");
         return false;
     }
 
@@ -163,10 +154,4 @@ RGLCore::RGLCore(const Options &options) noexcept : RCore(options)
 RGLCore::~RGLCore()
 {
     unitDevices();
-}
-
-void RGLCore::unbindCurrentThread() noexcept
-{
-    for (auto *device : devices())
-        eglMakeCurrent(device->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 }

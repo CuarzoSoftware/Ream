@@ -27,18 +27,19 @@ std::optional<GLuint> RGLImage::framebuffer(RGLDevice *device) const noexcept
     if (!device)
         device = core().asGL()->mainDevice();
 
-    auto it { m_devicesMap.find(device) };
-    if (it == m_devicesMap.end() || !it->second.hasFb)
+    auto *threadData { static_cast<ThreadDeviceData*>(m_threadDataManager->getData(device)) };
+
+    if (!threadData->hasFb)
         return {};
 
-    return it->second.fb;
+    return threadData->fb;
 }
 
 std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &params, RGLDevice *allocator) noexcept
 {
     if (!RCore::Get())
     {
-        RError(RLINE, "Cannot create an RImage without an RCore.");
+        RError(CZLN, "Cannot create an RImage without an RCore.");
         return {};
     }
 
@@ -46,7 +47,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
 
     if (!core)
     {
-        RError(RLINE, "The current RGraphicsAPI is not GL.");
+        RError(CZLN, "The current RGraphicsAPI is not GL.");
         return {};
     }
 
@@ -58,7 +59,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
 
     if (params.size.isEmpty())
     {
-        RError(RLINE, "Invalid image dimensions (%dx%d).", params.size.width(), params.size.height());
+        RError(CZLN, "Invalid image dimensions (%dx%d).", params.size.width(), params.size.height());
         return {};
     }
 
@@ -66,13 +67,13 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
 
     if (!formatInfo)
     {
-        RError(RLINE, "Unsupported image format %s.", drmGetFormatName(params.format));
+        RError(CZLN, "Unsupported image format %s.", drmGetFormatName(params.format));
         return {};
     }
 
     if (formatInfo->pixelsPerBlock() != 1)
     {
-        RError(RLINE, "Block formats are not supported: %s.", drmGetFormatName(params.format));
+        RError(CZLN, "Block formats are not supported: %s.", drmGetFormatName(params.format));
         return {};
     }
 
@@ -80,13 +81,13 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
 
     if (!glFormat)
     {
-        RError(RLINE, "Failed to find GL equivalent for format %s.", drmGetFormatName(params.format));
+        RError(CZLN, "Failed to find GL equivalent for format %s.", drmGetFormatName(params.format));
         return {};
     }
 
     if (params.pixels && !formatInfo->validateStride(params.size.width(), params.stride))
     {
-        RError(RLINE, "Invalid stride %d for width %d and alignment %d.", params.stride, params.size.width(), formatInfo->bytesPerBlock);
+        RError(CZLN, "Invalid stride %d for width %d and alignment %d.", params.stride, params.size.width(), formatInfo->bytesPerBlock);
         return {};
     }
 
@@ -94,7 +95,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
     image->m_self = image;
 
     auto current { RGLMakeCurrent::FromDevice(allocator, false) };
-    DeviceData &data { image->m_devicesMap.emplace(allocator, DeviceData{}).first->second };
+    GlobalDeviceData &data { image->m_devicesMap.emplace(allocator, GlobalDeviceData{}).first->second };
     data.textureOwnership = CZOwnership::Own;
     data.device = allocator;
     data.texture.target = GL_TEXTURE_2D;
@@ -133,7 +134,7 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 {
     if (!RCore::Get())
     {
-        RError(RLINE, "Cannot create an RImage without an RCore.");
+        RError(CZLN, "Cannot create an RImage without an RCore.");
         return {};
     }
 
@@ -141,7 +142,7 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
     if (!core)
     {
-        RError(RLINE, "The current RGraphicsAPI is not GL.");
+        RError(CZLN, "The current RGraphicsAPI is not GL.");
         return {};
     }
 
@@ -153,7 +154,7 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
     if (info.size.isEmpty())
     {
-        RError(RLINE, "Invalid image dimensions (%dx%d).", info.size.width(), info.size.height());
+        RError(CZLN, "Invalid image dimensions (%dx%d).", info.size.width(), info.size.height());
         return {};
     }
 
@@ -161,10 +162,9 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
     auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, {info.format, DRM_FORMAT_MOD_INVALID})) };
     image->m_self = image;
-    DeviceData data {};
-    data.fb = info.id;
-    data.hasFb = true;
-    image->m_devicesMap.emplace(allocator, data);
+    auto *threadData { static_cast<ThreadDeviceData*>(image->m_threadDataManager->getData(allocator)) };
+    threadData->fb = info.id;
+    threadData->hasFb = true;
     return image;
 }
 
@@ -180,7 +180,7 @@ bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
     return false;
 }
 
-RGLImage::DeviceDataMap::~DeviceDataMap() noexcept
+RGLImage::GlobalDeviceDataMap::~GlobalDeviceDataMap() noexcept
 {
     while (!empty())
     {
@@ -195,4 +195,9 @@ RGLImage::DeviceDataMap::~DeviceDataMap() noexcept
 
         erase(it);
     }
+}
+
+RGLImage::ThreadDeviceData::~ThreadDeviceData() noexcept
+{
+
 }

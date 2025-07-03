@@ -66,18 +66,21 @@ bool RGLPainter::drawImage(const SkRegion &region) noexcept
     if (region.isEmpty() || imageDstRect().isEmpty())
         return true;
 
-    if (!m_image || !m_surface || !m_surface->image())
+    auto image { m_image.lock() };
+    auto surface { m_surface.lock() };
+
+    if (!image || !surface || !surface->image())
         return false;
 
-    auto fb { m_surface->image()->asGL()->framebuffer(device()) };
+    auto fb { m_surface.lock()->image()->asGL()->framebuffer(device()) };
 
     if (!fb.has_value())
     {
-        RError(RLINE, "Invalid framebuffer");
+        RError(CZLN, "Invalid framebuffer");
         return false;
     }
 
-    auto tex { m_image->asGL()->texture(device()) };
+    auto tex { image->asGL()->texture(device()) };
 
     if (tex.id == 0)
     {
@@ -100,8 +103,8 @@ bool RGLPainter::drawImage(const SkRegion &region) noexcept
     SkScalar matVals[9];
     SkMatrix mat = SkMatrix::I();
     mat.preScale(
-        2.f / SkScalar(m_surface->size().width()),
-        2.f / SkScalar(m_surface->size().height()));
+        2.f / SkScalar(surface->size().width()),
+        2.f / SkScalar(surface->size().height()));
     mat.postTranslate(-1.0f, -1.f);
     if (fb.value() == 0)
         mat.postScale(1.f, -1.f);
@@ -123,8 +126,8 @@ bool RGLPainter::drawImage(const SkRegion &region) noexcept
         imageSrcRect().y());
 
     mat.postScale(
-        imageScale() / SkScalar(image()->size().width()),
-        imageScale() / SkScalar(image()->size().height()));
+        imageScale() / SkScalar(image->size().width()),
+        imageScale() / SkScalar(image->size().height()));
 
     //mat.postTranslate(-1.0f, -1.f);
     mat.get9(matVals);
@@ -171,7 +174,7 @@ bool RGLPainter::drawImage(const SkRegion &region) noexcept
 
     glEnableVertexAttribArray(a_pos);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vbo.data());
-    const auto size { m_surface->image()->size() };
+    const auto size { surface->image()->size() };
     glViewport(0, 0, size.width(), size.height());
     glDisable(GL_SCISSOR_TEST);
     glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);

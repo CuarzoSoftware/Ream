@@ -12,7 +12,7 @@ public:
     virtual bool drawImage(const SkRegion &region) noexcept = 0;
 
     void setImage(std::shared_ptr<RImage> image) noexcept { m_image = image; };
-    std::shared_ptr<RImage> image() const noexcept { return m_image; };
+    std::shared_ptr<RImage> image() const noexcept { return m_image.lock(); };
 
     void setImageScale(Float32 scale) noexcept
     {
@@ -34,8 +34,8 @@ public:
 protected:
     friend class RSurface;
     RPainter(RDevice *device) noexcept : m_device(device) {}
-    std::shared_ptr<RSurface> m_surface;
-    std::shared_ptr<RImage> m_image;
+    std::weak_ptr<RSurface> m_surface;
+    std::weak_ptr<RImage> m_image;
     SkRect m_imageSrcRect {};
     Float32 m_imageScale { 1.f };
     CZTransform m_imageSrcTransform { CZTransform::Normal };

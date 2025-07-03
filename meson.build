@@ -17,26 +17,23 @@ HEADERS_INSTALL_PATH = join_paths(get_option('prefix'), get_option('includedir')
 
 # -------------- DEPENDENCIES --------------
 
-cpp = meson.get_compiler('cpp')
-pkg = import('pkgconfig')
-drm_dep = dependency('libdrm', version: '>= 2.4.113')
+cpp             = meson.get_compiler('cpp')
+pkg             = import('pkgconfig')
+egl_dep         = dependency('egl', version: '>= 1.5')
+gles2_dep       = dependency('glesv2', version: '>= 3.2')
+gbm_dep         = dependency('gbm', version: '>= 23.2.1')
+drm_dep         = dependency('libdrm', version: '>= 2.4.113')
 drm_headers_dep = drm_dep.partial_dependency(compile_args: true, includes: true)
-egl_dep = dependency('egl', version: '>= 1.5')
-gles2_dep = dependency('glesv2', version: '>= 3.2')
-skia_dep = dependency('cz-skia')
-deps = [
-    dependency('cz-core'),
-    dependency('gbm', version: '>= 23.2.1'),
-    skia_dep,
-    gles2_dep,
-    egl_dep,
-    drm_dep
-]
+cz_core_dep     = dependency('cz-core')
+cz_skia_dep     = dependency('cz-skia')
 
 # -------------- HEADERS --------------
 
 header_dirs = [
-    ['./src/CZ/Ream', '']
+    ['src/CZ/Ream', ''],
+    ['src/CZ/Ream/DRM', 'DRM'],
+    ['src/CZ/Ream/GL', 'GL'],
+    ['src/CZ/Ream/WL', 'WL']
 ]
 
 foreach header_dir : header_dirs
@@ -49,13 +46,20 @@ endforeach
 cz_ream = library(
     'cz-ream',
     sources : run_command('find', './src/CZ', '-type', 'f', '-name', '*[.cpp,.c]', check : false).stdout().strip().split('\n'),
-    include_directories : ['./src'],
-    dependencies : deps,
+    include_directories : ['src'],
+    dependencies : [
+        egl_dep,
+        gles2_dep,
+        gbm_dep,
+        drm_dep,
+        cz_core_dep,
+        cz_skia_dep
+    ],
     soversion: VERSION_MAJOR,
     install : true)
 
 cz_ream_dep = declare_dependency(
-    dependencies: [drm_headers_dep],
+    dependencies: [drm_headers_dep, cz_skia_dep],
     include_directories : ['src', 'src/CZ/Ream'],
     link_with : cz_ream)
 
@@ -64,7 +68,12 @@ pkg.generate(
     name: 'cz-ream',
     description: 'C++ Library for Graphics Context and Buffer Management',
     version: meson.project_version(),
-    filebase: 'Ream',
+    filebase: 'cz-ream',
+    libraries: [
+        drm_headers_dep,
+        cz_core_dep,
+        cz_skia_dep
+    ],
     subdirs:'CZ/Ream')
 
 subdir('src/examples/ream')

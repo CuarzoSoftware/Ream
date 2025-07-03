@@ -11,6 +11,13 @@ public:
 
     static RGLMakeCurrent FromDevice(RGLDevice *device, bool keepSurfaces) noexcept;
 
+    RGLMakeCurrent() noexcept :
+        prevDisplay(eglGetCurrentDisplay()),
+        prevDraw(eglGetCurrentSurface(EGL_DRAW)),
+        prevRead(eglGetCurrentSurface(EGL_READ)),
+        prevContext(eglGetCurrentContext())
+    {}
+
     RGLMakeCurrent(EGLDisplay display, EGLSurface draw, EGLSurface read, EGLContext context) noexcept :
         prevDisplay(eglGetCurrentDisplay()),
         prevDraw(eglGetCurrentSurface(EGL_DRAW)),
@@ -29,7 +36,8 @@ public:
     {
         if (restored) return false;
         restored = true;
-        eglMakeCurrent(prevDisplay, prevDraw, prevRead, prevContext);
+        if (prevDisplay != EGL_NO_DISPLAY)
+            eglMakeCurrent(prevDisplay, prevDraw, prevRead, prevContext);
         return true;
     }
 

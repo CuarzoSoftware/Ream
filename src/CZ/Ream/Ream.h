@@ -29,6 +29,7 @@ namespace CZ
     class RImage;
     class RSurface;
     class RPainter;
+    struct RPresentationTime;
 
     class RGLCore;
     class RGLDevice;
@@ -36,6 +37,9 @@ namespace CZ
     class RGLPainter;
     class RGLStrings;
     class RGLMakeCurrent;
+    class RGLContextData;
+    class RGLContextDataManager;
+    struct RGLThreadDataManager;
 
     enum class RGraphicsAPI
     {
