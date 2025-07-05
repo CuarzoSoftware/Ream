@@ -6,12 +6,13 @@
 #include <CZ/Ream/RLog.h>
 #include <fcntl.h>
 #include <gbm.h>
+#include <xf86drm.h>
 
 using namespace CZ;
 
-RGLDevice *RGLDevice::Make(RGLCore &core, int drmFd) noexcept
+RGLDevice *RGLDevice::Make(RGLCore &core, int drmFd, void *userData) noexcept
 {
-    auto dev { new RGLDevice(core, drmFd)};
+    auto dev { new RGLDevice(core, drmFd, userData)};
 
     if (dev->init())
         return dev;
@@ -20,10 +21,11 @@ RGLDevice *RGLDevice::Make(RGLCore &core, int drmFd) noexcept
     return nullptr;
 }
 
-RGLDevice::RGLDevice(RGLCore &core, int drmFd) noexcept :
+RGLDevice::RGLDevice(RGLCore &core, int drmFd, void *userData) noexcept :
     RDevice(core)
 {
     m_drmFd = drmFd;
+    m_drmUserData = userData;
 }
 
 RGLDevice::~RGLDevice()
@@ -61,6 +63,8 @@ bool RGLDevice::init() noexcept
 {
     if (core().platform() == RPlatform::Wayland)
         return initWL();
+    else
+        return initDRM();
 
     return false;
 }
@@ -155,6 +159,56 @@ bool RGLDevice::initEGLDisplayWL() noexcept
     return true;
 failGBM:
     close(drmFd);
+    return true;
+}
+
+bool RGLDevice::initDRM() noexcept
+{
+    if (initEGLDisplayDRM() &&
+        initEGLDisplayExtensions() &&
+        initEGLContext() &&
+        initGLExtensions() &&
+        initEGLDisplayProcs() &&
+        initPainter())
+        return true;
+
+    return false;
+}
+
+bool RGLDevice::initEGLDisplayDRM() noexcept
+{
+    drmDevicePtr device;
+
+    if (drmGetDevice(m_drmFd, &device) == 0)
+    {
+        if (device->available_nodes & (1 << DRM_NODE_PRIMARY) && device->nodes[DRM_NODE_PRIMARY])
+            m_drmNode = device->nodes[DRM_NODE_PRIMARY];
+        else if (device->available_nodes & (1 << DRM_NODE_RENDER) && device->nodes[DRM_NODE_RENDER])
+            m_drmNode = device->nodes[DRM_NODE_RENDER];
+
+        drmFreeDevice(&device);
+    }
+
+    if (m_drmNode.empty())
+        m_drmNode = "Unknown";
+
+    m_gbmDevice = gbm_create_device(m_drmFd);
+
+    if (!m_gbmDevice)
+    {
+        RError(CZLN, "Failed to create gbm_device from DRM node %s.", m_drmNode.c_str());
+        return false;
+    }
+
+    //KHR_platform_gbm or MESA_platform_gbm already validated
+    m_eglDisplay = core().clientEGLProcs().eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, m_gbmDevice, NULL);
+
+    if (eglDisplay() == EGL_NO_DISPLAY)
+    {
+        RError(CZLN, "Failed to get EGL display.");
+        return false;
+    }
+
     return true;
 }
 

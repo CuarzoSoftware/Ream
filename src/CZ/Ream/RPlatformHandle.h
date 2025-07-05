@@ -8,10 +8,19 @@ class CZ::RPlatformHandle : public RObject
 {
 public:
     RPlatform platform() const noexcept { return m_platform; }
+
     RWLPlatformHandle *asWL() noexcept
     {
         if (platform() == RPlatform::Wayland)
             return (RWLPlatformHandle*)this;
+
+        return nullptr;
+    }
+
+    RDRMPlatformHandle *asDRM() noexcept
+    {
+        if (platform() == RPlatform::DRM)
+            return (RDRMPlatformHandle*)this;
 
         return nullptr;
     }

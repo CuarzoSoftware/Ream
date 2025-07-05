@@ -3,6 +3,7 @@
 #include <CZ/Ream/GL/RGLDevice.h>
 
 #include <CZ/Ream/WL/RWLPlatformHandle.h>
+#include <CZ/Ream/DRM/RDRMPlatformHandle.h>
 
 #include <CZ/Ream/RLog.h>
 
@@ -128,10 +129,23 @@ bool RGLCore::initDevices() noexcept
 {
     if (platform() == RPlatform::Wayland)
     {
-        m_mainDevice = RGLDevice::Make(*this, -1);
+        m_mainDevice = RGLDevice::Make(*this, -1, nullptr);
 
         if (m_mainDevice)
             m_devices.emplace_back(m_mainDevice);
+    }
+    else // DRM
+    {
+        for (auto &handle : options().platformHandle->asDRM()->fds())
+        {
+            auto *dev { RGLDevice::Make(*this, handle.fd, handle.userData) };
+
+            if (dev)
+            {
+                m_mainDevice = dev; // TODO
+                m_devices.emplace_back(dev);
+            }
+        }
     }
 
     return !m_devices.empty();

@@ -21,12 +21,17 @@ public:
 private:
     friend class RGLCore;
     friend struct RGLThreadDataManager;
-    static RGLDevice *Make(RGLCore &core, int drmFd) noexcept;
-    RGLDevice(RGLCore &core, int drmFd) noexcept;
+    static RGLDevice *Make(RGLCore &core, int drmFd, void *userData) noexcept;
+    RGLDevice(RGLCore &core, int drmFd, void *userData) noexcept;
     ~RGLDevice();
     bool init() noexcept;
+
     bool initWL() noexcept;
     bool initEGLDisplayWL() noexcept;
+
+    bool initDRM() noexcept;
+    bool initEGLDisplayDRM() noexcept;
+
     bool initEGLDisplayExtensions() noexcept;
     bool initEGLContext() noexcept;
     bool initGLExtensions() noexcept;
@@ -50,6 +55,7 @@ private:
     REGLDisplayExtensions m_eglDisplayExtensions {};
     REGLDeviceExtensions m_eglDeviceExtensions {};
     RGLExtensions m_glExtensions {};
+    void *m_drmUserData {};
 };
 
 #endif // RGLDEVICE_H

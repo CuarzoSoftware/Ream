@@ -23,6 +23,7 @@ namespace CZ
 
     class RPlatformHandle;
     class RWLPlatformHandle;
+    class RDRMPlatformHandle;
 
     class RCore;
     class RDevice;
