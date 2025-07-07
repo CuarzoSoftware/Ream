@@ -28,13 +28,15 @@ RImage::~RImage() noexcept
     RDebug("- (%d) RImage.", --count);
 }
 
-RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RDRMFormat &format) noexcept :
+RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, RFormat format, const std::vector<RModifier> &modifiers) noexcept :
     m_size(size),
     m_format(format),
+    m_modifiers(modifiers),
     m_allocator(device),
     m_core(core)
 {
     assert(!size.isEmpty());
+    assert(!modifiers.empty());
     assert(device);
     assert(core);
     RDebug("+ (%d) RImage.", ++count);

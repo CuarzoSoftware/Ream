@@ -54,7 +54,7 @@ namespace CZ
         None = 6,
     };
 
-    const std::string_view &RSubPixelString(RSubPixel subpixel) noexcept
+    inline const std::string_view &RSubPixelString(RSubPixel subpixel) noexcept
     {
         static constexpr const std::array<std::string_view, 7> strings { "Unknown", "HRGB", "HBGR", "VRGB", "VBGR", "None", "Unknown" };
         return strings[std::clamp(static_cast<UInt32>(subpixel) - 1U, 0U, 6U)];

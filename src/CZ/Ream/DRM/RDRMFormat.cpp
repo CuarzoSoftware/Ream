@@ -72,3 +72,30 @@ RFormat RDRMFormat::GetAlphaSubstitute(RFormat format) noexcept
     default:                        return format;
     }
 }
+
+RDRMFormatSet RDRMFormatSet::Union(const RDRMFormatSet &a, const RDRMFormatSet &b) noexcept
+{
+    RDRMFormatSet newSet {};
+
+    for (const auto &format : a.formats())
+        for (auto modifier : format.modifiers())
+            newSet.add(format.format(), modifier);
+
+    for (const auto &format : b.formats())
+        for (auto modifier : format.modifiers())
+            newSet.add(format.format(), modifier);
+
+    return newSet;
+}
+
+RDRMFormatSet RDRMFormatSet::Intersect(const RDRMFormatSet &a, const RDRMFormatSet &b) noexcept
+{
+    RDRMFormatSet newSet {};
+
+    for (const auto &format : a.formats())
+        for (auto modifier : format.modifiers())
+            if (b.has(format.format(), modifier))
+                newSet.add(format.format(), modifier);
+
+    return newSet;
+}

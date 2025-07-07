@@ -3,8 +3,11 @@
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
 
+#include <CZ/Ream/GBM/RGBMBo.h>
+
 #include <CZ/Ream/RLog.h>
 
+#include <gbm.h>
 #include <xf86drm.h>
 #include <drm_fourcc.h>
 
@@ -33,6 +36,63 @@ std::optional<GLuint> RGLImage::framebuffer(RGLDevice *device) const noexcept
         return {};
 
     return threadData->fb;
+}
+
+std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format, RStorageType storageType, RGLDevice *allocator) noexcept
+{
+    if (!RCore::Get())
+    {
+        RError(CZLN, "Cannot create an RImage without an RCore.");
+        return {};
+    }
+
+    auto core { RCore::Get()->asGL() };
+
+    if (!core)
+    {
+        RError(CZLN, "The current RGraphicsAPI is not GL.");
+        return {};
+    }
+
+    if (!allocator)
+    {
+        assert(core->mainDevice());
+        allocator = core->mainDevice()->asGL();
+    }
+
+    if (size.isEmpty())
+    {
+        RError(CZLN, "Invalid image dimensions (%dx%d).", size.width(), size.height());
+        return {};
+    }
+
+    const RFormatInfo *formatInfo { RDRMFormat::GetInfo(format.format()) };
+
+    if (!formatInfo)
+    {
+        RError(CZLN, "Unsupported image format %s.", drmGetFormatName(format.format()));
+        return {};
+    }
+
+    GlobalDeviceData data {};
+    data.device = allocator;
+    data.gbmBo = RGBMBo::Make(size, format, allocator);
+
+    if (!data.gbmBo)
+    {
+        RError(CZLN, "Failed to create gbm_bo.");
+        return {};
+    }
+
+    std::vector<RModifier> modifiers;
+    modifiers.resize(data.gbmBo->planeCount());
+    for (int i = 0; i < data.gbmBo->planeCount(); i++)
+        modifiers[i] = data.gbmBo->modifier();
+
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, format.format(), modifiers)) };
+    image->m_self = image;
+    image->m_devicesMap.emplace(allocator, data);
+    return image;
 }
 
 std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &params, RGLDevice *allocator) noexcept
@@ -91,7 +151,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
         return {};
     }
 
-    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, params.size, { .format = params.format, .modifier = DRM_FORMAT_MOD_INVALID })) };
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, params.size, params.format, { DRM_FORMAT_MOD_INVALID })) };
     image->m_self = image;
 
     auto current { RGLMakeCurrent::FromDevice(allocator, false) };
@@ -160,7 +220,7 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
     // TODO: Validate
 
-    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, {info.format, DRM_FORMAT_MOD_INVALID})) };
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, info.format, {DRM_FORMAT_MOD_INVALID})) };
     image->m_self = image;
     auto *threadData { static_cast<ThreadDeviceData*>(image->m_threadDataManager->getData(allocator)) };
     threadData->fb = info.id;

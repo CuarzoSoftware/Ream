@@ -16,7 +16,7 @@ namespace CZ
         Game
     };
 
-    const std::string_view &RContentTypeString(RContentType type) noexcept
+    inline const std::string_view &RContentTypeString(RContentType type) noexcept
     {
         static constexpr const std::array<std::string_view, 5> strings { "Graphics", "Photo", "Video", "Game", "Unknown" };
         return strings[std::clamp(static_cast<UInt32>(type) - 1U, 0U, 4U)];

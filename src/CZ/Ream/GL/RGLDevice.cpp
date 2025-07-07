@@ -209,6 +209,15 @@ bool RGLDevice::initEGLDisplayDRM() noexcept
         return false;
     }
 
+    EGLint minor, major;
+
+    if (!eglInitialize(eglDisplay(), &minor, &major))
+    {
+        RError(CZLN, "Failed to initialize EGL display.");
+        m_eglDisplay = EGL_NO_DISPLAY;
+        return false;
+    }
+
     return true;
 }
 

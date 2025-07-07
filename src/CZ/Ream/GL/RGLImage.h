@@ -34,6 +34,7 @@ public:
     RGLTexture texture(RGLDevice *device = nullptr) const noexcept;
     std::optional<GLuint> framebuffer(RGLDevice *device = nullptr) const noexcept;
 
+    [[nodiscard]] static std::shared_ptr<RGLImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RGLDevice *allocator = nullptr) noexcept;
     static std::shared_ptr<RGLImage> MakeFromPixels(const RPixelBufferInfo &params, RGLDevice *allocator = nullptr) noexcept;
     static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
 
@@ -51,6 +52,8 @@ private:
         CZOwnership textureOwnership { CZOwnership::Borrow };
 
         EGLImage image { EGL_NO_IMAGE };
+        std::shared_ptr<RGBMBo> gbmBo;
+        UInt32 drmFb {};
         RGLDevice *device { nullptr };
     };
 
@@ -77,8 +80,8 @@ private:
         ~GlobalDeviceDataMap() noexcept;
     };
 
-    RGLImage(std::shared_ptr<RCore> core, RGLDevice *device, SkISize size, const RDRMFormat &format) noexcept
-        : RImage(core, (RDevice*)device, size, format)
+    RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, RFormat format, const std::vector<RModifier> &modifiers) noexcept
+        : RImage(core, (RDevice*)device, size, format, modifiers)
     {
         m_threadDataManager = RGLContextDataManager::Make([](RGLDevice *device) -> RGLContextData*
         {

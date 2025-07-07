@@ -153,7 +153,7 @@ bool RGLCore::initDevices() noexcept
 
 void RGLCore::unitDevices() noexcept
 {
-    while (!devices().empty())
+    while (!m_devices.empty())
     {
         delete devices().back();
         m_devices.pop_back();

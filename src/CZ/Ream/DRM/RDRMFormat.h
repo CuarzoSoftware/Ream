@@ -3,6 +3,7 @@
 
 #include <CZ/Ream/Ream.h>
 #include <CZ/Utils/CZMathUtils.h>
+#include <flat_set>
 
 namespace CZ
 {
@@ -106,13 +107,118 @@ namespace CZ
         }
     };
 
-    struct RDRMFormat
+    class RDRMFormat
     {
+    public:
         static const RFormatInfo *GetInfo(RFormat format) noexcept;
         static RFormat GetAlphaSubstitute(RFormat format) noexcept;
 
-        RFormat format;
-        RModifier modifier;
+        constexpr RDRMFormat(RFormat format, std::initializer_list<RModifier> modifiers) noexcept
+            : m_format(format), m_modifiers(modifiers) {}
+
+        RFormat format() const noexcept { return m_format; }
+
+        void setFormat(RFormat format) noexcept
+        {
+            m_format = format;
+        }
+
+        const std::flat_set<RModifier> &modifiers() const noexcept { return m_modifiers; }
+        bool addModifier(RModifier modifier) noexcept
+        {
+            return m_modifiers.insert(modifier).second;
+        }
+        bool removeModifier(RModifier modifier) noexcept
+        {
+            return m_modifiers.erase(modifier) > 0;
+        }
+
+        bool operator<(const RDRMFormat& other) const noexcept
+        {
+            return m_format < other.m_format;
+        }
+
+        struct Less
+        {
+            using is_transparent = void;
+
+            bool operator()(const RDRMFormat& lhs, const RDRMFormat& rhs) const noexcept
+            {
+                return lhs.m_format < rhs.m_format;
+            }
+
+            bool operator()(const RDRMFormat& lhs, const RFormat& rhs) const noexcept
+            {
+                return lhs.m_format < rhs;
+            }
+
+            bool operator()(const RFormat& lhs, const RDRMFormat& rhs) const noexcept
+            {
+                return lhs < rhs.m_format;
+            }
+        };
+    private:
+        friend class RDRMFormatSet;
+        bool addModifier(RModifier modifier) const noexcept
+        {
+            return m_modifiers.insert(modifier).second;
+        }
+        bool removeModifier(RModifier modifier) const noexcept
+        {
+            return m_modifiers.erase(modifier) > 0;
+        }
+        RFormat m_format;
+        mutable std::flat_set<RModifier> m_modifiers;
+    };
+
+    class RDRMFormatSet
+    {
+    public:
+        const std::flat_set<RDRMFormat, RDRMFormat::Less> &formats() const noexcept { return m_formats; }
+
+        static RDRMFormatSet Union(const RDRMFormatSet &a, const RDRMFormatSet &b) noexcept;
+        static RDRMFormatSet Intersect(const RDRMFormatSet &a, const RDRMFormatSet &b) noexcept;
+
+        bool has(RFormat format, RModifier modifier) const noexcept
+        {
+            auto it { m_formats.find(format) };
+            if (it == m_formats.end())
+                return false;
+
+            return it->modifiers().contains(modifier);
+        }
+
+        // True if added, false if already exists
+        bool add(RFormat format, RModifier modifier) noexcept
+        {
+            auto it { m_formats.find(format) };
+
+            if (it == m_formats.end())
+            {
+                RDRMFormat newFormat { format, { modifier } };
+                m_formats.insert(newFormat);
+                return true;
+            }
+            else
+                return it->addModifier(modifier);
+        }
+
+        bool remove(RFormat format, RModifier modifier) noexcept
+        {
+            auto it { m_formats.find(format) };
+
+            if (it == m_formats.end())
+                return false;
+            else
+            {
+                const bool ret { it->removeModifier(modifier) };
+                if (it->modifiers().empty())
+                    m_formats.erase(it);
+                return ret;
+            }
+        }
+    private:
+        std::flat_set<RDRMFormat, RDRMFormat::Less> m_formats;
     };
 }
 

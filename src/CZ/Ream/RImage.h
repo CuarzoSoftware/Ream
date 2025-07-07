@@ -78,15 +78,18 @@ namespace CZ
         }
     };
 
-    struct RDMABufferInfo
+    enum class RStorageType
     {
-
+        Auto,
+        Native,
+        GBM
     };
 }
 
 class CZ::RImage : public RObject
 {
 public:
+    [[nodiscard]] static std::shared_ptr<RImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RDevice *allocator = nullptr) noexcept;
 
     [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &params, RDevice *allocator = nullptr) noexcept;
     //static std::shared_ptr<RImage> MakeFromGBM(gbm_bo *bo, CZOwnership ownership) noexcept;
@@ -98,9 +101,15 @@ public:
         return m_size;
     }
 
-    const RDRMFormat &format() const noexcept
+    const RFormat &format() const noexcept
     {
         return m_format;
+    }
+
+    // For each plane
+    const std::vector<RModifier> &modifiers() const noexcept
+    {
+        return m_modifiers;
     }
 
     RDevice *allocator() const noexcept
@@ -118,9 +127,10 @@ public:
     ~RImage() noexcept;
 
 protected:
-    RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RDRMFormat &format) noexcept;
+    RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, RFormat format, const std::vector<RModifier> &modifiers) noexcept;
     SkISize m_size;
-    RDRMFormat m_format;
+    RFormat m_format;
+    std::vector<RModifier> m_modifiers;
     RDevice *m_allocator;
     std::shared_ptr<RCore> m_core;
     std::weak_ptr<RImage> m_self;

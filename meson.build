@@ -6,7 +6,7 @@ project(
     default_options: [
         'warning_level=2',
         'buildtype=release',
-        'cpp_std=c++20'])
+        'cpp_std=c++23'])
 
 VERSION_MAJOR = meson.project_version().split('.')[0]
 VERSION_MINOR = meson.project_version().split('.')[1]

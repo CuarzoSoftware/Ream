@@ -13,6 +13,11 @@ namespace CZ
     {
         int fd;
         void *userData;
+
+        bool operator==(const RDRMFdHandle& other) const
+        {
+            return fd == other.fd;
+        }
     };
 }
 

@@ -55,7 +55,6 @@ private:
     REGLDisplayExtensions m_eglDisplayExtensions {};
     REGLDeviceExtensions m_eglDeviceExtensions {};
     RGLExtensions m_glExtensions {};
-    void *m_drmUserData {};
 };
 
 #endif // RGLDEVICE_H

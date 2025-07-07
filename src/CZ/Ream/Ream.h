@@ -24,12 +24,14 @@ namespace CZ
     class RPlatformHandle;
     class RWLPlatformHandle;
     class RDRMPlatformHandle;
+    class RDRMFormat;
 
     class RCore;
     class RDevice;
     class RImage;
     class RSurface;
     class RPainter;
+    class RGBMBo;
     struct RPresentationTime;
 
     class RGLCore;
@@ -60,6 +62,19 @@ namespace CZ
         Nearest,
         Linear
     };
+
+    struct RDMABufferInfo
+    {
+        Int32 width;
+        Int32 height;
+        RFormat format;
+        RModifier modifier;
+        int planeCount;
+        UInt32 offset[4] {};
+        UInt32 stride[4] {};
+        int fd[4] { -1, -1, -1, -1 };
+    };
+
 }
 
     struct gbm_bo;

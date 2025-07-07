@@ -19,6 +19,8 @@ public:
     // Could be -1
     int drmFd() const noexcept { return m_drmFd; }
 
+    void *drmUserData() const noexcept { return m_drmUserData; }
+
     // e.g. /dev/dri/card0 or empty
     const std::string &drmNode() const noexcept { return m_drmNode; }
 
@@ -32,12 +34,14 @@ public:
     RGLDevice *asGL() noexcept;
 
 protected:
+    friend class SRMCore;
     friend class RSurface;
     virtual RPainter *painter() const noexcept = 0;
     RDevice(RCore &core) noexcept :
         m_core(core) {};
     RCore &m_core;
     int m_drmFd { -1 };
+    void *m_drmUserData {};
     std::string m_drmNode;
     gbm_device *m_gbmDevice { nullptr };
     CZWeak<SRMDevice> m_srmDevice;

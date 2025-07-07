@@ -8,8 +8,7 @@
 class CZ::RGLCore : public RCore
 {
 public:
-    ~RGLCore();        
-    const std::vector<RGLDevice*> &devices() const noexcept { return (const std::vector<RGLDevice*>&)m_devices; }
+    ~RGLCore();
     RGLDevice *mainDevice() const noexcept { return (RGLDevice*)m_mainDevice; }
     const REGLClientExtensions &clientEGLExtensions() const noexcept { return m_clientEGLExtensions; }
     const REGLClientProcs &clientEGLProcs() const noexcept { return m_clientEGLProcs; }
