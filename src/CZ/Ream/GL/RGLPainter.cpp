@@ -72,7 +72,7 @@ bool RGLPainter::drawImage(const SkRegion &region) noexcept
     if (!image || !surface || !surface->image())
         return false;
 
-    auto fb { m_surface.lock()->image()->asGL()->framebuffer(device()) };
+    auto fb { m_surface.lock()->image()->asGL()->glFb(device()) };
 
     if (!fb.has_value())
     {

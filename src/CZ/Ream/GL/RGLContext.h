@@ -31,7 +31,7 @@ protected:
  *
  * In Ream, each device has a dedicated OpenGL context for every thread that uses it.
  * Although these contexts may be created as shared, they do not always share all OpenGL resources—
- * such as framebuffers, shader programs, and others—making it difficult for users to allocate
+ * such as framebuffers, shader programs, and others, making it difficult for users to allocate
  * and manage their own graphics resources.
  *
  * This class enables users to provide a custom allocator function that creates an instance of a subclass

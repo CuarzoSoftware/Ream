@@ -1,6 +1,7 @@
 #ifndef RGLDEVICE_H
 #define RGLDEVICE_H
 
+#include <CZ/Ream/EGL/REGLExtensions.h>
 #include <CZ/Ream/GL/RGLExtensions.h>
 #include <CZ/Ream/GL/RGLContext.h>
 #include <CZ/Ream/RDevice.h>

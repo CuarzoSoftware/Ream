@@ -2,6 +2,7 @@
 #define RGLCORE_H
 
 #include <CZ/Ream/RCore.h>
+#include <CZ/Ream/EGL/REGLExtensions.h>
 #include <CZ/Ream/GL/RGLExtensions.h>
 #include <thread>
 

@@ -25,6 +25,9 @@ namespace CZ
     class RWLPlatformHandle;
     class RDRMPlatformHandle;
     class RDRMFormat;
+    class RDRMFramebuffer;
+
+    class REGLImage;
 
     class RCore;
     class RDevice;

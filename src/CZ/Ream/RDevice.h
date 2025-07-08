@@ -16,6 +16,11 @@ class CZ::RDevice : public RObject
 {
 public:
 
+    struct Caps
+    {
+        bool AddFb2Modifiers;
+    };
+
     // Could be -1
     int drmFd() const noexcept { return m_drmFd; }
 
@@ -33,6 +38,8 @@ public:
     RCore &core() const noexcept { return m_core; }
     RGLDevice *asGL() noexcept;
 
+    const Caps &caps() const noexcept { return m_caps; }
+
 protected:
     friend class SRMCore;
     friend class RSurface;
@@ -42,6 +49,7 @@ protected:
     RCore &m_core;
     int m_drmFd { -1 };
     void *m_drmUserData {};
+    Caps m_caps {};
     std::string m_drmNode;
     gbm_device *m_gbmDevice { nullptr };
     CZWeak<SRMDevice> m_srmDevice;

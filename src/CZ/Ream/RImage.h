@@ -90,10 +90,10 @@ class CZ::RImage : public RObject
 {
 public:
     [[nodiscard]] static std::shared_ptr<RImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RDevice *allocator = nullptr) noexcept;
-
     [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &params, RDevice *allocator = nullptr) noexcept;
-    //static std::shared_ptr<RImage> MakeFromGBM(gbm_bo *bo, CZOwnership ownership) noexcept;
 
+    virtual std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept = 0;
+    virtual std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept = 0;
     virtual bool writePixels(const RPixelBufferRegion &region) noexcept = 0;
 
     SkISize size() const noexcept

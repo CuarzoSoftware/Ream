@@ -1,6 +1,7 @@
 #ifndef RGLIMAGE_H
 #define RGLIMAGE_H
 
+#include <CZ/Ream/GL/RGLTexture.h>
 #include <CZ/Ream/RImage.h>
 #include <CZ/Ream/GL/RGLFormat.h>
 #include <CZ/Ream/GL/RGLContext.h>
@@ -9,12 +10,6 @@
 
 namespace CZ
 {
-    struct RGLTexture
-    {
-        GLuint id;
-        GLenum target;
-    };
-
     struct RGLFramebufferInfo
     {
         GLuint id;
@@ -32,12 +27,15 @@ public:
      * @returns {0, 0} if no device is bound or the image couldn't be imported.
      */
     RGLTexture texture(RGLDevice *device = nullptr) const noexcept;
-    std::optional<GLuint> framebuffer(RGLDevice *device = nullptr) const noexcept;
+    std::optional<GLuint> glFb(RGLDevice *device = nullptr) const noexcept;
+    std::shared_ptr<REGLImage> eglImage(RGLDevice *device = nullptr) const noexcept;
 
     [[nodiscard]] static std::shared_ptr<RGLImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RGLDevice *allocator = nullptr) noexcept;
-    static std::shared_ptr<RGLImage> MakeFromPixels(const RPixelBufferInfo &params, RGLDevice *allocator = nullptr) noexcept;
-    static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> MakeFromPixels(const RPixelBufferInfo &params, RGLDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
 
+    std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept override;
+    std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept override;
     bool writePixels(const RPixelBufferRegion &region) noexcept override;
 
     RGLDevice *allocator() const noexcept
@@ -51,9 +49,12 @@ private:
         RGLTexture texture {};
         CZOwnership textureOwnership { CZOwnership::Borrow };
 
-        EGLImage image { EGL_NO_IMAGE };
+        GLuint rbo { 0 };
+        CZOwnership rboOwnership { CZOwnership::Borrow };
+
+        std::shared_ptr<REGLImage> eglImage;
         std::shared_ptr<RGBMBo> gbmBo;
-        UInt32 drmFb {};
+        std::shared_ptr<RDRMFramebuffer> drmFb;
         RGLDevice *device { nullptr };
     };
 
@@ -64,9 +65,6 @@ private:
             device(device) {};
 
         ~ThreadDeviceData() noexcept;
-
-        GLuint rbo { 0 };
-        CZOwnership rboOwnership { CZOwnership::Borrow };
 
         GLuint fb { 0 };
         CZOwnership fbOwnership { CZOwnership::Borrow };
@@ -89,7 +87,7 @@ private:
         });
     }
     RGLFormat m_glFormat;
-    GlobalDeviceDataMap m_devicesMap;
+    mutable GlobalDeviceDataMap m_devicesMap;
     std::shared_ptr<RGLContextDataManager> m_threadDataManager;
 };
 

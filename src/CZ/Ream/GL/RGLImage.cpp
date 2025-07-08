@@ -2,8 +2,11 @@
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
+#include <CZ/Ream/EGL/REGLImage.h>
 
 #include <CZ/Ream/GBM/RGBMBo.h>
+
+#include <CZ/Ream/DRM/RDRMFramebuffer.h>
 
 #include <CZ/Ream/RLog.h>
 
@@ -25,17 +28,48 @@ RGLTexture RGLImage::texture(RGLDevice *device) const noexcept
     return it->second.texture;
 }
 
-std::optional<GLuint> RGLImage::framebuffer(RGLDevice *device) const noexcept
+std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
 {
     if (!device)
         device = core().asGL()->mainDevice();
 
     auto *threadData { static_cast<ThreadDeviceData*>(m_threadDataManager->getData(device)) };
 
-    if (!threadData->hasFb)
+    if (threadData->hasFb)
+        return threadData->fb;
+
+    auto image { eglImage(device) };
+
+    if (!image)
         return {};
 
+    threadData->fb = image->fb();
+
+    if (!threadData->fb)
+        return {};
+
+    threadData->hasFb = true;
+    threadData->fbOwnership = CZOwnership::Borrow;
     return threadData->fb;
+}
+
+std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
+{
+    if (!device)
+        device = core().asGL()->mainDevice();
+
+    auto &data { m_devicesMap[device] };
+
+    if (data.eglImage)
+        return data.eglImage;
+
+    auto bo { gbmBo(device) };
+
+    if (!bo)
+        return {};
+
+    data.eglImage = REGLImage::MakeFromDMA(bo->dmaInfo(), device);
+    return data.eglImage;
 }
 
 std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format, RStorageType storageType, RGLDevice *allocator) noexcept
@@ -228,6 +262,31 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
     return image;
 }
 
+std::shared_ptr<RGBMBo> RGLImage::gbmBo(RDevice *device) const noexcept
+{
+    if (!device)
+        device = core().mainDevice();
+
+    auto *dev { static_cast<RGLDevice*>(device) };
+    auto &data { m_devicesMap[dev] };
+    return data.gbmBo;
+}
+
+std::shared_ptr<RDRMFramebuffer> RGLImage::drmFb(RDevice *device) const noexcept
+{
+    if (!device)
+        device = core().mainDevice();
+
+    auto *dev { static_cast<RGLDevice*>(device) };
+    auto &data { m_devicesMap[dev] };
+
+    if (data.drmFb)
+        return data.drmFb;
+
+    data.drmFb = RDRMFramebuffer::MakeFromGBMBo(gbmBo(device));
+    return data.drmFb;
+}
+
 bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
 {
     if (!region.pixels)
@@ -235,7 +294,6 @@ bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
 
     // TODO: Check bounds
     auto current { RGLMakeCurrent::FromDevice(allocator(), false) };
-
 
     return false;
 }
@@ -259,5 +317,6 @@ RGLImage::GlobalDeviceDataMap::~GlobalDeviceDataMap() noexcept
 
 RGLImage::ThreadDeviceData::~ThreadDeviceData() noexcept
 {
-
+    if (fbOwnership == CZOwnership::Own && fb)
+        glDeleteFramebuffers(1, &fb);
 }
