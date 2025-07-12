@@ -9,7 +9,7 @@ class CZ::RGLMakeCurrent
 public:
     CZ_DISABLE_COPY(RGLMakeCurrent)
 
-    static RGLMakeCurrent FromDevice(RGLDevice *device, bool keepSurfaces) noexcept;
+    [[nodiscard]] static RGLMakeCurrent FromDevice(RGLDevice *device, bool keepSurfaces) noexcept;
 
     RGLMakeCurrent() noexcept :
         prevDisplay(eglGetCurrentDisplay()),

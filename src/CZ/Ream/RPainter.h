@@ -6,9 +6,11 @@
 #include <CZ/CZTransform.h>
 #include <memory>
 
+#include <CZ/skia/core/SkBlendMode.h>
+
 class CZ::RPainter : public RObject
 {
-public:
+public:    
     virtual bool drawImage(const SkRegion &region) noexcept = 0;
 
     void setImage(std::shared_ptr<RImage> image) noexcept { m_image = image; };

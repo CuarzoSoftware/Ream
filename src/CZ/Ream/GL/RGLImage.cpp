@@ -3,11 +3,9 @@
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
 #include <CZ/Ream/EGL/REGLImage.h>
-
 #include <CZ/Ream/GBM/RGBMBo.h>
-
 #include <CZ/Ream/DRM/RDRMFramebuffer.h>
-
+#include <CZ/Ream/RSync.h>
 #include <CZ/Ream/RLog.h>
 
 #include <gbm.h>
@@ -108,6 +106,8 @@ std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format,
         return {};
     }
 
+    const SkAlphaType alphaType { formatInfo->alpha ? kPremul_SkAlphaType : kOpaque_SkAlphaType };
+
     GlobalDeviceData data {};
     data.device = allocator;
     data.gbmBo = RGBMBo::Make(size, format, allocator);
@@ -123,7 +123,7 @@ std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format,
     for (int i = 0; i < data.gbmBo->planeCount(); i++)
         modifiers[i] = data.gbmBo->modifier();
 
-    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, format.format(), modifiers)) };
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, modifiers)) };
     image->m_self = image;
     image->m_devicesMap.emplace(allocator, data);
     return image;
@@ -185,7 +185,12 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
         return {};
     }
 
-    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, params.size, params.format, { DRM_FORMAT_MOD_INVALID })) };
+    SkAlphaType alphaType { formatInfo->alpha ? kPremul_SkAlphaType : kOpaque_SkAlphaType };
+
+    if (formatInfo->alpha && params.alphaType == kUnpremul_SkAlphaType)
+        alphaType = kUnpremul_SkAlphaType;
+
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, params.size, formatInfo, alphaType, { DRM_FORMAT_MOD_INVALID })) };
     image->m_self = image;
 
     auto current { RGLMakeCurrent::FromDevice(allocator, false) };
@@ -221,6 +226,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
             0, glFormat->format, glFormat->type, NULL);
     }
 
+    image->setSync(RSync::Make(allocator));
     return image;
 }
 
@@ -252,9 +258,22 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
         return {};
     }
 
+    const RFormatInfo *formatInfo { RDRMFormat::GetInfo(info.format) };
+
+    if (!formatInfo)
+    {
+        RError(CZLN, "Unsupported image format %s.", drmGetFormatName(info.format));
+        return {};
+    }
+
     // TODO: Validate
 
-    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, info.format, {DRM_FORMAT_MOD_INVALID})) };
+    SkAlphaType alphaType { formatInfo->alpha ? kPremul_SkAlphaType : kOpaque_SkAlphaType };
+
+    if (formatInfo->alpha && info.alphaType == kUnpremul_SkAlphaType)
+        alphaType = kUnpremul_SkAlphaType;
+
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, formatInfo, alphaType, {DRM_FORMAT_MOD_INVALID})) };
     image->m_self = image;
     auto *threadData { static_cast<ThreadDeviceData*>(image->m_threadDataManager->getData(allocator)) };
     threadData->fb = info.id;

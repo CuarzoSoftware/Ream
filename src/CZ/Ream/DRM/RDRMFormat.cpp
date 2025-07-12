@@ -9,10 +9,10 @@ class RFormatInfoMap : public std::unordered_map<RFormat, RFormatInfo>
 public:
     RFormatInfoMap() noexcept
     {
-        emplace(DRM_FORMAT_ARGB8888, RFormatInfo{ .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = true});
-        emplace(DRM_FORMAT_XRGB8888, RFormatInfo{ .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = false});
-        emplace(DRM_FORMAT_ABGR8888, RFormatInfo{ .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = true});
-        emplace(DRM_FORMAT_XBGR8888, RFormatInfo{ .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = false});
+        emplace(DRM_FORMAT_ARGB8888, RFormatInfo{ .format = DRM_FORMAT_ARGB8888, .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = true});
+        emplace(DRM_FORMAT_XRGB8888, RFormatInfo{ .format = DRM_FORMAT_XRGB8888, .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = false});
+        emplace(DRM_FORMAT_ABGR8888, RFormatInfo{ .format = DRM_FORMAT_ABGR8888, .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = true});
+        emplace(DRM_FORMAT_XBGR8888, RFormatInfo{ .format = DRM_FORMAT_XBGR8888, .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = false});
     }
 };
 

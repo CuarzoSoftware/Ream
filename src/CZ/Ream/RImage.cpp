@@ -6,6 +6,18 @@ using namespace CZ;
 
 static UInt32 count { 0 };
 
+std::shared_ptr<RImage> RImage::Make(SkISize size, const RDRMFormat &format, RStorageType storageType, RDevice *allocator) noexcept
+{
+    auto core { RCore::Get() };
+
+    assert(core);
+
+    if (core->graphicsAPI() == RGraphicsAPI::GL)
+        return RGLImage::Make(size, format, storageType, (RGLDevice*)allocator);
+
+    return {};
+}
+
 std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &params, RDevice *allocator) noexcept
 {
     auto core { RCore::Get() };
@@ -28,13 +40,16 @@ RImage::~RImage() noexcept
     RDebug("- (%d) RImage.", --count);
 }
 
-RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, RFormat format, const std::vector<RModifier> &modifiers) noexcept :
+RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept :
     m_size(size),
-    m_format(format),
+    m_formatInfo(formatInfo),
+    m_alphaType(alphaType),
     m_modifiers(modifiers),
     m_allocator(device),
     m_core(core)
 {
+    assert(formatInfo);
+    assert(SkAlphaTypeIsValid(alphaType));
     assert(!size.isEmpty());
     assert(!modifiers.empty());
     assert(device);

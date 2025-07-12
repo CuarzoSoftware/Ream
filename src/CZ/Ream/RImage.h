@@ -5,11 +5,17 @@
 #include <CZ/Ream/DRM/RDRMFormat.h>
 #include <CZ/skia/core/SkSize.h>
 #include <CZ/skia/core/SkRegion.h>
+#include <CZ/skia/core/SkAlphaType.h>
 #include <CZ/CZWeak.h>
 #include <memory>
 
 namespace CZ
 {
+    static inline constexpr bool SkAlphaTypeIsValid(SkAlphaType alphaType) noexcept
+    {
+        return alphaType > kUnknown_SkAlphaType && alphaType < kLastEnum_SkAlphaType;
+    }
+
     /**
      * @brief Describes a pixel buffer.
      *
@@ -36,6 +42,8 @@ namespace CZ
          * @brief Pointer to the top-left corner of the pixel data.
          */
         UInt8 *pixels;
+
+        SkAlphaType alphaType { kUnknown_SkAlphaType };
     };
 
     /**
@@ -101,9 +109,14 @@ public:
         return m_size;
     }
 
-    const RFormat &format() const noexcept
+    const RFormatInfo &formatInfo() const noexcept
     {
-        return m_format;
+        return *m_formatInfo;
+    }
+
+    SkAlphaType alphaType() const noexcept
+    {
+        return m_alphaType;
     }
 
     // For each plane
@@ -122,18 +135,30 @@ public:
         return *m_core.get();
     }
 
+    void setSync(std::shared_ptr<RSync> sync) noexcept
+    {
+        m_sync = sync;
+    }
+
+    std::shared_ptr<RSync> sync() noexcept
+    {
+        return m_sync;
+    }
+
     std::shared_ptr<RGLImage> asGL() const noexcept;
 
     ~RImage() noexcept;
 
 protected:
-    RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, RFormat format, const std::vector<RModifier> &modifiers) noexcept;
+    RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept;
     SkISize m_size;
-    RFormat m_format;
+    const RFormatInfo *m_formatInfo;
+    SkAlphaType m_alphaType;
     std::vector<RModifier> m_modifiers;
     RDevice *m_allocator;
     std::shared_ptr<RCore> m_core;
     std::weak_ptr<RImage> m_self;
+    std::shared_ptr<RSync> m_sync;
 };
 
 #endif // RIMAGE_H

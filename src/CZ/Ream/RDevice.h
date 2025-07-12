@@ -16,10 +16,24 @@ class CZ::RDevice : public RObject
 {
 public:
 
+    /**
+     * @brief Device capabilities.
+     */
     struct Caps
     {
+        /// Supports creating DRM framebuffers with explicit format modifiers.
         bool AddFb2Modifiers;
+
+        /// Supports RSync-based client-side synchronization.
+        bool SyncCPU;
+
+        /// Supports RSync-based host-side synchronization.
+        bool SyncGPU;
+
+        /// Supports RSync synchronization with external devices.
+        bool SyncExternal;
     };
+
 
     // Could be -1
     int drmFd() const noexcept { return m_drmFd; }

@@ -24,28 +24,36 @@ namespace CZ
     class RPlatformHandle;
     class RWLPlatformHandle;
     class RDRMPlatformHandle;
+
     class RDRMFormat;
     class RDRMFramebuffer;
-
-    class REGLImage;
+    class RGBMBo;
 
     class RCore;
+    class RGLCore;
+
     class RDevice;
+    class RGLDevice;
+
     class RImage;
-    class RSurface;
+    class RGLImage;
+
     class RPainter;
-    class RGBMBo;
+    class RGLPainter;
+
+    class RSync;
+    class RGLSync;
+
+    class RSurface;
     struct RPresentationTime;
 
-    class RGLCore;
-    class RGLDevice;
-    class RGLImage;
-    class RGLPainter;
     class RGLStrings;
     class RGLMakeCurrent;
     class RGLContextData;
     class RGLContextDataManager;
     struct RGLThreadDataManager;
+
+    class REGLImage;
 
     enum class RGraphicsAPI
     {

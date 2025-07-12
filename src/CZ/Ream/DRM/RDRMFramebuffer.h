@@ -8,6 +8,7 @@ class CZ::RDRMFramebuffer final : public RObject
 {
 public:
     static std::shared_ptr<RDRMFramebuffer> MakeFromGBMBo(std::shared_ptr<RGBMBo> bo) noexcept;
+    UInt32 id() const noexcept { return m_id; }
     ~RDRMFramebuffer() noexcept;
 
 private:

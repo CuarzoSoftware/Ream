@@ -15,6 +15,7 @@ namespace CZ
         GLuint id;
         SkISize size {};
         RFormat format;
+        SkAlphaType alphaType { kUnknown_SkAlphaType };
     };
 }
 
@@ -78,8 +79,8 @@ private:
         ~GlobalDeviceDataMap() noexcept;
     };
 
-    RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, RFormat format, const std::vector<RModifier> &modifiers) noexcept
-        : RImage(core, (RDevice*)device, size, format, modifiers)
+    RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept
+        : RImage(core, (RDevice*)device, size, formatInfo, alphaType, modifiers)
     {
         m_threadDataManager = RGLContextDataManager::Make([](RGLDevice *device) -> RGLContextData*
         {

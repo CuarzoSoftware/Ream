@@ -4,6 +4,7 @@
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
 #include <CZ/Ream/GL/RGLImage.h>
 #include <CZ/Ream/RSurface.h>
+#include <CZ/Ream/RSync.h>
 #include <CZ/skia/core/SkMatrix.h>
 
 using namespace CZ;
@@ -71,6 +72,9 @@ bool RGLPainter::drawImage(const SkRegion &region) noexcept
 
     if (!image || !surface || !surface->image())
         return false;
+
+    if (image->sync())
+        image->sync()->gpuWait(device());
 
     auto fb { m_surface.lock()->image()->asGL()->glFb(device()) };
 
@@ -179,6 +183,7 @@ bool RGLPainter::drawImage(const SkRegion &region) noexcept
     glDisable(GL_SCISSOR_TEST);
     glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
     glDisableVertexAttribArray(a_pos);
+    surface->image()->setSync(RSync::Make(device()));
     return true;
 }
 

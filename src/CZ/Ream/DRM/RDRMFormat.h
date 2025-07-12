@@ -9,6 +9,8 @@ namespace CZ
 {
     struct RFormatInfo
     {
+        RFormat format;
+
         /**
          * @brief Number of bytes required to store one block of pixels.
          *

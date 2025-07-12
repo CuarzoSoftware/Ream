@@ -336,17 +336,27 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
         }
     }
 
-    const UInt8 hasEGLSync = glExts.OES_EGL_sync &&
-                             exts.KHR_fence_sync &&
-                             exts.KHR_wait_sync &&
-                             exts.ANDROID_native_fence_sync;
-
-    if (hasEGLSync)
+    if (glExts.OES_EGL_sync)
     {
-        procs.eglCreateSyncKHR = (PFNEGLCREATESYNCKHRPROC)eglGetProcAddress("eglCreateSyncKHR");
-        procs.eglDestroySyncKHR = (PFNEGLDESTROYSYNCKHRPROC)eglGetProcAddress("eglDestroySyncKHR");
-        procs.eglWaitSyncKHR = (PFNEGLWAITSYNCKHRPROC)eglGetProcAddress("eglWaitSyncKHR");
-        procs.eglDupNativeFenceFDANDROID = (PFNEGLDUPNATIVEFENCEFDANDROIDPROC)eglGetProcAddress("eglDupNativeFenceFDANDROID");
+        if (exts.KHR_fence_sync)
+        {
+            m_caps.SyncCPU = true;
+            procs.eglCreateSyncKHR = (PFNEGLCREATESYNCKHRPROC)eglGetProcAddress("eglCreateSyncKHR");
+            procs.eglDestroySyncKHR = (PFNEGLDESTROYSYNCKHRPROC)eglGetProcAddress("eglDestroySyncKHR");
+            procs.eglClientWaitSyncKHR = (PFNEGLCLIENTWAITSYNCKHRPROC)eglGetProcAddress("eglClientWaitSyncKHR");
+        }
+
+        if (exts.ANDROID_native_fence_sync)
+        {
+            m_caps.SyncExternal = true;
+            procs.eglDupNativeFenceFDANDROID = (PFNEGLDUPNATIVEFENCEFDANDROIDPROC)eglGetProcAddress("eglDupNativeFenceFDANDROID");
+        }
+
+        if (exts.KHR_wait_sync)
+        {
+            m_caps.SyncGPU = true;
+            procs.eglWaitSyncKHR = (PFNEGLWAITSYNCKHRPROC)eglGetProcAddress("eglWaitSyncKHR");
+        }
     }
 
     if (exts.EXT_image_dma_buf_import_modifiers)

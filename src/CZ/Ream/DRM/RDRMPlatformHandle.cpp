@@ -1,5 +1,6 @@
 #include <CZ/Ream/DRM/RDRMPlatformHandle.h>
 #include <CZ/Ream/RLog.h>
+#include <fcntl.h>
 
 using namespace CZ;
 
@@ -16,7 +17,7 @@ std::shared_ptr<RDRMPlatformHandle> RDRMPlatformHandle::Make(const std::unordere
     for (const RDRMFdHandle &handle : fds)
     {
         RDRMFdHandle dupHandle { handle };
-        dupHandle.fd = dup(handle.fd);
+        dupHandle.fd = fcntl(handle.fd, F_DUPFD_CLOEXEC, 0);
 
         if (dupHandle.fd < 0)
         {
