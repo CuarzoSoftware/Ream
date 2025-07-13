@@ -9,14 +9,27 @@ using namespace CZ;
 std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
 {
     auto core { RCore::Get() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
     auto glCore { core->asGL() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Not an RGLCore");
+        return {};
+    }
 
     if (!device)
         device = glCore->mainDevice();
 
     if (!device->eglDisplayProcs().eglCreateSyncKHR)
     {
-        RError(CZLN, "Missing eglCreateSyncKHR proc.");
+        device->log(CZError, CZLN, "Missing eglCreateSyncKHR proc");
         return {};
     }
 
@@ -41,7 +54,7 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
 
     if (sync == EGL_NO_SYNC_KHR)
     {
-        RError(CZLN, "Failed to create EGLSync.");
+        device->log(CZError, CZLN, "Failed to create EGLSync");
         return {};
     }
 
@@ -50,22 +63,35 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
 
 std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexcept
 {
-    if (fd < 0)
+    auto core { RCore::Get() };
+
+    if (!core)
     {
-        RError(CZLN, "Invalid fd.");
+        RLog(CZError, CZLN, "Missing RCore");
         return {};
     }
 
-    auto core { RCore::Get() };
     auto glCore { core->asGL() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Not an RGLCore");
+        return {};
+    }
 
     if (!device)
         device = glCore->mainDevice();
 
+    if (fd < 0)
+    {
+        device->log(CZError, CZLN, "Invalid fd");
+        return {};
+    }
+
     if (!device->eglDisplayProcs().eglCreateSyncKHR)
     {
         close(fd);
-        RError(CZLN, "Missing eglCreateSyncKHR proc.");
+        device->log(CZError, CZLN, "Missing eglCreateSyncKHR proc");
         return {};
     }
 
@@ -83,7 +109,7 @@ std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexce
     if (sync == EGL_NO_SYNC_KHR)
     {
         close(fd);
-        RError(CZLN, "Failed to create EGLSync.");
+        device->log(CZError, CZLN, "Failed to create EGLSync");
         return {};
     }
 
@@ -113,7 +139,7 @@ bool RGLSync::gpuWait(RDevice *waiter) const noexcept
 
     if (!waiter->caps().SyncGPU)
     {
-        RError(CZLN, "SyncGPU cap not available.");
+        waiter->log(CZError, CZLN, "SyncGPU cap not available");
         return false;
     }
 
@@ -133,7 +159,7 @@ bool RGLSync::gpuWait(RDevice *waiter) const noexcept
 
     if (!sync)
     {
-        RError(CZLN, "Failed to create RGLSync from external fence.");
+        waiter->log(CZError, CZLN, "Failed to create RGLSync from external fence");
         return false;
     }
 

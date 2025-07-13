@@ -39,7 +39,7 @@ void main() {
 }
 )";
 
-static GLuint compileShader(GLenum type, const char *shaderString)
+static GLuint compileShader(RGLDevice *device, GLenum type, const char *shaderString)
 {
     GLuint shader;
     GLint compiled;
@@ -54,7 +54,7 @@ static GLuint compileShader(GLenum type, const char *shaderString)
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &infoLen);
         GLchar errorLog[infoLen];
         glGetShaderInfoLog(shader, infoLen, &infoLen, errorLog);
-        RError("%s", errorLog);
+        device->log(CZError, "{}", (const char*)errorLog);
         glDeleteShader(shader);
         return 0;
     }
@@ -76,11 +76,11 @@ bool RGLPainter::drawImage(const SkRegion &region) noexcept
     if (image->sync())
         image->sync()->gpuWait(device());
 
-    auto fb { m_surface.lock()->image()->asGL()->glFb(device()) };
+    auto fb { surface->image()->asGL()->glFb(device()) };
 
     if (!fb.has_value())
     {
-        RError(CZLN, "Invalid framebuffer");
+        device()->log(CZError, CZLN, "Failed to get GL framebuffer from RGLImage");
         return false;
     }
 
@@ -200,8 +200,8 @@ std::shared_ptr<RGLPainter> RGLPainter::Make(RGLDevice *device) noexcept
 bool RGLPainter::init() noexcept
 {
     auto current { RGLMakeCurrent::FromDevice(device(), false) };
-    vert = compileShader(GL_VERTEX_SHADER, v);
-    frag = compileShader(GL_FRAGMENT_SHADER, f);
+    vert = compileShader(device(), GL_VERTEX_SHADER, v);
+    frag = compileShader(device(), GL_FRAGMENT_SHADER, f);
     prog = glCreateProgram();
     glAttachShader(prog, vert);
     glAttachShader(prog, frag);

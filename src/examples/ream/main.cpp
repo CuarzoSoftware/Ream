@@ -217,7 +217,7 @@ void Window::update() noexcept
         p->drawImage(SkRegion(p->imageDstRect()));
     }
     else
-        RError("NO SURF");
+        RLog(CZError, "NO SURF");
 
         /*
     if (!wlCallback)
@@ -289,14 +289,14 @@ struct Test
 
 int main()
 {
-    setenv("REAM_DEBUG", "4", 0);
-    setenv("REAM_EGL_DEBUG", "4", 0);
+    setenv("CZ_REAM_LOG_LEVEL", "6", 0);
+    setenv("CZ_REAM_EGL_LOG_LEVEL", "6", 0);
 
     app.wlDisplay = wl_display_connect(NULL);
 
     if (!app.wlDisplay)
     {
-        RFatal(CZLN, "Failed to create wl_display.");
+        RLog(CZFatal, CZLN, "Failed to create wl_display");
         return EXIT_FAILURE;
     }
 

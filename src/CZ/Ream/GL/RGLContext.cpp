@@ -33,7 +33,7 @@ struct CZ::RGLThreadDataManager
 
         if (create && !threadData.glCore)
         {
-            RDebug("+ (%d) RGLThreadDataManager.", ++threadCount);
+            RLog(CZTrace, "+ ({}) RGLThreadDataManager", ++threadCount);
             assert(RCore::Get());
             threadData.glCore = RCore::Get()->asGL();
             assert(threadData.glCore);
@@ -81,7 +81,7 @@ struct CZ::RGLThreadDataManager
 
         glCore->m_threadDataManagers.erase(std::this_thread::get_id());
         glCore.reset();
-        RDebug("- (%d) RGLThreadDataManager.", --threadCount);
+        RLog(CZTrace, "- ({}) RGLThreadDataManager", --threadCount);
     }
 
     ~RGLThreadDataManager() noexcept
@@ -169,7 +169,7 @@ std::shared_ptr<RGLContextDataManager> RGLContextDataManager::Make(AllocFunc fun
 
     if (!core)
     {
-        RError(CZLN, "Missing RCore.");
+        RLog(CZError, CZLN, "Missing RCore");
         return  {};
     }
 
@@ -177,19 +177,19 @@ std::shared_ptr<RGLContextDataManager> RGLContextDataManager::Make(AllocFunc fun
 
     if (!core)
     {
-        RError(CZLN, "The current core must be an RGLCore.");
+        RLog(CZError, CZLN, "Not an RGLCore");
         return  {};
     }
 
     if (!func)
     {
-        RError(CZLN, "Invalid allocator function.");
+        RLog(CZError, CZLN, "Invalid allocator function");
         return  {};
     }
 
     std::shared_ptr<RGLContextDataManager> manager { new RGLContextDataManager(func) };
     glCore->m_contextDataManagers.emplace_back(manager.get());
-    RDebug("+ (%u) RGLContextDataManager.", ++managerCount);
+    RLog(CZTrace, "+ ({}) RGLContextDataManager", ++managerCount);
     return manager;
 }
 
@@ -199,7 +199,7 @@ RGLContextData *RGLContextDataManager::getData(RGLDevice *device) noexcept
 
     if (!device)
     {
-        RError(CZLN, "Invalid device.");
+        RLog(CZError, CZLN, "Invalid device");
         return nullptr;
     }
 
@@ -224,7 +224,7 @@ void RGLContextDataManager::freeData(RGLDevice *device) noexcept
 
     if (!device)
     {
-        RError(CZLN, "Invalid device.");
+        RLog(CZError, CZLN, "Invalid device");
         return;
     }
 
@@ -309,7 +309,7 @@ RGLContextDataManager::~RGLContextDataManager() noexcept
         CZVectorUtils::RemoveOneUnordered(core->m_contextDataManagers, this);
     }
 
-    RDebug("- (%u) RGLContextDataManager.", --managerCount);
+    RLog(CZTrace, "- ({}) RGLContextDataManager", --managerCount);
 }
 
 void RGLContextDataManager::freeCurrentThreadData() noexcept
@@ -335,11 +335,11 @@ static UInt32 contextDataCount { 0 };
 RGLContextData::RGLContextData() noexcept
 {
     contextDataCount++;
-    RDebug("+ (%d) RGLContextData.", contextDataCount);
+    RLog(CZTrace, "+ ({}) RGLContextData", contextDataCount);
 }
 
 RGLContextData::~RGLContextData() noexcept
 {
     contextDataCount--;
-    RDebug("- (%d) RGLContextData.", contextDataCount);
+    RLog(CZTrace, "- ({}) RGLContextData", contextDataCount);
 }

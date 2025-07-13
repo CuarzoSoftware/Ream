@@ -72,17 +72,17 @@ std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
 
 std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format, RStorageType storageType, RGLDevice *allocator) noexcept
 {
-    if (!RCore::Get())
-    {
-        RError(CZLN, "Cannot create an RImage without an RCore.");
-        return {};
-    }
-
-    auto core { RCore::Get()->asGL() };
+    auto core { RCore::Get() };
 
     if (!core)
     {
-        RError(CZLN, "The current RGraphicsAPI is not GL.");
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    if (core->graphicsAPI() != RGraphicsAPI::GL)
+    {
+        RLog(CZError, CZLN, "Not an RGLCore");
         return {};
     }
 
@@ -94,7 +94,7 @@ std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format,
 
     if (size.isEmpty())
     {
-        RError(CZLN, "Invalid image dimensions (%dx%d).", size.width(), size.height());
+        allocator->log(CZError, CZLN, "Invalid image dimensions ({}x{})", size.width(), size.height());
         return {};
     }
 
@@ -102,7 +102,7 @@ std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format,
 
     if (!formatInfo)
     {
-        RError(CZLN, "Unsupported image format %s.", drmGetFormatName(format.format()));
+        allocator->log(CZError, CZLN, "Unsupported image format {}", drmGetFormatName(format.format()));
         return {};
     }
 
@@ -114,7 +114,7 @@ std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format,
 
     if (!data.gbmBo)
     {
-        RError(CZLN, "Failed to create gbm_bo.");
+        allocator->log(CZError, CZLN, "Failed to create gbm_bo");
         return {};
     }
 
@@ -131,17 +131,17 @@ std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format,
 
 std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &params, RGLDevice *allocator) noexcept
 {
-    if (!RCore::Get())
-    {
-        RError(CZLN, "Cannot create an RImage without an RCore.");
-        return {};
-    }
-
-    auto core { RCore::Get()->asGL() };
+    auto core { RCore::Get() };
 
     if (!core)
     {
-        RError(CZLN, "The current RGraphicsAPI is not GL.");
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    if (core->graphicsAPI() != RGraphicsAPI::GL)
+    {
+        RLog(CZError, CZLN, "Not an RGLCore");
         return {};
     }
 
@@ -153,7 +153,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
 
     if (params.size.isEmpty())
     {
-        RError(CZLN, "Invalid image dimensions (%dx%d).", params.size.width(), params.size.height());
+        allocator->log(CZError, CZLN, "Invalid image dimensions ({}x{})", params.size.width(), params.size.height());
         return {};
     }
 
@@ -161,13 +161,13 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
 
     if (!formatInfo)
     {
-        RError(CZLN, "Unsupported image format %s.", drmGetFormatName(params.format));
+        allocator->log(CZError, CZLN, "Unsupported image format {}", drmGetFormatName(params.format));
         return {};
     }
 
     if (formatInfo->pixelsPerBlock() != 1)
     {
-        RError(CZLN, "Block formats are not supported: %s.", drmGetFormatName(params.format));
+        allocator->log(CZError, CZLN, "Block formats are not supported: {}", drmGetFormatName(params.format));
         return {};
     }
 
@@ -175,13 +175,13 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
 
     if (!glFormat)
     {
-        RError(CZLN, "Failed to find GL equivalent for format %s.", drmGetFormatName(params.format));
+        allocator->log(CZError, CZLN, "Failed to find GL equivalent for format: {}", drmGetFormatName(params.format));
         return {};
     }
 
     if (params.pixels && !formatInfo->validateStride(params.size.width(), params.stride))
     {
-        RError(CZLN, "Invalid stride %d for width %d and alignment %d.", params.stride, params.size.width(), formatInfo->bytesPerBlock);
+        allocator->log(CZError, CZLN, "Invalid stride {} for width {} and alignment {}", params.stride, params.size.width(), formatInfo->bytesPerBlock);
         return {};
     }
 
@@ -232,17 +232,17 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
 
 std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator) noexcept
 {
-    if (!RCore::Get())
-    {
-        RError(CZLN, "Cannot create an RImage without an RCore.");
-        return {};
-    }
-
-    auto core { RCore::Get()->asGL() };
+    auto core { RCore::Get() };
 
     if (!core)
     {
-        RError(CZLN, "The current RGraphicsAPI is not GL.");
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    if (core->graphicsAPI() != RGraphicsAPI::GL)
+    {
+        RLog(CZError, CZLN, "Not an RGLCore");
         return {};
     }
 
@@ -254,7 +254,7 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
     if (info.size.isEmpty())
     {
-        RError(CZLN, "Invalid image dimensions (%dx%d).", info.size.width(), info.size.height());
+        allocator->log(CZError, CZLN, "Invalid image dimensions ({}x{}).", info.size.width(), info.size.height());
         return {};
     }
 
@@ -262,7 +262,7 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
     if (!formatInfo)
     {
-        RError(CZLN, "Unsupported image format %s.", drmGetFormatName(info.format));
+        allocator->log(CZError, CZLN, "Unsupported image format {}", drmGetFormatName(info.format));
         return {};
     }
 

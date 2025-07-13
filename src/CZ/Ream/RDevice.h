@@ -1,6 +1,7 @@
 #ifndef RDEVICE_H
 #define RDEVICE_H
 
+#include <CZ/Ream/RLog.h>
 #include <CZ/Ream/RObject.h>
 #include <CZ/CZWeak.h>
 #include <string>
@@ -54,6 +55,7 @@ public:
 
     const Caps &caps() const noexcept { return m_caps; }
 
+    CZLogger log { RLog };
 protected:
     friend class SRMCore;
     friend class RSurface;

@@ -19,47 +19,17 @@ namespace CZ
      */
     using RModifier = UInt64;
 
-    class RObject;
-
-    class RPlatformHandle;
-    class RWLPlatformHandle;
-    class RDRMPlatformHandle;
-
-    class RDRMFormat;
-    class RDRMFramebuffer;
-    class RGBMBo;
-
-    class RCore;
-    class RGLCore;
-
-    class RDevice;
-    class RGLDevice;
-
-    class RImage;
-    class RGLImage;
-
-    class RPainter;
-    class RGLPainter;
-
-    class RSync;
-    class RGLSync;
-
-    class RSurface;
-    struct RPresentationTime;
-
-    class RGLStrings;
-    class RGLMakeCurrent;
-    class RGLContextData;
-    class RGLContextDataManager;
-    struct RGLThreadDataManager;
-
-    class REGLImage;
+    enum class RFilterMode
+    {
+        Nearest,
+        Linear
+    };
 
     enum class RGraphicsAPI
     {
         Auto,
         GL,
-        Vk
+        VK
     };
 
     enum class RPlatform
@@ -68,11 +38,44 @@ namespace CZ
         Wayland
     };
 
-    enum class RFilterMode
-    {
-        Nearest,
-        Linear
-    };
+    class RDRMFormat;
+    class RDRMFramebuffer;
+    class RGBMBo;
+
+    class RPlatformHandle;
+    class RWLPlatformHandle;
+    class RDRMPlatformHandle;
+
+    // Base
+    class RObject;
+    class RCore;
+    class RDevice;
+    class RImage;
+    class RPainter;
+    class RSync;
+    class RSurface;
+    struct RPresentationTime;
+
+    // GL/EGL
+    class RGLCore;
+    class RGLDevice;
+    class RGLImage;
+    class RGLPainter;
+    class RGLSync;
+
+    class RGLStrings;
+    class RGLMakeCurrent;
+    class RGLContextData;
+    class RGLContextDataManager;
+    struct RGLThreadDataManager;
+    class REGLImage;
+
+    // Vulkan
+    class RVKCore;
+    class RVKDevice;
+    class RVKImage;
+    class RVKPainter;
+    class RVKSync;
 
     struct RDMABufferInfo
     {
@@ -85,7 +88,6 @@ namespace CZ
         UInt32 stride[4] {};
         int fd[4] { -1, -1, -1, -1 };
     };
-
 }
 
     struct gbm_bo;

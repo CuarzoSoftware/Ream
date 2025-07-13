@@ -17,13 +17,13 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromGBMBo(std::shared_ptr<
 
     if (!core)
     {
-        RError(CZLN, "Missing RCore.");
+        RLog(CZError, CZLN, "Missing RCore");
         return {};
     }
 
     if (!bo)
     {
-        RError(CZLN, "Invalid RGBMBo.");
+        RLog(CZError, CZLN, "Invalid RGBMBo");
         return {};
     }
 
@@ -134,7 +134,7 @@ end:
 
     if (!pass)
     {
-        RError(CZLN, "Failed to create RDRMFramebuffer from RGBMBo.");
+        device->log(CZError, CZLN, "Failed to create RDRMFramebuffer from RGBMBo");
         return {};
     }
 

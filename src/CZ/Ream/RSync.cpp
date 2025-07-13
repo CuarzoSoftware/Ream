@@ -11,7 +11,7 @@ std::shared_ptr<RSync> RSync::FromExternal(int fd, RDevice *device) noexcept
 
     if (!core)
     {
-        RError(CZLN, "Missing RCore.");
+        RLog(CZError, CZLN, "Missing RCore");
         return {};
     }
 
@@ -27,7 +27,7 @@ std::shared_ptr<RSync> RSync::Make(RDevice *device) noexcept
 
     if (!core)
     {
-        RError(CZLN, "Missing RCore.");
+        RLog(CZError, CZLN, "Missing RCore");
         return {};
     }
 

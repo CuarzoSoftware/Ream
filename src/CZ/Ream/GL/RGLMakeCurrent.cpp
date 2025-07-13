@@ -8,7 +8,7 @@ RGLMakeCurrent RGLMakeCurrent::FromDevice(RGLDevice *device, bool keepSurfaces) 
 {
     if (!device || !device->asGL())
     {
-        RError(CZLN, "Invalid RGLDevice.");
+        RLog(CZError, CZLN, "Invalid RGLDevice");
         return { EGL_NO_DISPLAY, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT };
     }
 

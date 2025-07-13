@@ -54,7 +54,7 @@ std::shared_ptr<REGLImage> REGLImage::MakeFromDMA(const RDMABufferInfo &info, RG
 
     if (!core)
     {
-        RError(CZLN, "Missing RCore.");
+        RLog(CZError, CZLN, "Missing RCore");
         return {};
     }
 
@@ -62,7 +62,7 @@ std::shared_ptr<REGLImage> REGLImage::MakeFromDMA(const RDMABufferInfo &info, RG
 
     if (!glCore)
     {
-        RError(CZLN, "The RCore must be an RGLCore.");
+        RLog(CZError, CZLN, "The RCore must be an RGLCore");
         return {};
     }
 
@@ -109,7 +109,7 @@ std::shared_ptr<REGLImage> REGLImage::MakeFromDMA(const RDMABufferInfo &info, RG
 
     if (image == EGL_NO_IMAGE)
     {
-        RError(CZLN, "Failed to create EGLImage.");
+        device->log(CZError, CZLN, "Failed to create EGLImage");
         return {};
     }
 
@@ -157,7 +157,7 @@ GLuint REGLImage::fb() const noexcept
 
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
-        RError(CZLN, "Failed to create fb.");
+        m_device->log(CZError, CZLN, "Failed to create GL fb");
         glDeleteFramebuffers(1, &data->fb);
         data->fb = 0;
     }

@@ -8,7 +8,7 @@ std::shared_ptr<RDRMPlatformHandle> RDRMPlatformHandle::Make(const std::unordere
 {
     if (fds.empty())
     {
-        RError(CZLN, "The set is empty.");
+        RLog(CZError, CZLN, "The set is empty");
         return nullptr;
     }
 
@@ -21,7 +21,7 @@ std::shared_ptr<RDRMPlatformHandle> RDRMPlatformHandle::Make(const std::unordere
 
         if (dupHandle.fd < 0)
         {
-            RError(CZLN, "Failed to duplicate DRM fd.");
+            RLog(CZError, CZLN, "Failed to duplicate DRM fd");
             continue;
         }
 
@@ -30,7 +30,7 @@ std::shared_ptr<RDRMPlatformHandle> RDRMPlatformHandle::Make(const std::unordere
 
     if (dupSet.empty())
     {
-        RError(CZLN, "Failed to duplicate at least one DRM fd.");
+        RLog(CZFatal, CZLN, "Failed to duplicate at least one DRM fd");
         return nullptr;
     }
 

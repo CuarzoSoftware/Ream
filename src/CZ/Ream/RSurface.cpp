@@ -31,13 +31,13 @@ RPainter *RSurface::painter(RDevice *device) const noexcept
 
 RSurface::~RSurface() noexcept
 {
-    RDebug("- (%d) RSurface.", --count);
+    RLog(CZTrace, "- ({}) RSurface", --count);
 }
 
 RSurface::RSurface(std::shared_ptr<RImage> image, Int32 scale) noexcept :
     m_image(image), m_scale(scale)
 {
-    RDebug("+ (%d) RSurface.", ++count);
+    RLog(CZTrace, "+ ({}) RSurface", ++count);
 }
 
 void RSurface::calculateSizeFromImage() noexcept

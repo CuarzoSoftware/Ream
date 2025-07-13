@@ -9,25 +9,13 @@
 
 using namespace CZ;
 
-std::shared_ptr<CZ::RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format, RDevice *allocator) noexcept
+std::shared_ptr<RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format, RDevice *allocator) noexcept
 {
-    if (size.isEmpty())
-    {
-        RError(CZLN, "Invalid size (%dx%d).", size.width(), size.height());
-        return {};
-    }
-
-    if (format.modifiers().empty())
-    {
-        RError(CZLN, "The RDRMFormat has no modifiers.");
-        return {};
-    }
-
     auto core { RCore::Get() };
 
     if (!core)
     {
-        RError(CZLN, "Missing RCore.");
+        RLog(CZError, CZLN, "Missing RCore");
         return {};
     }
 
@@ -39,7 +27,19 @@ std::shared_ptr<CZ::RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format,
 
     if (!allocator->gbmDevice())
     {
-        RError(CZLN, "The RDevice has not gbm_device.");
+        allocator->log(CZError, CZLN, "Missing gbm_device");
+        return {};
+    }
+
+    if (size.isEmpty())
+    {
+        allocator->log(CZError, CZLN, "Invalid size ({}x{})", size.width(), size.height());
+        return {};
+    }
+
+    if (format.modifiers().empty())
+    {
+        allocator->log(CZError, "The RDRMFormat has no modifiers");
         return {};
     }
 
@@ -81,7 +81,7 @@ std::shared_ptr<CZ::RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format,
 
     if (!bo)
     {
-        RError(CZLN, "Failed to create gbm_bo.");
+        allocator->log(CZError, CZLN, "Failed to create gbm_bo");
         return {};
     }
 
@@ -100,7 +100,7 @@ std::shared_ptr<CZ::RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format,
                     close(dmaInfo.fd[j]);
 
             gbm_bo_destroy(bo);
-            RError(CZLN, "Failed to export gbm_bo.");
+            allocator->log(CZError, CZLN, "Failed to export gbm_bo");
             return {};
         }
     }

@@ -17,38 +17,41 @@
 
 using namespace CZ;
 
+static CZLogger logEGL;
+
 static void EGLLog(EGLenum error, const char *command, EGLint type, EGLLabelKHR thread, EGLLabelKHR obj, const char *msg)
 {
     CZ_UNUSED(thread);
     CZ_UNUSED(obj);
 
-    static const char *format = "[EGL] command: %s, error: %s (0x%x), message: \"%s\".";
+    CZLogLevel level { CZDebug };
 
     switch (type)
     {
     case EGL_DEBUG_MSG_CRITICAL_KHR:
-        RFatal(format, command, RGLStrings::EGLError(error), error, msg);
+        level = CZFatal;
         break;
     case EGL_DEBUG_MSG_ERROR_KHR:
-        RError(format, command, RGLStrings::EGLError(error), error, msg);
+        level = CZError;
         break;
     case EGL_DEBUG_MSG_WARN_KHR:
-        RWarning(format, command, RGLStrings::EGLError(error), error, msg);
+        level = CZWarning;
         break;
     case EGL_DEBUG_MSG_INFO_KHR:
-        RDebug(format, command, RGLStrings::EGLError(error), error, msg);
+        level = CZInfo;
         break;
     default:
-        RDebug(format, command, RGLStrings::EGLError(error), error, msg);
         break;
     }
+
+    logEGL(level, "command: {}, error: {}, message: {}", command, RGLStrings::EGLError(error), msg);
 }
 
 bool RGLCore::initClientEGLExtensions() noexcept
 {
     if (eglBindAPI(EGL_OPENGL_ES_API) == EGL_FALSE)
     {
-        RError(CZLN, "Failed to bind OpenGL ES API.");
+        RLog(CZError, CZLN, "Failed to bind OpenGL ES API");
         return false;
     }
 
@@ -57,12 +60,14 @@ bool RGLCore::initClientEGLExtensions() noexcept
     if (!extensions)
     {
         if (eglGetError() == EGL_BAD_DISPLAY)
-            RError(CZLN, "EGL_EXT_client_extensions not supported. Required to query its existence without a display.");
+            RLog(CZError, CZLN, "EGL_EXT_client_extensions not supported. Required to query its existence without a display");
         else
-            RError(CZLN, "Failed to query EGL client extensions");
+            RLog(CZError, CZLN, "Failed to query EGL client extensions");
 
         return false;
     }
+
+    RLog(CZDebug, "EGL Client Extensions: {}", extensions);
 
     auto &exts { m_clientEGLExtensions };
     auto &procs { m_clientEGLProcs };
@@ -71,7 +76,7 @@ bool RGLCore::initClientEGLExtensions() noexcept
 
     if (!exts.EXT_platform_base)
     {
-        RError(CZLN, "EGL_EXT_platform_base not supported.");
+        RLog(CZError, CZLN, "EGL_EXT_platform_base not supported");
         return false;
     }
 
@@ -81,7 +86,7 @@ bool RGLCore::initClientEGLExtensions() noexcept
 
     if (m_options.platformHandle->platform() == RPlatform::DRM && !exts.KHR_platform_gbm && !exts.MESA_platform_gbm)
     {
-        RError(CZLN, "EGL_KHR_platform_gbm not supported and is required by the DRM platform.");
+        RLog(CZError, CZLN, "EGL_KHR_platform_gbm not supported and is required by the DRM platform");
         return false;
     }
 
@@ -89,7 +94,7 @@ bool RGLCore::initClientEGLExtensions() noexcept
 
     if (m_options.platformHandle->platform() == RPlatform::Wayland && !exts.KHR_platform_wayland)
     {
-        RError(CZLN, "EGL_KHR_platform_wayland not supported.");
+        RLog(CZError, CZLN, "EGL_KHR_platform_wayland not supported");
         return false;
     }
 
@@ -109,14 +114,15 @@ bool RGLCore::initClientEGLExtensions() noexcept
     {
         procs.eglDebugMessageControlKHR = (PFNEGLDEBUGMESSAGECONTROLKHRPROC) eglGetProcAddress("eglDebugMessageControlKHR");
 
-        const int level { REGLLogLevel() };
+        logEGL = CZLogger("Ream", "CZ_REAM_EGL_LOG_LEVEL");
+        logEGL = logEGL.newWithContext("EGL");
 
         const EGLAttrib debugAttribs[]
         {
-            EGL_DEBUG_MSG_CRITICAL_KHR, level > 0 ? EGL_TRUE : EGL_FALSE,
-            EGL_DEBUG_MSG_ERROR_KHR,    level > 1 ? EGL_TRUE : EGL_FALSE,
-            EGL_DEBUG_MSG_WARN_KHR,     level > 2 ? EGL_TRUE : EGL_FALSE,
-            EGL_DEBUG_MSG_INFO_KHR,     level > 3 ? EGL_TRUE : EGL_FALSE,
+            EGL_DEBUG_MSG_CRITICAL_KHR, logEGL.level() > 0 ? EGL_TRUE : EGL_FALSE,
+            EGL_DEBUG_MSG_ERROR_KHR,    logEGL.level() > 1 ? EGL_TRUE : EGL_FALSE,
+            EGL_DEBUG_MSG_WARN_KHR,     logEGL.level() > 2 ? EGL_TRUE : EGL_FALSE,
+            EGL_DEBUG_MSG_INFO_KHR,     logEGL.level() > 3 ? EGL_TRUE : EGL_FALSE,
             EGL_NONE,
         };
 
