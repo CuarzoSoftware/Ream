@@ -1,9 +1,12 @@
 #include <CZ/Ream/RLog.h>
 #include <CZ/Ream/RCore.h>
+#include <CZ/Ream/RDevice.h>
 #include <CZ/Ream/GL/RGLSync.h>
 #include <fcntl.h>
 
 using namespace CZ;
+
+static UInt32 count { 0 };
 
 std::shared_ptr<RSync> RSync::FromExternal(int fd, RDevice *device) noexcept
 {
@@ -45,12 +48,15 @@ RSync::RSync(std::shared_ptr<RCore> core, RDevice *device, int fd, bool isExtern
 {
     assert(device);
     assert(core);
+    //device->log(CZTrace, "+ ({}) RSync", ++count);
 }
 
 RSync::~RSync() noexcept
 {
     if (m_fd >= 0)
         close(m_fd);
+
+    //device()->log(CZTrace, "- ({}) RSync", --count);
 }
 
 int RSync::fd() const noexcept

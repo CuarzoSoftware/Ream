@@ -47,7 +47,10 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
     if (sync != EGL_NO_SYNC_KHR)
     {
         if (device->eglDisplayProcs().eglDupNativeFenceFDANDROID)
+        {
+            glFlush();
             dupFd = device->eglDisplayProcs().eglDupNativeFenceFDANDROID(device->eglDisplay(), sync);
+        }
     }
     else
         sync = device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_FENCE_KHR, &attribs[2]);
@@ -146,7 +149,7 @@ bool RGLSync::gpuWait(RDevice *waiter) const noexcept
     if (device() == waiter)
     {
         // OpenGL guarantees command ordering within the same context and thread
-        if (!isExternal() && std::this_thread::get_id() == m_threadId)
+        if (false && !isExternal() && std::this_thread::get_id() == m_threadId)
             return true;
         else
         {

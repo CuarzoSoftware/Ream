@@ -5,7 +5,7 @@ using namespace CZ;
 
 RPainter *RVKDevice::painter() const noexcept
 {
-
+    return nullptr;
 }
 
 RVKDevice *RVKDevice::Make(RVKCore &core, VkPhysicalDevice physicalDevice) noexcept
@@ -28,5 +28,5 @@ RVKDevice::RVKDevice(RVKCore &core, VkPhysicalDevice physicalDevice) noexcept :
 
 bool RVKDevice::init() noexcept
 {
-
+    return false;
 }

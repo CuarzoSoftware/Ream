@@ -353,7 +353,7 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
 
         if (exts.ANDROID_native_fence_sync)
         {
-            m_caps.SyncExternal = true;
+            m_caps.SyncImport = m_caps.SyncExport = true;
             procs.eglDupNativeFenceFDANDROID = (PFNEGLDUPNATIVEFENCEFDANDROIDPROC)eglGetProcAddress("eglDupNativeFenceFDANDROID");
         }
 

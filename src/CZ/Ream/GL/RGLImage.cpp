@@ -226,7 +226,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeFromPixels(const RPixelBufferInfo &param
             0, glFormat->format, glFormat->type, NULL);
     }
 
-    image->setSync(RSync::Make(allocator));
+    image->setWriteSync(RSync::Make(allocator));
     return image;
 }
 

@@ -6,12 +6,13 @@
 #include <CZ/Ream/RObject.h>
 #include <memory>
 
+// Note: The alphaType() of the storage/destination image is ignored always considered premult alpha
 class CZ::RSurface : public RObject
 {
 public:
     static std::shared_ptr<RSurface> WrapImage(std::shared_ptr<RImage> image, Int32 scale = 1) noexcept;
 
-    RPainter *painter(RDevice *device = nullptr) const noexcept;
+    RPainter *beginPass(RDevice *device = nullptr) const noexcept;
     std::shared_ptr<RImage> image() const noexcept { return m_image; }
 
     // Size (may differ from the image size if scale != 1 or the transform contains a 90° rotation)

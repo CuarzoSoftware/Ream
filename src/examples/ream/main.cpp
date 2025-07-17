@@ -203,18 +203,24 @@ void Window::update() noexcept
 
     if (surf)
     {
-        auto *p { surf->painter() };
-        p->setImage(testImage);
-        p->setImageScale(1.f);
-        p->setImageSrcTransform(CZTransform::Normal);
-        p->setImageSrcRect(
-            SkRect::MakeXYWH(
-                0,
-                0,
-                testImage->size().width(),
-                testImage->size().height()));
-        p->setImageDstRect(SkIRect::MakeXYWH(10, 10, 256, 256));
-        p->drawImage(SkRegion(p->imageDstRect()));
+        auto *p { surf->beginPass() };
+
+        RDrawImageInfo info {};
+        info.image = testImage;
+        info.srcScale = 1.f;
+        info.srcTransform = CZTransform::Normal;
+        info.src = SkRect::MakeXYWH(
+            0,
+            0,
+            testImage->size().width(),
+            testImage->size().height());
+        info.dst = SkIRect::MakeXYWH(10, 10, 256, 256);
+        p->drawImage(info);
+
+        p->setColor(SK_ColorCYAN);
+        p->drawColor(SkRegion(SkIRect::MakeXYWH(10, 10, 40, 40)));
+
+        p->endPass();
     }
     else
         RLog(CZError, "NO SURF");

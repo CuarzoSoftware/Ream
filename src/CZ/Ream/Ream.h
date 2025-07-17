@@ -19,12 +19,6 @@ namespace CZ
      */
     using RModifier = UInt64;
 
-    enum class RFilterMode
-    {
-        Nearest,
-        Linear
-    };
-
     enum class RGraphicsAPI
     {
         Auto,
@@ -62,6 +56,8 @@ namespace CZ
     class RGLImage;
     class RGLPainter;
     class RGLSync;
+    class RGLShader;
+    class RGLProgram;
 
     class RGLStrings;
     class RGLMakeCurrent;

@@ -32,7 +32,8 @@ public:
         bool SyncGPU;
 
         /// Supports RSync synchronization with external devices.
-        bool SyncExternal;
+        bool SyncImport;
+        bool SyncExport;
     };
 
 

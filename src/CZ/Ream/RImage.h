@@ -7,13 +7,15 @@
 #include <CZ/skia/core/SkRegion.h>
 #include <CZ/skia/core/SkAlphaType.h>
 #include <CZ/CZWeak.h>
+#include <filesystem>
 #include <memory>
+#include <unordered_set>
 
 namespace CZ
 {
     static inline constexpr bool SkAlphaTypeIsValid(SkAlphaType alphaType) noexcept
     {
-        return alphaType > kUnknown_SkAlphaType && alphaType < kLastEnum_SkAlphaType;
+        return alphaType > kUnknown_SkAlphaType && alphaType <= kLastEnum_SkAlphaType;
     }
 
     /**
@@ -99,6 +101,8 @@ class CZ::RImage : public RObject
 public:
     [[nodiscard]] static std::shared_ptr<RImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RDevice *allocator = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &params, RDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RImage> LoadFile(const std::filesystem::path &path, SkISize size = {0, 0}, RDevice *allocator = nullptr) noexcept;
+
 
     virtual std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept = 0;
     virtual std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept = 0;
@@ -109,10 +113,10 @@ public:
         return m_size;
     }
 
-    const RFormatInfo &formatInfo() const noexcept
-    {
-        return *m_formatInfo;
-    }
+    const RFormatInfo &formatInfo() const noexcept { return *m_formatInfo; }
+
+    const std::unordered_set<RFormat> &readFormats() const noexcept { return m_readFormats; };
+    const std::unordered_set<RFormat> &writeFormats() const noexcept { return m_writeFormats; }
 
     SkAlphaType alphaType() const noexcept
     {
@@ -135,14 +139,26 @@ public:
         return *m_core.get();
     }
 
-    void setSync(std::shared_ptr<RSync> sync) noexcept
+    void setReadSync(std::shared_ptr<RSync> sync) noexcept
     {
-        m_sync = sync;
+        m_readSync = sync;
     }
 
-    std::shared_ptr<RSync> sync() noexcept
+    // Signaled when no longer beind read
+    std::shared_ptr<RSync> readSync() noexcept
     {
-        return m_sync;
+        return m_readSync;
+    }
+
+    void setWriteSync(std::shared_ptr<RSync> sync) noexcept
+    {
+        m_writeSync = sync;
+    }
+
+    // Signaled when pending write operations end
+    std::shared_ptr<RSync> writeSync() noexcept
+    {
+        return m_writeSync;
     }
 
     std::shared_ptr<RGLImage> asGL() const noexcept;
@@ -156,9 +172,12 @@ protected:
     SkAlphaType m_alphaType;
     std::vector<RModifier> m_modifiers;
     RDevice *m_allocator;
+    std::unordered_set<RFormat> m_readFormats;
+    std::unordered_set<RFormat> m_writeFormats;
     std::shared_ptr<RCore> m_core;
     std::weak_ptr<RImage> m_self;
-    std::shared_ptr<RSync> m_sync;
+    std::shared_ptr<RSync> m_readSync;
+    std::shared_ptr<RSync> m_writeSync;
 };
 
 #endif // RIMAGE_H

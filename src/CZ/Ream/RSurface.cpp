@@ -1,9 +1,10 @@
-#include "CZ/Ream/RLog.h"
+#include <CZ/Ream/RLog.h>
 #include <CZ/Ream/RSurface.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RDevice.h>
 #include <CZ/Ream/RPainter.h>
 #include <CZ/Ream/RImage.h>
+#include <CZ/Ream/RSync.h>
 
 using namespace CZ;
 
@@ -11,8 +12,20 @@ static UInt32 count { 0 };
 
 std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image, Int32 scale) noexcept
 {
-    if (!image) return {};
-    if (scale <= 0) scale = 1;
+    if (!image)
+    {
+        RLog(CZError, CZLN, "Invalid RImage");
+        return {};
+    }
+
+    if (scale <= 0)
+    {
+        RLog(CZWarning, CZLN, "Invalid scale factor <= 0. Replacing it with 1...");
+        scale = 1;
+    }
+
+    if (image->alphaType() == kUnpremul_SkAlphaType)
+        RLog(CZWarning, CZLN, "The destination RImage is unpremultiplied alpha, but RSurface/Skia will still output premultiplied results");
 
     auto surface { std::shared_ptr<RSurface>(new RSurface(image, scale)) };
     surface->m_self = surface;
@@ -20,12 +33,19 @@ std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image, Int
     return surface;
 }
 
-RPainter *RSurface::painter(RDevice *device) const noexcept
+RPainter *RSurface::beginPass(RDevice *device) const noexcept
 {
     if (!device)
         device = RCore::Get()->mainDevice();
 
     device->painter()->m_surface = m_self.lock();
+
+    if (image()->readSync())
+        image()->readSync()->gpuWait(device);
+
+    if (image()->writeSync())
+        image()->writeSync()->gpuWait(device);
+
     return device->painter();
 }
 

@@ -1,6 +1,14 @@
+#include "drm_fourcc.h"
 #include <CZ/Ream/GL/RGLImage.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
+
+#include <CZ/skia/core/SkPixelRef.h>
+#include <CZ/skia/core/SkCanvas.h>
+#include <CZ/skia/core/SkStream.h>
+#include <CZ/skia/core/SkImageInfo.h>
+#include <CZ/skia/core/SkBitmap.h>
+#include <CZ/skia/modules/svg/include/SkSVGDOM.h>
 
 using namespace CZ;
 
@@ -28,6 +36,69 @@ std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &params, R
         return RGLImage::MakeFromPixels(params, (RGLDevice*)allocator);
 
     return {};
+}
+
+std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, SkISize size, RDevice *allocator) noexcept
+{
+    auto core { RCore::Get() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    auto stream { SkMemoryStream::MakeFromFile(path.c_str()) };
+    auto dom { SkSVGDOM::MakeFromStream(*stream) };
+
+    if (!dom)
+    {
+        RLog(CZError, CZLN, "Failed to create SkSVGDOM from file: {}", path.c_str());
+        return {};
+    }
+
+    SkSize finalSize
+    {
+        size.fWidth > 0 ? SkIntToScalar(size.width()) : dom->containerSize().width(),
+        size.fHeight > 0 ? SkIntToScalar(size.height()) : dom->containerSize().height()
+    };
+
+    if (finalSize.fWidth <= 0 || finalSize.fHeight <= 0)
+    {
+        RLog(CZError, CZLN, "The image has invalid dimensions: {}", path.c_str());
+        return {};
+    }
+
+    SkImageInfo info
+    {
+        SkImageInfo::Make(
+            finalSize.toCeil(),
+            kBGRA_8888_SkColorType,
+            kPremul_SkAlphaType)
+    };
+
+    SkBitmap bitmap;
+    if (!bitmap.tryAllocPixels(info))
+    {
+        RLog(CZError, CZLN, "Failed to allocate SkBitmap pixels");
+        return {};
+    }
+
+    SkCanvas canvas { bitmap };
+    canvas.clear(SK_ColorTRANSPARENT);
+    canvas.scale(
+        finalSize.fWidth / dom->containerSize().width(),
+        finalSize.fHeight / dom->containerSize().height());
+    dom->render(&canvas);
+
+    RPixelBufferInfo pixInfo {};
+    pixInfo.pixels = (UInt8*)bitmap.pixelRef()->pixels();
+    pixInfo.stride = bitmap.pixelRef()->rowBytes();
+    pixInfo.size.fWidth = bitmap.pixelRef()->width();
+    pixInfo.size.fHeight = bitmap.pixelRef()->height();
+    pixInfo.alphaType = kPremul_SkAlphaType;
+    pixInfo.format = DRM_FORMAT_ARGB8888;
+    return MakeFromPixels(pixInfo, allocator);
 }
 
 std::shared_ptr<RGLImage> RImage::asGL() const noexcept

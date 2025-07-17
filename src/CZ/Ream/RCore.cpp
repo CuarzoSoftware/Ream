@@ -3,6 +3,7 @@
 
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/VK/RVKCore.h>
+#include <cstring>
 
 using namespace CZ;
 
@@ -23,13 +24,28 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
         return nullptr;
     }
 
+    auto gAPI { options.graphicsAPI };
+
     if (!options.platformHandle)
     {
         RLog(CZFatal, CZLN, "Missing Options::platformHandle");
         goto fail;
     }
 
-    if (options.graphicsAPI == RGraphicsAPI::VK || options.graphicsAPI == RGraphicsAPI::Auto)
+    if (gAPI == RGraphicsAPI::Auto)
+    {
+        const char *gAPIEnv { getenv("CZ_REAM_GAPI") };
+
+        if (gAPIEnv)
+        {
+            if (strcmp(gAPIEnv, "GL") == 0)
+                gAPI = RGraphicsAPI::GL;
+            else if (strcmp(gAPIEnv, "VK") == 0)
+                gAPI = RGraphicsAPI::VK;
+        }
+    }
+
+    if (gAPI == RGraphicsAPI::VK || gAPI == RGraphicsAPI::Auto)
     {
         auto core { std::shared_ptr<RCore>(new RVKCore(options)) };
         s_core = core;
@@ -37,7 +53,7 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
         if (core->init())
             return core;
 
-        if (options.graphicsAPI != RGraphicsAPI::Auto)
+        if (gAPI != RGraphicsAPI::Auto)
             goto fail;
     }
 
