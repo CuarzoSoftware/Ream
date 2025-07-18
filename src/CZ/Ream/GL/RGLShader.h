@@ -11,14 +11,21 @@ class CZ::RGLShader final : public RObject
 public:
     enum Features : UInt32
     {
-        HasImage            = 1u << 0,
-        HasMask             = 1u << 1,
-        ReplaceImageColor   = 1u << 2,
-        HasFactorR          = 1u << 3,
-        HasFactorG          = 1u << 4,
-        HasFactorB          = 1u << 5,
-        HasFactorA          = 1u << 6,
-        PremultSrc          = 1u << 7
+        /* The lowest 2 bits represent the blend mode */
+        BlendSrc            = 0,
+        BlendSrcOver        = 1,
+        BlendDstIn          = 0x3,
+
+        HasImage            = 1u << 2,
+        ImageExternal       = 1u << 3,
+        HasMask             = 1u << 4,
+        MaskExternal        = 1u << 5,
+        ReplaceImageColor   = 1u << 6,
+        HasFactorR          = 1u << 7,
+        HasFactorG          = 1u << 8,
+        HasFactorB          = 1u << 9,
+        HasFactorA          = 1u << 10,
+        PremultSrc          = 1u << 11
     };
 
     static constexpr CZBitset<Features> VertFeatures { HasImage | HasMask };

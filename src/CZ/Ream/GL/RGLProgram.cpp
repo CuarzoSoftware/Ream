@@ -82,32 +82,28 @@ bool RGLProgram::link() noexcept
     m_loc.pos = glGetAttribLocation(m_id, "pos");
     m_loc.posProj = glGetUniformLocation(m_id, "posProj");
 
+    if (features().has(RGLShader::HasFactorR))
+        m_loc.factorR = glGetUniformLocation(m_id, "factorR");
+
+    if (features().has(RGLShader::HasFactorG))
+        m_loc.factorG = glGetUniformLocation(m_id, "factorG");
+
+    if (features().has(RGLShader::HasFactorB))
+        m_loc.factorB = glGetUniformLocation(m_id, "factorB");
+
+    if (features().has(RGLShader::HasFactorA))
+        m_loc.factorA = glGetUniformLocation(m_id, "factorA");
+
     if (features().has(RGLShader::HasImage))
     {
         m_loc.imageProj = glGetUniformLocation(m_id, "imageProj");
         m_loc.image = glGetUniformLocation(m_id, "image");
-
-        if (features().has(RGLShader::HasFactorR))
-            m_loc.factorR = glGetUniformLocation(m_id, "factorR");
-
-        if (features().has(RGLShader::HasFactorG))
-            m_loc.factorG = glGetUniformLocation(m_id, "factorG");
-
-        if (features().has(RGLShader::HasFactorB))
-            m_loc.factorB = glGetUniformLocation(m_id, "factorB");
-
-        if (features().has(RGLShader::HasFactorA))
-            m_loc.factorA = glGetUniformLocation(m_id, "factorA");
 
         if (features().has(RGLShader::HasMask))
         {
             m_loc.maskProj = glGetUniformLocation(m_id, "maskProj");
             m_loc.mask = glGetUniformLocation(m_id, "mask");
         }
-    }
-    else
-    {
-        m_loc.color = glGetUniformLocation(m_id, "color");
     }
 
     return true;

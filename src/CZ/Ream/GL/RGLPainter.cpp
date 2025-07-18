@@ -71,6 +71,9 @@ void RGLPainter::bindTexture(RGLTexture tex, GLuint uniform, const RDrawImageInf
 
 bool RGLPainter::drawImage(const RDrawImageInfo &imageInfo, const SkRegion *clip, const RDrawImageInfo *maskInfo) noexcept
 {
+    if (blendMode() == RBlendMode::SrcOver && (factor().fA <= 0.f || opacity() <= 0.f))
+        return true;
+
     auto surface { m_surface.lock() };
 
     if (!surface || !surface->image())
@@ -105,9 +108,9 @@ bool RGLPainter::drawImage(const RDrawImageInfo &imageInfo, const SkRegion *clip
             return false;
         }
 
-        // Disable mask if it only has alpha = 1.f
         if (mask->alphaType() == SkAlphaType::kOpaque_SkAlphaType)
         {
+            RLog(CZWarning, CZLN, "The mask's alpha type is Opaque. Ignoring it...");
             mask.reset();
             goto skipMask;
         }
@@ -145,9 +148,9 @@ skipMask:
         return false;
     }
 
-    auto current { RGLMakeCurrent::FromDevice(device(), true) };
-    const auto features { calcFeatures(image, mask) };
-    auto prog { RGLProgram::GetOrMake(this, features) };
+    const auto current { RGLMakeCurrent::FromDevice(device(), true) };
+    const auto features { calcDrawImageFeatures(image, &tex, mask ? &maskTex : nullptr) };
+    const auto prog { RGLProgram::GetOrMake(this, features) };
 
     if (!prog)
     {
@@ -158,33 +161,49 @@ skipMask:
     // Color
     SkColor4f colorF { m_state.factor };
 
-    if (image->alphaType() == kPremul_SkAlphaType)
+    if (blendMode() != RBlendMode::DstIn && features.has(RGLShader::ReplaceImageColor))
     {
+        const SkColor4f replaceColorF { SkColor4f::FromColor(color()) };        
         colorF.fA *= m_state.opacity;
-        colorF.fR *= colorF.fA;
-        colorF.fG *= colorF.fA;
-        colorF.fB *= colorF.fA;
+        colorF.fR *= replaceColorF.fR * colorF.fA;
+        colorF.fG *= replaceColorF.fG * colorF.fA;
+        colorF.fB *= replaceColorF.fB * colorF.fA;
     }
     else
     {
         colorF.fA *= m_state.opacity;
     }
 
-    if (image->alphaType() == kOpaque_SkAlphaType && m_state.blendMode == RBlendMode::DstIn)
+    RLog(CZFatal, "POST {} - {} - {} - {}", colorF.fR, colorF.fG, colorF.fB, colorF.fA);
+
+    /* Skip dummy user operations */
+    if (image->alphaType() == kOpaque_SkAlphaType && !mask)
     {
-        if (colorF.fA >= 1.f)
+        if (blendMode() == RBlendMode::DstIn)
         {
-            device()->log(CZTrace, "Skipping drawImage(DstIn, alpha = 1.f, Opaque): multiplying dst by 1.f is a noop");
-            return true;
-        }
-        else
+            if (colorF.fA == 1.f)
+            {
+                device()->log(CZTrace, "Skipping drawImage(DstIn, alpha = 1.f, Opaque): multiplying dst by 1.f is a noop");
+                return true;
+            }
+            else
+            {
+                /* Avoid sampling if alpha is constant */
+                save();
+                reset();
+                setBlendMode(RBlendMode::DstIn);
+                setOpacity(colorF.fA);
+                setColor(SK_ColorWHITE);
+                setOptions(ColorIsPremult);
+                const bool ret { drawColor(region) };
+                restore();
+                return ret;
+            }
+        } /* Replacing the color of an opaque image is the same as drawing a solid color */
+        else if (features.has(RGLShader::ReplaceImageColor))
         {
-            /* Avoid sampling if alpha is constant */
-            save();
-            reset();
-            setBlendMode(RBlendMode::DstIn);
-            setOpacity(colorF.fA);
-            setColor(SK_ColorWHITE);
+            save(); // Keep everything except color.a
+            setColor(SkColorSetA(color(), 255));
             setOptions(ColorIsPremult);
             const bool ret { drawColor(region) };
             restore();
@@ -227,49 +246,71 @@ skipMask:
         glUniformMatrix3fv(prog->loc().maskProj, 1, GL_FALSE, mat);
     }
 
-    if (m_state.blendMode == RBlendMode::Src)
+    if (blendMode() == RBlendMode::Src)
     {
-        /* Even in this mode, we need to enable blending and convert the image to premultiplied */
-        if (image->alphaType() == kUnpremul_SkAlphaType)
+        if (features.has(RGLShader::ReplaceImageColor))
         {
+            // The color is premult and HasFactorA is not set
+            // but RGB must be multiplied by image.a and/or mask.a
             glEnable(GL_BLEND);
             glBlendEquation(GL_FUNC_ADD);
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ZERO, GL_ONE, GL_ZERO);
         }
         else
-            glDisable(GL_BLEND);
-    }
-    else if (m_state.blendMode == RBlendMode::SrcOver)
-    {
-        if (image->alphaType() == kOpaque_SkAlphaType)
         {
-            if (colorF.fA >= 1.f)
-                glDisable(GL_BLEND);
-            else
+            /* Even in this mode, we need to enable blending and convert the image to premultiplied */
+            if (image->alphaType() == kUnpremul_SkAlphaType)
             {
                 glEnable(GL_BLEND);
                 glBlendEquation(GL_FUNC_ADD);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                glBlendFuncSeparate(GL_SRC_ALPHA, GL_ZERO, GL_ONE, GL_ZERO);
             }
+            else
+                glDisable(GL_BLEND);
         }
-        else if (image->alphaType() == kUnpremul_SkAlphaType)
+    }
+    else if (blendMode() == RBlendMode::SrcOver)
+    {
+        if (features.has(RGLShader::ReplaceImageColor))
         {
+            // The color is premult and HasFactorA is not set
+            // but RGB must be multiplied by image.a and/or mask.a
             glEnable(GL_BLEND);
             glBlendEquation(GL_FUNC_ADD);
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         }
-        else // Premult
+        else
         {
-            glEnable(GL_BLEND);
-            glBlendEquation(GL_FUNC_ADD);
-            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            if (image->alphaType() == kOpaque_SkAlphaType)
+            {
+                if (colorF.fA >= 1.f && !mask)
+                    glDisable(GL_BLEND);
+                else
+                {
+                    glEnable(GL_BLEND);
+                    glBlendEquation(GL_FUNC_ADD);
+                    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+                }
+            }
+            else if (image->alphaType() == kUnpremul_SkAlphaType)
+            {
+                glEnable(GL_BLEND);
+                glBlendEquation(GL_FUNC_ADD);
+                glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            }
+            else // Premult
+            {
+                glEnable(GL_BLEND);
+                glBlendEquation(GL_FUNC_ADD);
+                glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            }
         }
     }
     else // DstIn
     {
         /* We only care about A so the alphaType() doesn't matter.
          * This function exits earlier if the alpha type is Opaque
-         * and alpha = 1.f */
+         * finalAlpha = 1.f and there is no mask */
         glEnable(GL_BLEND);
         glBlendEquation(GL_FUNC_ADD);
         glBlendFunc(GL_ZERO, GL_SRC_ALPHA);
@@ -344,10 +385,12 @@ SkRegion RGLPainter::calcDrawImageRegion(RSurface *surface, const RDrawImageInfo
     return region;
 }
 
-
 bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
 {
-    auto surface { m_surface.lock() };
+    if (blendMode() == RBlendMode::SrcOver && (SkColorGetA(color()) == 0 || factor().fA <= 0.f || opacity() <= 0.f))
+        return true;
+
+    const auto surface { m_surface.lock() };
 
     if (!surface || !surface->image())
         return false;
@@ -359,7 +402,7 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
     if (!region.op(clipRect, userRegion, SkRegion::kIntersect_Op))
         return true; // Empty
 
-    auto fb { surface->image()->asGL()->glFb(device()) };
+    const auto fb { surface->image()->asGL()->glFb(device()) };
 
     if (!fb.has_value())
     {
@@ -367,9 +410,19 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
         return false;
     }
 
-    auto current { RGLMakeCurrent::FromDevice(device(), true) };
-    auto features { calcFeatures(nullptr, nullptr) };
-    auto prog { RGLProgram::GetOrMake(this, features) };
+    const auto current { RGLMakeCurrent::FromDevice(device(), true) };
+
+    // Always converted to premultiplied alpha
+    const SkColor4f colorF { calcDrawColorColor() };
+
+    if (m_state.blendMode == RBlendMode::DstIn && colorF.fA >= 1.f)
+    {
+        device()->log(CZTrace, "Skipping drawColor(DstIn, alpha = 1.f): multiplying dst by 1.f is a noop");
+        return true;
+    }
+
+    const auto features { calcDrawColorFeatures(colorF.fA) };
+    const auto prog { RGLProgram::GetOrMake(this, features) };
 
     if (!prog)
     {
@@ -377,7 +430,155 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
         return false;
     }
 
-    // Color
+    prog->bind();
+    glBindFramebuffer(GL_FRAMEBUFFER, fb.value());
+    setDrawColorUniforms(features, prog, colorF);
+
+    // posProj
+    SkScalar matVals[9];
+    calcPosProj(surface.get(), fb.value() == 0, matVals);
+    glUniformMatrix3fv(prog->loc().posProj, 1, GL_FALSE, matVals);
+
+    std::vector<GLfloat> vbo { genVBO(region) };
+    glEnableVertexAttribArray(prog->loc().pos);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vbo.data());
+
+    setDrawColorBlendFunc(features);
+
+    glViewport(0, 0, surface->image()->size().width(), surface->image()->size().height());
+    setScissors(surface.get(), fb == 0, region);
+
+    glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
+    glDisableVertexAttribArray(prog->loc().pos);
+    return true;
+}
+
+CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<RImage> image, RGLTexture *imageTex, RGLTexture *maskTex) const noexcept
+{
+    assert(image);
+    assert(imageTex);
+
+    CZBitset<RGLShader::Features> features {};
+    features.add(RGLShader::HasImage);
+    features.setFlag(RGLShader::ImageExternal, imageTex->target == GL_TEXTURE_EXTERNAL_OES);
+
+    if (maskTex) // If the mask is opaque, this will always be nullptr
+    {
+        features.add(RGLShader::HasMask);
+        features.setFlag(RGLShader::MaskExternal, maskTex->target == GL_TEXTURE_EXTERNAL_OES);
+    }
+
+    switch (blendMode())
+    {
+    case RBlendMode::Src:
+        features.add(RGLShader::BlendSrc);
+
+        if (m_state.options.has(ReplaceImageColor))
+        {
+            // UNUSED: PremultSrc, HasFactorA
+            features.add(RGLShader::ReplaceImageColor | RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB);
+        }
+        else
+        {
+            features.setFlag(RGLShader::PremultSrc, image->alphaType() == kPremul_SkAlphaType);
+            features.setFlag(RGLShader::HasFactorR, m_state.factor.fR != 1.f);
+            features.setFlag(RGLShader::HasFactorG, m_state.factor.fG != 1.f);
+            features.setFlag(RGLShader::HasFactorB, m_state.factor.fB != 1.f);
+            features.setFlag(RGLShader::HasFactorA, m_state.factor.fA * m_state.opacity != 1.f);
+        }
+        break;
+    case RBlendMode::SrcOver:
+        features.add(RGLShader::BlendSrcOver);
+
+        if (m_state.options.has(ReplaceImageColor))
+        {
+            // UNUSED: PremultSrc, HasFactorA
+            features.add(RGLShader::ReplaceImageColor | RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB);
+        }
+        else
+        {
+            features.setFlag(RGLShader::PremultSrc, image->alphaType() == kPremul_SkAlphaType);
+            features.setFlag(RGLShader::HasFactorR, m_state.factor.fR != 1.f);
+            features.setFlag(RGLShader::HasFactorG, m_state.factor.fG != 1.f);
+            features.setFlag(RGLShader::HasFactorB, m_state.factor.fB != 1.f);
+            features.setFlag(RGLShader::HasFactorA, m_state.factor.fA * m_state.opacity != 1.f);
+        }
+        break;
+    case RBlendMode::DstIn:
+        // UNUSED: PremultSrc, ReplaceImageColor, HasFactor{R,G,B}
+        features.add(RGLShader::BlendDstIn);
+        break;
+    }
+
+    return features;
+}
+
+CZBitset<RGLShader::Features> RGLPainter::calcDrawColorFeatures(SkScalar finalAlpha) const noexcept
+{
+    CZBitset<RGLShader::Features> features {};
+
+    switch (blendMode())
+    {
+    case RBlendMode::Src: // glBlend disabled
+        features.set(RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB);
+        break;
+    case RBlendMode::SrcOver:
+        if (finalAlpha == 1.f) // glBlend disabled
+            features.set(RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB);
+        else
+            features.set(RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB | RGLShader::HasFactorA);
+        break;
+    case RBlendMode::DstIn: // Only alpha is used
+        features.set(RGLShader::HasFactorA);
+        break;
+    };
+
+    return features;
+}
+
+void RGLPainter::setDrawColorUniforms(CZBitset<RGLShader::Features> features, std::shared_ptr<RGLProgram> prog, const SkColor4f &colorF) const noexcept
+{
+    if (features.has(RGLShader::HasFactorR))
+        glUniform1f(prog->loc().factorR, colorF.fR);
+
+    if (features.has(RGLShader::HasFactorG))
+        glUniform1f(prog->loc().factorG, colorF.fG);
+
+    if (features.has(RGLShader::HasFactorB))
+        glUniform1f(prog->loc().factorB, colorF.fB);
+
+    if (features.has(RGLShader::HasFactorA))
+        glUniform1f(prog->loc().factorA, colorF.fA);
+}
+
+void RGLPainter::setDrawColorBlendFunc(CZBitset<RGLShader::Features> features) const noexcept
+{
+    switch (blendMode())
+    {
+    case RBlendMode::Src:
+        glDisable(GL_BLEND);
+        break;
+    case RBlendMode::SrcOver:
+        if (features.has(RGLShader::HasFactorA))
+        {
+            glEnable(GL_BLEND);
+            glBlendEquation(GL_FUNC_ADD);
+            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        }
+        else
+            glDisable(GL_BLEND);
+        break;
+    case RBlendMode::DstIn:
+        glEnable(GL_BLEND);
+        glBlendEquation(GL_FUNC_ADD);
+        glBlendFunc(GL_ZERO, GL_SRC_ALPHA);
+        break;
+    };
+}
+
+SkColor4f RGLPainter::calcDrawColorColor() const noexcept
+{
+    // Always converted to premultiplied alpha
     SkColor4f colorF { SkColor4f::FromColor(color()) };
 
     if (m_state.options.has(ColorIsPremult))
@@ -396,85 +597,7 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
         colorF.fB *= colorF.fA * m_state.factor.fB;
     }
 
-    if (m_state.blendMode == RBlendMode::DstIn && colorF.fA >= 1.f)
-    {
-        device()->log(CZTrace, "Skipping drawColor(DstIn, alpha = 1.f): multiplying dst by 1.f is a noop");
-        return true;
-    }
-
-    prog->bind();
-    glBindFramebuffer(GL_FRAMEBUFFER, fb.value());
-    glUniform4fv(prog->loc().color, 1, (GLfloat*)&colorF);
-
-    // posProj
-    SkScalar matVals[9];
-    calcPosProj(surface.get(), fb.value() == 0, matVals);
-    glUniformMatrix3fv(prog->loc().posProj, 1, GL_FALSE, matVals);
-
-    std::vector<GLfloat> vbo { genVBO(region) };
-    glEnableVertexAttribArray(prog->loc().pos);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vbo.data());
-    const auto size { surface->image()->size() };
-    glViewport(0, 0, size.width(), size.height());
-
-    if (m_state.blendMode == RBlendMode::Src)
-    {
-        glDisable(GL_BLEND);
-    }
-    else if (m_state.blendMode == RBlendMode::SrcOver)
-    {
-        if (colorF.fA >= 1.f)
-        {
-            glDisable(GL_BLEND);
-        }
-        else
-        {
-            glEnable(GL_BLEND);
-            glBlendEquation(GL_FUNC_ADD);
-            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        }
-    }
-    else // DstIn
-    {
-        glEnable(GL_BLEND);
-        glBlendEquation(GL_FUNC_ADD);
-        glBlendFunc(GL_ZERO, GL_SRC_ALPHA);
-    }
-
-    setScissors(surface.get(), fb == 0, region);
-    glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
-    glDisableVertexAttribArray(prog->loc().pos);
-    return true;
-}
-
-CZBitset<RGLShader::Features> RGLPainter::calcFeatures(std::shared_ptr<RImage> image, std::shared_ptr<RImage> mask) const noexcept
-{
-    CZBitset<RGLShader::Features> features {};
-
-    if (image)
-    {
-        features.add(RGLShader::HasImage);
-        features.setFlag(RGLShader::HasMask, mask != nullptr);
-
-        if (m_state.blendMode != RBlendMode::DstIn)
-        {
-            features.setFlag(RGLShader::HasFactorR, m_state.factor.fR != 1.f);
-            features.setFlag(RGLShader::HasFactorG, m_state.factor.fG != 1.f);
-            features.setFlag(RGLShader::HasFactorB, m_state.factor.fB != 1.f);
-        }
-
-        features.setFlag(RGLShader::HasFactorA, m_state.factor.fA != 1.f || m_state.opacity < 1.f);
-
-        /* If the image is premult and only has A, do color * A in shader */
-        features.setFlag(RGLShader::PremultSrc,
-            image->alphaType() == kPremul_SkAlphaType &&
-            features.has(RGLShader::HasFactorA) &&
-            !features.has(RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB));
-    }
-
-    /* drawColor features are always 0 since the final color is pre-calculated in the CPU */
-
-    return features;
+    return colorF;
 }
 
 std::shared_ptr<RGLPainter> RGLPainter::Make(RGLDevice *device) noexcept

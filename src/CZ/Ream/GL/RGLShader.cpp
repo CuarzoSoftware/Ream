@@ -43,67 +43,133 @@ const char *f = R"(
 
 #ifdef HAS_IMAGE
     varying vec2 imageCord;
-    uniform sampler2D image;
-
-    #ifdef HAS_R
-        uniform float factorR;
-    #endif
-
-    #ifdef HAS_G
-        uniform float factorG;
-    #endif
-
-    #ifdef HAS_B
-        uniform float factorB;
-    #endif
-
-    #ifdef HAS_A
-        uniform float factorA;
-    #endif
+    uniform IMAGE_SAMPLER image;
 
     #ifdef HAS_MASK
         varying vec2 maskCord;
-        uniform sampler2D mask;
+        uniform MASK_SAMPLER mask;
     #endif
-#else
-    uniform vec4 color;
+#endif
+
+#ifdef HAS_R
+    uniform float factorR;
+#endif
+
+#ifdef HAS_G
+    uniform float factorG;
+#endif
+
+#ifdef HAS_B
+    uniform float factorB;
+#endif
+
+#ifdef HAS_A
+    uniform float factorA;
 #endif
 
 void main()
 {
+
 #ifdef HAS_IMAGE
 
-    #ifdef PREMULT_SRC
-        #ifdef HAS_MASK
-            gl_FragColor = texture2D(image, imageCord) * (factorA * texture2D(mask, maskCord).a);
-        #else
-            gl_FragColor = texture2D(image, imageCord) * factorA;
-        #endif
+    // Src and SrcOver Blend Mode
+    #if BLEND_MODE == 0 || BLEND_MODE == 1
+
+        #ifdef REPLACE_IMAGE_COLOR
+
+            // factorRGB must be premult by factorA
+
+            gl_FragColor = vec4(factorR, factorG, factorB, texture2D(image, imageCord).a);
+
+            #ifdef HAS_MASK
+                gl_FragColor.a *= texture2D(mask, maskCord).a;
+            #endif
+
+        #else // REPLACE COLOR DISABLED
+
+            gl_FragColor = texture2D(image, imageCord);
+
+            // factorRGB must always be unpremult
+
+            #ifdef HAS_R
+                gl_FragColor.r *= factorR;
+            #endif
+
+            #ifdef HAS_G
+                gl_FragColor.g *= factorG;
+            #endif
+
+            #ifdef HAS_B
+                gl_FragColor.b *= factorB;
+            #endif
+
+            #ifdef PREMULT_SRC
+
+                #ifdef HAS_A
+
+                    #ifdef HAS_MASK
+                        gl_FragColor *= (factorA * texture2D(mask, maskCord).a);
+                    #else
+                        gl_FragColor *= factorA;
+                    #endif
+
+                #else // NO ALPHA
+
+                    #ifdef HAS_MASK
+                        gl_FragColor *= texture2D(mask, maskCord).a;
+                    #endif
+
+                #endif
+
+            #else // UNPREMULT SRC
+
+                #ifdef HAS_A
+                    gl_FragColor.a *= factorA;
+                #endif
+
+                #ifdef HAS_MASK
+                    gl_FragColor.a *= texture2D(mask, maskCord).a;
+                #endif
+
+            #endif // PREMULT_SRC
+
+        #endif // REPLACE_IMAGE_COLOR
+
+    // DstIn Blend Mode
     #else
-        gl_FragColor = texture2D(image, imageCord);
 
-        #ifdef HAS_R
-            gl_FragColor.r *= factorR;
-        #endif
+        // Unaffected by REPLACE_IMAGE_COLOR and PREMULT_SRC
 
-        #ifdef HAS_G
-            gl_FragColor.g *= factorG;
-        #endif
+        gl_FragColor.a = texture2D(image, imageCord).a;
 
-        #ifdef HAS_B
-            gl_FragColor.b *= factorB;
+        #ifdef HAS_MASK
+            gl_FragColor.a *= texture2D(mask, maskCord).a;
         #endif
 
         #ifdef HAS_A
             gl_FragColor.a *= factorA;
         #endif
 
-        #ifdef HAS_MASK
-            gl_FragColor.a *= texture2D(mask, maskCord).a;
-        #endif
     #endif
-#else
-    gl_FragColor = color;
+
+#else // COLOR MODE (Unaffected by BLEND_MODE)
+
+    #ifdef HAS_R
+        gl_FragColor.r = factorR;
+    #endif
+
+    #ifdef HAS_G
+        gl_FragColor.g = factorG;
+    #endif
+
+    #ifdef HAS_B
+        gl_FragColor.b = factorB;
+    #endif
+
+    #ifdef HAS_A
+        gl_FragColor.a = factorA;
+    #endif
+
 #endif
 }
 )";
@@ -179,16 +245,22 @@ static GLuint CompileShader(RGLDevice *device, GLenum type, const std::string &f
 bool RGLShader::build() noexcept
 {
     const std::string featuresStr {
-        std::format("{}{}{}{}{}{}{}",
-            !m_features.has(PremultSrc) ? "" : "#define PREMULT_SRC\n",
-            !m_features.has(HasImage)   ? "" : "#define HAS_IMAGE\n",
-            !m_features.has(HasMask)    ? "" : "#define HAS_MASK\n",
-            !m_features.has(HasFactorR) ? "" : "#define HAS_R\n",
-            !m_features.has(HasFactorG) ? "" : "#define HAS_G\n",
-            !m_features.has(HasFactorB) ? "" : "#define HAS_B\n",
-            !m_features.has(HasFactorA) ? "" : "#define HAS_A\n")
+        std::format("{}{}{}{}{}{}{}{}{}{}{}#define BLEND_MODE {}\n",
+            !m_features.has(ImageExternal | MaskExternal) ? "" : "#extension GL_OES_EGL_image_external : require\n",
+            !m_features.has(ImageExternal)                ? "#define IMAGE_SAMPLER sampler2D\n" : "#define IMAGE_SAMPLER samplerExternalOES\n",
+            !m_features.has(MaskExternal)                 ? "#define MASK_SAMPLER sampler2D\n" : "#define MASK_SAMPLER samplerExternalOES\n", 
+            !m_features.has(ReplaceImageColor)            ? "" : "#define REPLACE_IMAGE_COLOR\n",
+            !m_features.has(PremultSrc)                   ? "" : "#define PREMULT_SRC\n",
+            !m_features.has(HasImage)                     ? "" : "#define HAS_IMAGE\n",
+            !m_features.has(HasMask)                      ? "" : "#define HAS_MASK\n",
+            !m_features.has(HasFactorR)                   ? "" : "#define HAS_R\n",
+            !m_features.has(HasFactorG)                   ? "" : "#define HAS_G\n",
+            !m_features.has(HasFactorB)                   ? "" : "#define HAS_B\n",
+            !m_features.has(HasFactorA)                   ? "" : "#define HAS_A\n",
+            UInt32(m_features.get() & 0x3)) // Blend Mode
     };
 
+    RLog(CZFatal, "{}", featuresStr);
     m_id = CompileShader(painter()->device(), type(), featuresStr);
     return m_id != 0;
 }

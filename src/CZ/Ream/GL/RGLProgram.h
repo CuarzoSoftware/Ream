@@ -19,7 +19,6 @@ public:
         GLint mask;
         GLint maskProj;
 
-        GLint color;
         GLint factorR;
         GLint factorG;
         GLint factorB;

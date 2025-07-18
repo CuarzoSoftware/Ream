@@ -14,7 +14,12 @@ public:
     RGLDevice *device() const noexcept { return (RGLDevice*)m_device; }
 
 private:
-    CZBitset<RGLShader::Features> calcFeatures(std::shared_ptr<RImage> image, std::shared_ptr<RImage> mask) const noexcept;
+    CZBitset<RGLShader::Features> calcDrawImageFeatures(std::shared_ptr<RImage> image, RGLTexture *imageTex, RGLTexture *maskTex) const noexcept;
+    CZBitset<RGLShader::Features> calcDrawColorFeatures(SkScalar finalAlpha) const noexcept;
+    SkColor4f calcDrawColorColor() const noexcept;
+    void setDrawColorUniforms(CZBitset<RGLShader::Features> features, std::shared_ptr<RGLProgram> prog, const SkColor4f &colorF) const noexcept;
+    void setDrawColorBlendFunc(CZBitset<RGLShader::Features> features) const noexcept;
+
     std::vector<GLfloat> genVBO(const SkRegion &region) const noexcept;
     SkRegion calcDrawImageRegion(RSurface *surface, const RDrawImageInfo &imageInfo, const SkRegion *clip, const RDrawImageInfo *maskInfo) const noexcept;
     void calcPosProj(RSurface *surface, bool flipY, SkScalar *outMat) const noexcept;
