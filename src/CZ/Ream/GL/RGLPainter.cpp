@@ -8,6 +8,8 @@
 #include <CZ/Ream/RSurface.h>
 #include <CZ/Ream/RSync.h>
 #include <CZ/skia/core/SkMatrix.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 using namespace CZ;
 
@@ -173,8 +175,6 @@ skipMask:
     {
         colorF.fA *= m_state.opacity;
     }
-
-    RLog(CZFatal, "POST {} - {} - {} - {}", colorF.fR, colorF.fG, colorF.fB, colorF.fA);
 
     /* Skip dummy user operations */
     if (image->alphaType() == kOpaque_SkAlphaType && !mask)
@@ -453,6 +453,39 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
     return true;
 }
 
+void RGLPainter::beginPass() noexcept
+{
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glEnableVertexAttribArray(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1.0f);
+    glEnable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DITHER);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    glDisable(GL_SAMPLE_COVERAGE);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glCullFace(GL_BACK);
+    glLineWidth(1);
+    glHint(GL_GENERATE_MIPMAP_HINT, GL_FASTEST);
+    glPolygonOffset(0, 0);
+    glDepthFunc(GL_LESS);
+    glDepthRangef(0, 1);
+    glStencilMask(1);
+    glDepthMask(GL_FALSE);
+    glFrontFace(GL_CCW);
+    glBlendColor(0, 0, 0, 0);
+    glBlendEquation(GL_FUNC_ADD);
+}
+
 CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<RImage> image, RGLTexture *imageTex, RGLTexture *maskTex) const noexcept
 {
     assert(image);
@@ -507,6 +540,7 @@ CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<
     case RBlendMode::DstIn:
         // UNUSED: PremultSrc, ReplaceImageColor, HasFactor{R,G,B}
         features.add(RGLShader::BlendDstIn);
+        features.setFlag(RGLShader::HasFactorA, m_state.factor.fA * m_state.opacity != 1.f);
         break;
     }
 
@@ -612,6 +646,7 @@ std::shared_ptr<RGLPainter> RGLPainter::Make(RGLDevice *device) noexcept
 
 bool RGLPainter::init() noexcept
 {
+    return true;
     auto current { RGLMakeCurrent::FromDevice(device(), false) };
     auto testA { RGLProgram::GetOrMake(this, RGLShader::HasImage) };
     auto testB { RGLProgram::GetOrMake(this, 0) };

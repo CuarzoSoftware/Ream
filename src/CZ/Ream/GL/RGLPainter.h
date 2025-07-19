@@ -14,6 +14,7 @@ public:
     RGLDevice *device() const noexcept { return (RGLDevice*)m_device; }
 
 private:
+    void beginPass() noexcept override;
     CZBitset<RGLShader::Features> calcDrawImageFeatures(std::shared_ptr<RImage> image, RGLTexture *imageTex, RGLTexture *maskTex) const noexcept;
     CZBitset<RGLShader::Features> calcDrawColorFeatures(SkScalar finalAlpha) const noexcept;
     SkColor4f calcDrawColorColor() const noexcept;

@@ -282,6 +282,7 @@ public:
 
     bool endPass() noexcept;
 protected:
+    virtual void beginPass() noexcept = 0;
     State m_state {};
     std::vector<State> m_history;
     friend class RSurface;

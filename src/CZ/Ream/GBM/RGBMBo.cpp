@@ -113,6 +113,44 @@ gbm_bo_handle RGBMBo::planeHandle(int planeIndex) const noexcept
     return gbm_bo_get_handle_for_plane(m_bo, planeIndex);
 }
 
+bool RGBMBo::supportsMapRead() const noexcept
+{
+    if (m_supportsMapRead == 2)
+    {
+        void *mapData { nullptr };
+        UInt32 stride;
+
+        if (!gbm_bo_map(m_bo, 0, 0, 1, 1, GBM_BO_TRANSFER_READ, &stride, &mapData))
+            m_supportsMapRead = 0;
+        else
+        {
+            m_supportsMapRead = 1;
+            gbm_bo_unmap(m_bo, mapData);
+        }
+    }
+
+    return m_supportsMapRead == 1;
+}
+
+bool RGBMBo::supportsMapWrite() const noexcept
+{
+    if (m_supportsMapWrite == 2)
+    {
+        void *mapData { nullptr };
+        UInt32 stride;
+
+        if (!gbm_bo_map(m_bo, 0, 0, 1, 1, GBM_BO_TRANSFER_WRITE, &stride, &mapData))
+            m_supportsMapWrite = 0;
+        else
+        {
+            m_supportsMapWrite = 1;
+            gbm_bo_unmap(m_bo, mapData);
+        }
+    }
+
+    return m_supportsMapWrite == 1;
+}
+
 RGBMBo::~RGBMBo() noexcept
 {
     for (int i = 0; i < planeCount(); i++)

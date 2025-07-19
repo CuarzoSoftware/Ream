@@ -373,7 +373,16 @@ int main()
     info.stride = 100 * 4;
     info.pixels = buff.data();
 
-    testImage = RImage::MakeFromPixels(info);
+    testImage = RImage::Make({100, 100}, { DRM_FORMAT_ABGR8888, { DRM_FORMAT_MOD_INVALID } });
+    assert(testImage);
+    assert(testImage->writePixels({
+        .offset = {0, 0},
+        .stride = 100 * 4,
+        .pixels = buff.data(),
+        .region = SkRegion(SkIRect::MakeWH(100, 100)),
+        .format = DRM_FORMAT_ABGR8888,
+    }));
+
     //wl_event_queue *queue = wl_display_create_queue(app.wlDisplay);
 
     std::thread([core]{

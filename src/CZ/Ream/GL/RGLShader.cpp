@@ -4,6 +4,13 @@
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <format>
 
+#include <string>
+#include <sstream>
+#include <unordered_map>
+#include <stack>
+#include <regex>
+#include <iostream>
+
 using namespace CZ;
 
 const char *v = R"(
@@ -219,6 +226,8 @@ static GLuint CompileShader(RGLDevice *device, GLenum type, const std::string &f
     else
         source = features + f;
 
+    // device->log(CZTrace, "New {} Shader: \n{}", type == GL_VERTEX_SHADER ? "vertex" : "fragment" , source);
+
     GLuint shader;
     GLint compiled;
     shader = glCreateShader(type);
@@ -260,7 +269,6 @@ bool RGLShader::build() noexcept
             UInt32(m_features.get() & 0x3)) // Blend Mode
     };
 
-    RLog(CZFatal, "{}", featuresStr);
     m_id = CompileShader(painter()->device(), type(), featuresStr);
     return m_id != 0;
 }

@@ -39,6 +39,7 @@ RPainter *RSurface::beginPass(RDevice *device) const noexcept
         device = RCore::Get()->mainDevice();
 
     device->painter()->m_surface = m_self.lock();
+    device->painter()->beginPass();
 
     if (image()->readSync())
         image()->readSync()->gpuWait(device);

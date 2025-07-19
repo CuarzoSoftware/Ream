@@ -1,4 +1,4 @@
-#include "drm_fourcc.h"
+#include <CZ/Ream/SK/RSKFormat.h>
 #include <CZ/Ream/GL/RGLImage.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
@@ -26,20 +26,35 @@ std::shared_ptr<RImage> RImage::Make(SkISize size, const RDRMFormat &format, RSt
     return {};
 }
 
-std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &params, RDevice *allocator) noexcept
+std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, RStorageType storageType, RDevice *allocator) noexcept
 {
-    auto core { RCore::Get() };
+    auto image { Make(info.size, format, storageType, allocator) };
 
-    assert(core);
+    if (!image)
+        return {};
 
-    if (core->graphicsAPI() == RGraphicsAPI::GL)
-        return RGLImage::MakeFromPixels(params, (RGLDevice*)allocator);
+    RPixelBufferRegion region {};
+    region.pixels = info.pixels;
+    region.region.setRect(SkIRect::MakeSize(info.size));
+    region.format = info.format;
+    region.stride = info.stride;
 
-    return {};
+    if (!image->writePixels(region))
+        return {};
+
+    return image;
 }
 
-std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, SkISize size, RDevice *allocator) noexcept
+std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size, RDevice *allocator) noexcept
 {
+    const SkColorType skFormat { RSKFormat::FromDRM(format.format()) };
+
+    if (skFormat == kUnknown_SkColorType)
+    {
+        RLog(CZError, CZLN, "Could not find DRM -> SkColorType mapping");
+        return {};
+    }
+
     auto core { RCore::Get() };
 
     if (!core)
@@ -73,7 +88,7 @@ std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, SkIS
     {
         SkImageInfo::Make(
             finalSize.toCeil(),
-            kBGRA_8888_SkColorType,
+            skFormat,
             kPremul_SkAlphaType)
     };
 
@@ -91,14 +106,14 @@ std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, SkIS
         finalSize.fHeight / dom->containerSize().height());
     dom->render(&canvas);
 
+    const SkISize pixelSize { bitmap.pixelRef()->width(), bitmap.pixelRef()->height() };
+
     RPixelBufferInfo pixInfo {};
     pixInfo.pixels = (UInt8*)bitmap.pixelRef()->pixels();
     pixInfo.stride = bitmap.pixelRef()->rowBytes();
-    pixInfo.size.fWidth = bitmap.pixelRef()->width();
-    pixInfo.size.fHeight = bitmap.pixelRef()->height();
-    pixInfo.alphaType = kPremul_SkAlphaType;
-    pixInfo.format = DRM_FORMAT_ARGB8888;
-    return MakeFromPixels(pixInfo, allocator);
+    pixInfo.format = format.format();
+    pixInfo.size = pixelSize;
+    return MakeFromPixels(pixInfo, format, RStorageType::Auto, allocator);
 }
 
 std::shared_ptr<RGLImage> RImage::asGL() const noexcept

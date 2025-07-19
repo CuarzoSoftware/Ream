@@ -56,7 +56,7 @@ namespace CZ
     struct RPixelBufferRegion
     {
         /**
-         * @brief Offset applied to each source rect before copying.
+         * @brief Offset in pixels applied to each source rect before copying.
          *
          * For example:
          * - To copy src(10, 10, 100, 100) to dest(0, 0, 100, 100),
@@ -82,6 +82,9 @@ namespace CZ
          */
         SkRegion region;
 
+        // DRM Format
+        RFormat format;
+
         static constexpr UInt8 *AddressAt(UInt8 *origin, SkIPoint offset, UInt32 bytesPerPixel, UInt32 stride) noexcept
         {
             return origin + (offset.y() * stride) + (offset.x() * bytesPerPixel);
@@ -100,9 +103,8 @@ class CZ::RImage : public RObject
 {
 public:
     [[nodiscard]] static std::shared_ptr<RImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RDevice *allocator = nullptr) noexcept;
-    [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &params, RDevice *allocator = nullptr) noexcept;
-    [[nodiscard]] static std::shared_ptr<RImage> LoadFile(const std::filesystem::path &path, SkISize size = {0, 0}, RDevice *allocator = nullptr) noexcept;
-
+    [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RImage> LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size = {0, 0}, RDevice *allocator = nullptr) noexcept;
 
     virtual std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept = 0;
     virtual std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept = 0;

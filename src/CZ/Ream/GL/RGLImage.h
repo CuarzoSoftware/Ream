@@ -1,6 +1,7 @@
 #ifndef RGLIMAGE_H
 #define RGLIMAGE_H
 
+#include <CZ/CZBitset.h>
 #include <CZ/Ream/GL/RGLTexture.h>
 #include <CZ/Ream/RImage.h>
 #include <CZ/Ream/GL/RGLFormat.h>
@@ -32,7 +33,6 @@ public:
     std::shared_ptr<REGLImage> eglImage(RGLDevice *device = nullptr) const noexcept;
 
     [[nodiscard]] static std::shared_ptr<RGLImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RGLDevice *allocator = nullptr) noexcept;
-    [[nodiscard]] static std::shared_ptr<RGLImage> MakeFromPixels(const RPixelBufferInfo &params, RGLDevice *allocator = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
 
     std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept override;
@@ -45,6 +45,20 @@ public:
     }
 
 private:
+
+    [[nodiscard]] static std::shared_ptr<RGLImage> MakeWithGBMStorage(SkISize size, const RDRMFormat &format, RGLDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> MakeWithNativeStorage(SkISize size, const RDRMFormat &format, RGLDevice *allocator = nullptr) noexcept;
+
+    bool writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept;
+    bool writePixelsNative(const RPixelBufferRegion &region) noexcept;
+    void assignReadWriteFormats() noexcept;
+
+    enum PF
+    {
+        PFStorageGBM        = 1 << 0,
+        PFStorageNative     = 1 << 1
+    };
+
     struct GlobalDeviceData
     {
         RGLTexture texture {};
@@ -87,6 +101,8 @@ private:
             return new ThreadDeviceData(device);
         });
     }
+
+    CZBitset<PF> m_pf {};
     RGLFormat m_glFormat;
     mutable GlobalDeviceDataMap m_devicesMap;
     std::shared_ptr<RGLContextDataManager> m_threadDataManager;

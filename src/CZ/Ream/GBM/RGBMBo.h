@@ -18,6 +18,9 @@ public:
     RModifier modifier() const noexcept { return m_dmaInfo.modifier; }
     int planeCount() const noexcept { return m_dmaInfo.planeCount; }
     union gbm_bo_handle planeHandle(int planeIndex) const noexcept;
+    bool supportsMapRead() const noexcept;
+    bool supportsMapWrite() const noexcept;
+    gbm_bo *bo() const noexcept { return m_bo; }
     ~RGBMBo() noexcept;
 private:
     RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOwnership ownership, bool hasModifier, const RDMABufferInfo &dmaInfo) noexcept;
@@ -26,6 +29,9 @@ private:
     CZOwnership m_ownership;
     RDevice *m_allocator;
     std::shared_ptr<RCore> m_core;
+    // 2: unchecked, 1: supported, 0: unsupported
+    mutable UInt8 m_supportsMapRead { 2 };
+    mutable UInt8 m_supportsMapWrite { 2 };
     bool m_hasModifier;
 };
 
