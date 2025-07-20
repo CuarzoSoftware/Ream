@@ -35,7 +35,8 @@ header_dirs = [
     ['src/CZ/Ream/GL', 'GL'],
     ['src/CZ/Ream/WL', 'WL'],
     ['src/CZ/Ream/GBM', 'GBM'],
-    ['src/CZ/Ream/EGL', 'EGL']
+    ['src/CZ/Ream/EGL', 'EGL'],
+    ['src/CZ/Ream/SK', 'SK']
 ]
 
 foreach header_dir : header_dirs

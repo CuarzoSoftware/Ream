@@ -3,7 +3,11 @@
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
+#include <CZ/Ream/SK/RSKContext.h>
 #include <CZ/Utils/CZVectorUtils.h>
+
+#include <CZ/skia/gpu/ganesh/gl/GrGLAssembleInterface.h>
+#include <CZ/skia/gpu/ganesh/gl/GrGLDirectContext.h>
 
 #include <mutex>
 
@@ -13,19 +17,35 @@ static UInt32 managerCount { 0 };
 static UInt32 threadCount { 0 };
 static std::recursive_mutex mutex;
 
+static auto skInterface = GrGLMakeAssembledInterface(nullptr, (GrGLGetProc)*[](void *, const char *p) -> void * {
+    return (void *)eglGetProcAddress(p);
+});
+
+/* A thread_local struct to manage context-specific resources
+ * See Get() */
 struct CZ::RGLThreadDataManager
 {
+    /* Device data for this thread except for the main thread */
     struct DeviceData
     {
         EGLContext context { EGL_NO_CONTEXT };
+        sk_sp<GrDirectContext> skContext;
     };
 
+    /* Some needed info, stored to prevent checking the core */
     std::thread::id mainThreadId;
     RPlatform platform;
     std::shared_ptr<RGLCore> glCore;
+
+    /* Data of each device for this thread */
     std::unordered_map<RGLDevice*, DeviceData> devicesData;
+
+    /* User data requested to be destroyed from another thread.
+     * The destruction occurs when clearGarbage() is called from this thread
+     * or this thread dies */
     std::unordered_map<RGLDevice*, std::vector<RGLContextData*>> devicesGarbage;
 
+    /* Creates or gets this thread instance */
     static RGLThreadDataManager &Get(bool create = true) noexcept
     {
         std::lock_guard<std::recursive_mutex> lock(mutex);
@@ -74,6 +94,7 @@ struct CZ::RGLThreadDataManager
         while (!devicesData.empty())
         {
             auto it { devicesData.begin() };
+            it->second.skContext.reset();
             eglMakeCurrent(it->first->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
             eglDestroyContext(it->first->eglDisplay(), it->second.context);
             devicesData.erase(it);
@@ -102,9 +123,11 @@ struct CZ::RGLThreadDataManager
         if (data.context != EGL_NO_CONTEXT)
             return &data;
 
+        /* The main context is created by the RGLDevice from the main thread */
         if (std::this_thread::get_id() == mainThreadId)
         {
             data.context = device->m_eglContext;
+            data.skContext = device->m_skContext;
         }
         else
         {
@@ -123,6 +146,18 @@ struct CZ::RGLThreadDataManager
 
             attribs[atti++] = EGL_NONE;
             data.context = eglCreateContext(device->eglDisplay(), EGL_NO_CONFIG_KHR, device->m_eglContext, attribs);
+
+            if (data.context == EGL_NO_CONTEXT)
+                device->log(CZError, CZLN, "Failed to create shared GL context for thread {}", std::this_thread::get_id());
+            else
+            {
+                eglMakeCurrent(device->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, data.context);
+                device->log(CZInfo, CZLN, "Shared GL context created for thread {}", std::this_thread::get_id());
+                data.skContext = GrDirectContexts::MakeGL(skInterface, CZ::GetSKContextOptions());
+
+                if (!data.skContext)
+                    device->log(CZError, CZLN, "Failed to create GL GrDirectContext for thread {}", std::this_thread::get_id());
+            }
         }
 
         return &data;
@@ -159,6 +194,12 @@ EGLContext RGLDevice::eglContext() const noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
     return RGLThreadDataManager::Get(false).getDeviceData((RGLDevice*)this)->context;
+}
+
+sk_sp<GrDirectContext> RGLDevice::skContext() const noexcept
+{
+    std::lock_guard<std::recursive_mutex> lock(mutex);
+    return RGLThreadDataManager::Get(false).getDeviceData((RGLDevice*)this)->skContext;
 }
 
 std::shared_ptr<RGLContextDataManager> RGLContextDataManager::Make(AllocFunc func) noexcept

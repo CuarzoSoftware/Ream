@@ -3,6 +3,7 @@
 
 #include <CZ/skia/core/SkRRect.h>
 #include <CZ/skia/core/SkColor.h>
+#include <CZ/skia/core/SkCanvas.h>
 #include <CZ/Ream/RObject.h>
 #include <CZ/Ream/RImageFilter.h>
 #include <CZ/Ream/RImageWrap.h>
@@ -10,8 +11,6 @@
 #include <CZ/CZTransform.h>
 #include <CZ/CZBitset.h>
 #include <memory>
-
-#include <CZ/skia/core/SkBlendMode.h>
 
 namespace CZ
 {
@@ -280,14 +279,18 @@ public:
      */
     RDevice* device() const noexcept { return m_device; }
 
+    SkCanvas *canvas() const noexcept { return m_canvas; }
     bool endPass() noexcept;
 protected:
     virtual void beginPass() noexcept = 0;
     State m_state {};
     std::vector<State> m_history;
     friend class RSurface;
+    friend class RPass;
+    friend class RSKPass;
     RPainter(RDevice *device) noexcept : m_device(device) {}
     std::weak_ptr<RSurface> m_surface;
+    SkCanvas *m_canvas {};
     RDevice *m_device;
 };
 

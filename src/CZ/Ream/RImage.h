@@ -6,6 +6,8 @@
 #include <CZ/skia/core/SkSize.h>
 #include <CZ/skia/core/SkRegion.h>
 #include <CZ/skia/core/SkAlphaType.h>
+#include <CZ/skia/core/SkImage.h>
+#include <CZ/skia/core/SkSurface.h>
 #include <CZ/CZWeak.h>
 #include <filesystem>
 #include <memory>
@@ -108,6 +110,9 @@ public:
 
     virtual std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept = 0;
     virtual std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept = 0;
+    virtual sk_sp<SkImage> skImage(RDevice *device = nullptr) const noexcept = 0;
+    virtual sk_sp<SkSurface> skSurface(RDevice *device = nullptr) const noexcept = 0;
+
     virtual bool writePixels(const RPixelBufferRegion &region) noexcept = 0;
 
     SkISize size() const noexcept

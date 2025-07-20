@@ -48,7 +48,11 @@ namespace CZ
     class RPainter;
     class RSync;
     class RSurface;
+    class RPass;
     struct RPresentationTime;
+
+    // Skia
+    class RSKPass;
 
     // GL/EGL
     class RGLCore;

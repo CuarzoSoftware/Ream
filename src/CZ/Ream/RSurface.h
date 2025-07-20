@@ -12,7 +12,9 @@ class CZ::RSurface : public RObject
 public:
     static std::shared_ptr<RSurface> WrapImage(std::shared_ptr<RImage> image, Int32 scale = 1) noexcept;
 
-    RPainter *beginPass(RDevice *device = nullptr) const noexcept;
+    RPass beginPass(RDevice *device = nullptr) const noexcept;
+    RSKPass beginSKPass(RDevice *device = nullptr) const noexcept;
+
     std::shared_ptr<RImage> image() const noexcept { return m_image; }
 
     // Size (may differ from the image size if scale != 1 or the transform contains a 90° rotation)

@@ -2,15 +2,25 @@
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
+#include <CZ/Ream/SK/RSKFormat.h>
 #include <CZ/Ream/EGL/REGLImage.h>
 #include <CZ/Ream/GBM/RGBMBo.h>
 #include <CZ/Ream/DRM/RDRMFramebuffer.h>
 #include <CZ/Ream/RSync.h>
 #include <CZ/Ream/RLog.h>
 
+#include <CZ/skia/gpu/ganesh/gl/GrGLTypes.h>
+#include <CZ/skia/gpu/ganesh/GrBackendSurface.h>
+#include <CZ/skia/gpu/ganesh/gl/GrGLBackendSurface.h>
+#include <CZ/skia/gpu/ganesh/SkSurfaceGanesh.h>
+#include <CZ/skia/gpu/ganesh/SkImageGanesh.h>
+#include <CZ/skia/core/SkColorSpace.h>
+
 #include <gbm.h>
 #include <xf86drm.h>
 #include <drm_fourcc.h>
+
+static auto skSRGB { SkColorSpace::MakeSRGB() };
 
 using namespace CZ;
 
@@ -187,8 +197,115 @@ std::shared_ptr<RDRMFramebuffer> RGLImage::drmFb(RDevice *device) const noexcept
     return data.drmFb;
 }
 
+sk_sp<SkImage> RGLImage::skImage(RDevice *device) const noexcept
+{
+    // TODO: Save hint if failed to prevent testing again
+
+    if (!device)
+        device = core().mainDevice();
+
+    auto *threadData { static_cast<ThreadDeviceData*>(m_threadDataManager->getData(device->asGL())) };
+
+    if (threadData->skImage)
+        return threadData->skImage;
+
+    auto skContext { device->asGL()->skContext() };
+
+    if (!skContext)
+        return {};
+
+    auto tex { texture((RGLDevice*)device) };
+
+    if (tex.id == 0)
+        return {};
+
+    auto *glFormat { RGLFormat::FromDRM(formatInfo().format) };
+
+    if (!glFormat)
+        return {};
+
+    GrGLTextureInfo skTextureInfo;
+    GrBackendTexture skTexture;
+    skTextureInfo.fFormat = glFormat->internalFormat;
+    skTextureInfo.fID = tex.id;
+    skTextureInfo.fTarget = tex.target;
+
+    skTexture = GrBackendTextures::MakeGL(
+        size().width(),
+        size().height(),
+        skgpu::Mipmapped::kNo,
+        skTextureInfo);
+
+    threadData->skImage = SkImages::BorrowTextureFrom(
+        skContext.get(),
+        skTexture,
+        GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
+        RSKFormat::FromDRM(formatInfo().format),
+        alphaType(),
+        skSRGB,
+        nullptr,
+        nullptr);
+
+    return threadData->skImage;
+}
+
+sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
+{
+    // TODO: Save hint if failed to prevent testing again
+
+    if (!device)
+        device = core().mainDevice();
+
+    auto *threadData { static_cast<ThreadDeviceData*>(m_threadDataManager->getData(device->asGL())) };
+
+    if (threadData->skSurface)
+        return threadData->skSurface;
+
+    auto skContext { device->asGL()->skContext() };
+
+    if (!skContext)
+        return {};
+
+    auto fb { glFb((RGLDevice*)device) };
+
+    if (!fb.has_value())
+        return {};
+
+    auto *glFormat { RGLFormat::FromDRM(formatInfo().format) };
+
+    if (!glFormat)
+        return {};
+
+    const GrGLFramebufferInfo fbInfo
+    {
+        .fFBOID = fb.value(),
+        .fFormat = (GrGLenum)glFormat->internalFormat
+    };
+
+    const GrBackendRenderTarget backendTarget = GrBackendRenderTargets::MakeGL(
+        size().width(),
+        size().height(),
+        0, 0,
+        fbInfo);
+
+    // TODO: Add pixel geometry to constructor
+    static SkSurfaceProps skSurfaceProps(0, kUnknown_SkPixelGeometry);
+
+    threadData->skSurface = SkSurfaces::WrapBackendRenderTarget(
+        skContext.get(),
+        backendTarget,
+        fbInfo.fFBOID == 0 ? GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin : GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
+        RSKFormat::FromDRM(formatInfo().format),
+        skSRGB,
+        &skSurfaceProps);
+
+    return threadData->skSurface;
+}
+
 bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
 {
+    // TODO: Implement blitting as fallback
+
     if (!region.pixels)
         return false;
 

@@ -1,3 +1,6 @@
+#include <CZ/skia/gpu/ganesh/GrDirectContext.h>
+#include <CZ/skia/gpu/ganesh/GrRecordingContext.h>
+#include <CZ/Ream/SK/RSKPass.h>
 #include <CZ/Ream/RLog.h>
 #include <CZ/Ream/RSurface.h>
 #include <CZ/Ream/RCore.h>
@@ -5,6 +8,7 @@
 #include <CZ/Ream/RPainter.h>
 #include <CZ/Ream/RImage.h>
 #include <CZ/Ream/RSync.h>
+#include <CZ/Ream/RPass.h>
 
 using namespace CZ;
 
@@ -33,21 +37,25 @@ std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image, Int
     return surface;
 }
 
-RPainter *RSurface::beginPass(RDevice *device) const noexcept
+RPass RSurface::beginPass(RDevice *device) const noexcept
 {
     if (!device)
         device = RCore::Get()->mainDevice();
 
-    device->painter()->m_surface = m_self.lock();
-    device->painter()->beginPass();
+    auto *painter { device->painter() };
 
-    if (image()->readSync())
-        image()->readSync()->gpuWait(device);
+    if (!painter)
+        return {};
 
-    if (image()->writeSync())
-        image()->writeSync()->gpuWait(device);
+    return { m_self.lock(), painter };
+}
 
-    return device->painter();
+RSKPass RSurface::beginSKPass(RDevice *device) const noexcept
+{
+    if (!device)
+        device = RCore::Get()->mainDevice();
+
+    return { m_image, device };
 }
 
 RSurface::~RSurface() noexcept

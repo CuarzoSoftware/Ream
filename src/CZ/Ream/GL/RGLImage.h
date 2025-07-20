@@ -37,6 +37,9 @@ public:
 
     std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept override;
     std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept override;
+    sk_sp<SkImage> skImage(RDevice *device = nullptr) const noexcept override;
+    sk_sp<SkSurface> skSurface(RDevice *device = nullptr) const noexcept override;
+
     bool writePixels(const RPixelBufferRegion &region) noexcept override;
 
     RGLDevice *allocator() const noexcept
@@ -81,6 +84,8 @@ private:
 
         ~ThreadDeviceData() noexcept;
 
+        sk_sp<SkImage> skImage;
+        sk_sp<SkSurface> skSurface;
         GLuint fb { 0 };
         CZOwnership fbOwnership { CZOwnership::Borrow };
         bool hasFb { false };

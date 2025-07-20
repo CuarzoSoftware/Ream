@@ -6,11 +6,11 @@
 #include <RImage.h>
 #include <RSurface.h>
 #include <RPainter.h>
+#include <RPass.h>
 
 #include <GL/RGLImage.h>
 
-#include <iostream>
-#include <ostream>
+
 #include <thread>
 #include <wayland-client.h>
 #include <wayland-egl.h>
@@ -203,7 +203,7 @@ void Window::update() noexcept
 
     if (surf)
     {
-        auto *p { surf->beginPass() };
+        auto pass { surf->beginPass() };
 
         RDrawImageInfo info {};
         info.image = testImage;
@@ -215,12 +215,10 @@ void Window::update() noexcept
             testImage->size().width(),
             testImage->size().height());
         info.dst = SkIRect::MakeXYWH(10, 10, 256, 256);
-        p->drawImage(info);
-
-        p->setColor(SK_ColorCYAN);
-        p->drawColor(SkRegion(SkIRect::MakeXYWH(10, 10, 40, 40)));
-
-        p->endPass();
+        pass()->drawImage(info);
+        pass()->setColor(SK_ColorCYAN);
+        pass()->drawColor(SkRegion(SkIRect::MakeXYWH(10, 10, 40, 40)));
+        pass.end();
     }
     else
         RLog(CZError, "NO SURF");

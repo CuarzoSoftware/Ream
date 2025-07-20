@@ -1,5 +1,6 @@
 #include <Utils/CZStringUtils.h>
 #include <CZ/Ream/WL/RWLPlatformHandle.h>
+#include <CZ/Ream/SK/RSKContext.h>
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLPainter.h>
@@ -7,6 +8,17 @@
 #include <fcntl.h>
 #include <gbm.h>
 #include <xf86drm.h>
+
+#include <CZ/skia/gpu/ganesh/gl/GrGLAssembleInterface.h>
+#include <CZ/skia/gpu/ganesh/gl/GrGLDirectContext.h>
+
+#include <mutex>
+
+using namespace CZ;
+
+static auto skInterface = GrGLMakeAssembledInterface(nullptr, (GrGLGetProc)*[](void *, const char *p) -> void * {
+    return (void *)eglGetProcAddress(p);
+});
 
 using namespace CZ;
 
@@ -303,6 +315,12 @@ bool RGLDevice::initEGLContext() noexcept
     }
 
     eglMakeCurrent(eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, m_eglContext);
+
+    m_skContext = GrDirectContexts::MakeGL(skInterface, CZ::GetSKContextOptions());
+
+    if (!m_skContext)
+        log(CZError, CZLN, "Failed to create GL GrDirectContext");
+
     return true;
 }
 
