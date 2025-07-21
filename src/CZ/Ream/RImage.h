@@ -104,6 +104,22 @@ namespace CZ
 class CZ::RImage : public RObject
 {
 public:
+    /// Device-specific caps
+    enum class DeviceCap
+    {
+        /// Can be used as a src image by an RPass (RPass::drawImage())
+        RPassSrc,
+
+        /// Can be used as a src image by an RSKPass (has an SkImage)
+        RSKPassSrc,
+
+        /// Can be used as a render destination in an RPass (accepted by RSurface::WrapImage)
+        RPassDst,
+
+        /// Can be used as a render destination in an RSKPass (has an SkSurface)
+        RSKPassDst
+    };
+
     [[nodiscard]] static std::shared_ptr<RImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RDevice *allocator = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RDevice *allocator = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RImage> LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size = {0, 0}, RDevice *allocator = nullptr) noexcept;
@@ -112,6 +128,7 @@ public:
     virtual std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept = 0;
     virtual sk_sp<SkImage> skImage(RDevice *device = nullptr) const noexcept = 0;
     virtual sk_sp<SkSurface> skSurface(RDevice *device = nullptr) const noexcept = 0;
+    virtual bool checkDeviceCap(DeviceCap cap, RDevice *device = nullptr) const noexcept = 0;
 
     virtual bool writePixels(const RPixelBufferRegion &region) noexcept = 0;
 
@@ -185,6 +202,8 @@ protected:
     std::weak_ptr<RImage> m_self;
     std::shared_ptr<RSync> m_readSync;
     std::shared_ptr<RSync> m_writeSync;
+    std::unique_ptr<RDMABufferInfo> m_dmaInfo;
+    CZOwnership m_dmaInfoOwn;
 };
 
 #endif // RIMAGE_H

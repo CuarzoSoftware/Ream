@@ -1,5 +1,5 @@
-#ifndef REAM_H
-#define REAM_H
+#ifndef CZ_REAM_H
+#define CZ_REAM_H
 
 #include <CZ/CZ.h>
 
@@ -50,6 +50,7 @@ namespace CZ
     class RSurface;
     class RPass;
     struct RPresentationTime;
+    struct RDMABufferInfo;
 
     // Skia
     class RSKPass;
@@ -76,20 +77,6 @@ namespace CZ
     class RVKImage;
     class RVKPainter;
     class RVKSync;
-
-    struct RDMABufferInfo
-    {
-        Int32 width;
-        Int32 height;
-        RFormat format;
-        RModifier modifier;
-        int planeCount;
-        UInt32 offset[4] {};
-        UInt32 stride[4] {};
-        int fd[4] { -1, -1, -1, -1 };
-    };
 }
-
-    struct gbm_bo;
 
 #endif

@@ -39,6 +39,7 @@ public:
     std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept override;
     sk_sp<SkImage> skImage(RDevice *device = nullptr) const noexcept override;
     sk_sp<SkSurface> skSurface(RDevice *device = nullptr) const noexcept override;
+    bool checkDeviceCap(DeviceCap cap, RDevice *device = nullptr) const noexcept override;
 
     bool writePixels(const RPixelBufferRegion &region) noexcept override;
 
@@ -56,14 +57,29 @@ private:
     bool writePixelsNative(const RPixelBufferRegion &region) noexcept;
     void assignReadWriteFormats() noexcept;
 
+    /* If set, re-checks can be omitted */
+    enum UnsupportedDeviceCap
+    {
+        NoGLTexture     = 1 << 0,
+        NoGLFramebufer  = 1 << 1,
+        NoEGLImage      = 1 << 2,
+        NoGBMBo         = 1 << 3,
+        NoDRMFb         = 1 << 4,
+        NoSkImage       = 1 << 5,
+        NoSkSurface     = 1 << 6,
+    };
+
+    /* Private flags */
     enum PF
     {
         PFStorageGBM        = 1 << 0,
         PFStorageNative     = 1 << 1
     };
 
+    /* Device data shared across GL contexts */
     struct GlobalDeviceData
     {
+        CZBitset<UnsupportedDeviceCap> unsupportedCaps;
         RGLTexture texture {};
         CZOwnership textureOwnership { CZOwnership::Borrow };
 
@@ -76,20 +92,17 @@ private:
         RGLDevice *device { nullptr };
     };
 
-    class ThreadDeviceData : public RGLContextData
+    /* Device data for a specific GL context */
+    class ContextData : public RGLContextData
     {
     public:
-        ThreadDeviceData(RGLDevice *device) noexcept :
-            device(device) {};
-
-        ~ThreadDeviceData() noexcept;
+        ContextData(RGLDevice *device) noexcept : device(device) {};
+        ~ContextData() noexcept;
 
         sk_sp<SkImage> skImage;
         sk_sp<SkSurface> skSurface;
-        GLuint fb { 0 };
+        std::optional<GLuint> glFb {};
         CZOwnership fbOwnership { CZOwnership::Borrow };
-        bool hasFb { false };
-
         RGLDevice *device { nullptr };
     };
 
@@ -101,16 +114,16 @@ private:
     RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept
         : RImage(core, (RDevice*)device, size, formatInfo, alphaType, modifiers)
     {
-        m_threadDataManager = RGLContextDataManager::Make([](RGLDevice *device) -> RGLContextData*
-        {
-            return new ThreadDeviceData(device);
+
+        m_contextDataManager = RGLContextDataManager::Make([](RGLDevice *device) -> RGLContextData* {
+            return new ContextData(device);
         });
     }
 
     CZBitset<PF> m_pf {};
     RGLFormat m_glFormat;
     mutable GlobalDeviceDataMap m_devicesMap;
-    std::shared_ptr<RGLContextDataManager> m_threadDataManager;
+    std::shared_ptr<RGLContextDataManager> m_contextDataManager;
 };
 
 #endif // RGLIMAGE_H

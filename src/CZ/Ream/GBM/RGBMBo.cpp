@@ -1,10 +1,11 @@
-#include <drm_fourcc.h>
 #include <CZ/Ream/RLog.h>
 #include <CZ/Ream/GBM/RGBMBo.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RDevice.h>
 #include <CZ/Ream/DRM/RDRMFormat.h>
 #include <CZ/skia/core/SkSize.h>
+
+#include <drm_fourcc.h>
 #include <gbm.h>
 
 using namespace CZ;
@@ -108,6 +109,87 @@ std::shared_ptr<RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format, RDe
     return std::shared_ptr<RGBMBo>(new RGBMBo(core, allocator, bo, CZOwnership::Own, hasModifier, dmaInfo));
 }
 
+std::shared_ptr<RGBMBo> RGBMBo::MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevice *importer) noexcept
+{
+    if (!dmaInfo.isValid())
+    {
+        RLog(CZError, CZLN, "Invalid DMA info");
+        return {};
+    }
+
+    auto core { RCore::Get() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    if (!importer)
+    {
+        assert(core->mainDevice());
+        importer = core->mainDevice();
+    }
+
+    if (!importer->gbmDevice())
+    {
+        importer->log(CZError, CZLN, "Missing gbm_device");
+        return {};
+    }
+
+    gbm_import_fd_modifier_data data {};
+    data.width = dmaInfo.width;
+    data.height = dmaInfo.height;
+    data.modifier = dmaInfo.modifier;
+    data.format = dmaInfo.format;
+    data.num_fds = dmaInfo.planeCount;
+
+    for (int i = 0; i < dmaInfo.planeCount; i++)
+    {
+        data.fds[i] = dmaInfo.fd[i];
+        data.offsets[i] = dmaInfo.offset[i];
+        data.strides[i] = dmaInfo.stride[i];
+    }
+
+    bool hasModifier;
+    gbm_bo *bo {};
+
+    if (dmaInfo.modifier != DRM_FORMAT_MOD_INVALID)
+    {
+        hasModifier = true;
+        bo = gbm_bo_import(importer->gbmDevice(), GBM_BO_IMPORT_FD_MODIFIER, &data, GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
+    }
+
+    if (!bo && dmaInfo.modifier == DRM_FORMAT_MOD_INVALID)
+    {
+        hasModifier = false;
+        bo = gbm_bo_import(importer->gbmDevice(), GBM_BO_IMPORT_FD, &data, GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT);
+    }
+
+    if (!bo && dmaInfo.modifier == DRM_FORMAT_MOD_LINEAR)
+    {
+        hasModifier = false;
+        bo = gbm_bo_import(importer->gbmDevice(), GBM_BO_IMPORT_FD, &data, GBM_BO_USE_RENDERING | GBM_BO_USE_SCANOUT | GBM_BO_USE_LINEAR);
+    }
+
+    if (!bo)
+    {
+        importer->log(CZError, CZLN, "Failed create gbm_bo from DMA buffer");
+        return {};
+    }
+
+    auto dmaDup { dmaInfo.dup() };
+
+    if (!dmaDup.has_value())
+    {
+        RLog(CZError, CZLN, "Failed to dup DMA info");
+        gbm_bo_destroy(bo);
+        return {};
+    }
+
+    return std::shared_ptr<RGBMBo>(new RGBMBo(core, importer, bo, CZOwnership::Own, hasModifier, dmaDup.value()));
+}
+
 gbm_bo_handle RGBMBo::planeHandle(int planeIndex) const noexcept
 {
     return gbm_bo_get_handle_for_plane(m_bo, planeIndex);
@@ -115,7 +197,7 @@ gbm_bo_handle RGBMBo::planeHandle(int planeIndex) const noexcept
 
 bool RGBMBo::supportsMapRead() const noexcept
 {
-    if (m_supportsMapRead == 2)
+    if (m_supportsMapRead == 2) // 2 => not yet checked
     {
         void *mapData { nullptr };
         UInt32 stride;
@@ -134,7 +216,7 @@ bool RGBMBo::supportsMapRead() const noexcept
 
 bool RGBMBo::supportsMapWrite() const noexcept
 {
-    if (m_supportsMapWrite == 2)
+    if (m_supportsMapWrite == 2) // 2 => not yet checked
     {
         void *mapData { nullptr };
         UInt32 stride;

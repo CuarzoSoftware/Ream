@@ -1,5 +1,6 @@
 #include <CZ/Ream/SK/RSKFormat.h>
 #include <CZ/Ream/GL/RGLImage.h>
+#include <CZ/Ream/RDMABufferInfo.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
 

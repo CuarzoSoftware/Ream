@@ -11,6 +11,7 @@
 class CZ::REGLImage final : public RObject
 {
 public:
+    // dups the fds internally and thus does not take ownership
     static std::shared_ptr<REGLImage> MakeFromDMA(const RDMABufferInfo &info, RGLDevice *device = nullptr) noexcept;
 
     // id = 0 on failure

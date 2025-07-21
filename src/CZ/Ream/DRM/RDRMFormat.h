@@ -9,6 +9,9 @@ namespace CZ
 {
     struct RFormatInfo
     {
+        /**
+         * @brief The DRM format.
+         */
         RFormat format;
 
         /**
@@ -101,7 +104,7 @@ namespace CZ
          *
          * @param width Image width in pixels.
          * @param stride Stride in bytes.
-         * @return `true` if stride is valid; `false` otherwise.
+         * @return `true` if stride is valid, `false` otherwise.
          */
         constexpr bool validateStride(UInt32 width, UInt32 stride) const noexcept
         {
@@ -109,31 +112,80 @@ namespace CZ
         }
     };
 
+    /**
+     * @brief A DRM Four Character Code format along with a set of supported modifiers.
+     *
+     * It can be passed to buffer allocators to let them choose an optimal modifier for the given format.
+     */
     class RDRMFormat
     {
     public:
+        /**
+         * @brief Retrieves detailed information about a DRM format.
+         *
+         * @param format The DRM format to query.
+         * @return A pointer to an RFormatInfo struct if the format is supported, or nullptr otherwise.
+         */
         static const RFormatInfo *GetInfo(RFormat format) noexcept;
+
+        /**
+         * @brief Returns a substitute format with or without alpha, depending on the input.
+         *
+         * For example, this can convert ARGB8888 to XRGB8888 and vice versa.
+         * If no suitable substitute exists, the original format is returned.
+         *
+         * @param format The input DRM format.
+         * @return A substitute format with modified alpha presence, or the original format.
+         */
         static RFormat GetAlphaSubstitute(RFormat format) noexcept;
 
+        /**
+         * @brief Constructs a new RDRMFormat with the specified format and modifiers.
+         *
+         * @param format The DRM format.
+         * @param modifiers A list of supported modifiers for the format.
+         */
         constexpr RDRMFormat(RFormat format, std::initializer_list<RModifier> modifiers) noexcept
             : m_format(format), m_modifiers(modifiers) {}
 
+        /**
+         * @brief Returns the DRM format.
+         */
         RFormat format() const noexcept { return m_format; }
 
-        void setFormat(RFormat format) noexcept
-        {
-            m_format = format;
-        }
+        /**
+         * @brief Sets a new DRM format.
+         */
+        void setFormat(RFormat format) noexcept { m_format = format; }
 
+        /**
+         * @brief Returns the set of modifiers associated with this format.
+         */
         const std::flat_set<RModifier> &modifiers() const noexcept { return m_modifiers; }
+
+        /**
+         * @brief Adds a modifier to the set.
+         *
+         * @param modifier The modifier to add.
+         * @return true if the modifier was newly added, false if it was already present.
+         */
         bool addModifier(RModifier modifier) noexcept
         {
             return m_modifiers.insert(modifier).second;
         }
+
+        /**
+         * @brief Removes a modifier from the set.
+         *
+         * @param modifier The modifier to remove.
+         * @return true if the modifier was removed, false if it was not found.
+         */
         bool removeModifier(RModifier modifier) noexcept
         {
             return m_modifiers.erase(modifier) > 0;
         }
+
+        /* Used to enable RDRMFormat comparisons */
 
         bool operator<(const RDRMFormat& other) const noexcept
         {
@@ -173,14 +225,59 @@ namespace CZ
         mutable std::flat_set<RModifier> m_modifiers;
     };
 
+    /**
+     * @brief Represents a set of DRM formats and their associated modifiers.
+     *
+     * This class is typically used by subsystems (e.g. KMS, EGL, etc) to declare
+     * supported format+modifier combinations.
+     */
     class RDRMFormatSet
     {
     public:
+
+        /**
+         * @brief Returns the internal set of formats with their modifiers.
+         */
         const std::flat_set<RDRMFormat, RDRMFormat::Less> &formats() const noexcept { return m_formats; }
 
+        /**
+         * @brief Computes the union of two format sets.
+         *
+         * @param a First format set.
+         * @param b Second format set.
+         * @return A new set containing all format+modifier combinations from both inputs.
+         */
         static RDRMFormatSet Union(const RDRMFormatSet &a, const RDRMFormatSet &b) noexcept;
+
+        /**
+         * @brief Computes the intersection of two format sets.
+         *
+         * Only formats and modifiers present in both sets will be retained.
+         *
+         * @param a First format set.
+         * @param b Second format set.
+         * @return A new set containing only the common format+modifier pairs.
+         */
         static RDRMFormatSet Intersect(const RDRMFormatSet &a, const RDRMFormatSet &b) noexcept;
 
+        /**
+         * @brief Computes the intersection between a format set and a set of DRM formats.
+         *
+         * All modifiers for matching formats are retained.
+         *
+         * @param a Format set to filter.
+         * @param b Set of DRM formats.
+         * @return A new set with formats present in both inputs.
+         */
+        static RDRMFormatSet Intersect(const RDRMFormatSet &a, const std::flat_set<RFormat> &b) noexcept;
+
+        /**
+         * @brief Checks if a specific format+modifier combination is present.
+         *
+         * @param format The DRM format to check.
+         * @param modifier The modifier to check.
+         * @return true if the format and modifier exist in the set, false otherwise.
+         */
         bool has(RFormat format, RModifier modifier) const noexcept
         {
             auto it { m_formats.find(format) };
@@ -190,7 +287,16 @@ namespace CZ
             return it->modifiers().contains(modifier);
         }
 
-        // True if added, false if already exists
+        /**
+         * @brief Adds a format+modifier pair to the set.
+         *
+         * If the format is new, it is inserted with the modifier.
+         * If the format already exists, the modifier is added to its modifier set.
+         *
+         * @param format The DRM format to add.
+         * @param modifier The modifier to add.
+         * @return true if the combination was newly added, false if it already existed.
+         */
         bool add(RFormat format, RModifier modifier) noexcept
         {
             auto it { m_formats.find(format) };
@@ -205,6 +311,15 @@ namespace CZ
                 return it->addModifier(modifier);
         }
 
+        /**
+         * @brief Removes a specific modifier from a format.
+         *
+         * If the modifier is the last one for that format, the entire format entry is removed.
+         *
+         * @param format The DRM format.
+         * @param modifier The modifier to remove.
+         * @return true if the modifier was removed, false if it was not found.
+         */
         bool remove(RFormat format, RModifier modifier) noexcept
         {
             auto it { m_formats.find(format) };
@@ -218,6 +333,68 @@ namespace CZ
                     m_formats.erase(it);
                 return ret;
             }
+        }
+
+        /**
+         * @brief Removes all modifiers for a given format, effectively removing the format.
+         *
+         * @param format The DRM format to remove.
+         * @return true if the format was removed, false if it was not present.
+         */
+        bool removeFormat(RFormat format) noexcept
+        {
+            auto it { m_formats.find(format) };
+
+            if (it == m_formats.end())
+                return false;
+            else
+            {
+                m_formats.erase(it);
+                return true;
+            }
+        }
+
+        /**
+         * @brief Removes the given modifier from all formats.
+         *
+         * If any format ends up with no modifiers, it is removed from the set.
+         *
+         * @param modifier The modifier to remove.
+         * @return true if at least one modifier was removed, false otherwise.
+         */
+        bool removeModifier(RModifier modifier) noexcept
+        {
+            bool removedOne { false };
+
+            start:
+            for (auto &format : m_formats)
+            {
+                removedOne |= format.removeModifier(modifier);
+
+                if (format.modifiers().empty())
+                {
+                    m_formats.erase(format);
+                    goto start;
+                }
+            }
+
+            return removedOne;
+        }
+
+        /**
+         * @brief Adds the given modifier to all existing formats.
+         *
+         * @param modifier The modifier to add.
+         * @return true if the modifier was added to at least one format; false otherwise.
+         */
+        bool addModifier(RModifier modifier) noexcept
+        {
+            bool addedOne { false };
+
+            for (auto &format : m_formats)
+                addedOne |= format.addModifier(modifier);
+
+            return addedOne;
         }
     private:
         std::flat_set<RDRMFormat, RDRMFormat::Less> m_formats;

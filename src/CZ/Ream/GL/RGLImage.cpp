@@ -24,6 +24,7 @@ static auto skSRGB { SkColorSpace::MakeSRGB() };
 
 using namespace CZ;
 
+/* Validates common parameters during allocation */
 static std::shared_ptr<RGLCore> ValidateMake(SkISize size, RFormat format, SkAlphaType alphaType, RGLDevice **allocator, const RFormatInfo **formatInfo, SkAlphaType *outAlphaType) noexcept
 {
     auto core { RCore::Get() };
@@ -77,16 +78,21 @@ RGLTexture RGLImage::texture(RGLDevice *device) const noexcept
     if (!device)
         device = core().asGL()->mainDevice();
 
-    auto &data { m_devicesMap[device] };
+    auto &deviceData { m_devicesMap[device] };
 
-    if (data.texture.id != 0)
-        return data.texture;
+    /* Already has one */
+
+    if (deviceData.texture.id != 0)
+        return deviceData.texture;
+
+    /* Already failed to create one */
+
 
     auto image { eglImage(device) };
 
-    data.texture = image->texture();
-    data.textureOwnership = CZOwnership::Borrow;
-    return data.texture;
+    deviceData.texture = image->texture();
+    deviceData.textureOwnership = CZOwnership::Borrow;
+    return deviceData.texture;
 }
 
 std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
@@ -94,24 +100,41 @@ std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
     if (!device)
         device = core().asGL()->mainDevice();
 
-    auto *threadData { static_cast<ThreadDeviceData*>(m_threadDataManager->getData(device)) };
+    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device)) };
 
-    if (threadData->hasFb)
-        return threadData->fb;
+    /* Already has one */
+
+    if (contextData->glFb.has_value())
+        return contextData->glFb;
+
+    auto &deviceData { m_devicesMap[device] };
+
+    /* Already failed before */
+
+    if (deviceData.unsupportedCaps.has(NoGLFramebufer))
+        return {};
+
+    /* Attempt to create one */
 
     auto image { eglImage(device) };
 
     if (!image)
+    {
+        deviceData.unsupportedCaps.add(NoGLFramebufer);
         return {};
+    }
 
-    threadData->fb = image->fb();
+    contextData->glFb = image->fb();
 
-    if (!threadData->fb)
-        return {};
+    if (contextData->glFb.value() == 0)
+    {
+        deviceData.unsupportedCaps.add(NoGLFramebufer);
+        contextData->glFb.reset();
+        return contextData->glFb;
+    }
 
-    threadData->hasFb = true;
-    threadData->fbOwnership = CZOwnership::Borrow;
-    return threadData->fb;
+    contextData->fbOwnership = CZOwnership::Borrow;
+    return contextData->glFb;
 }
 
 std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
@@ -119,18 +142,34 @@ std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
     if (!device)
         device = core().asGL()->mainDevice();
 
-    auto &data { m_devicesMap[device] };
+    auto &deviceData { m_devicesMap[device] };
 
-    if (data.eglImage)
-        return data.eglImage;
+    /* Already has one */
+
+    if (deviceData.eglImage)
+        return deviceData.eglImage;
+
+    /* Already failed to create one */
+
+    if (deviceData.unsupportedCaps.has(NoEGLImage))
+        return {};
+
+    /* Attempt to create one */
 
     auto bo { gbmBo(device) };
 
     if (!bo)
+    {
+        deviceData.unsupportedCaps.add(NoEGLImage);
         return {};
+    }
 
-    data.eglImage = REGLImage::MakeFromDMA(bo->dmaInfo(), device);
-    return data.eglImage;
+    deviceData.eglImage = REGLImage::MakeFromDMA(bo->dmaInfo(), device);
+
+    if (!deviceData.eglImage)
+        deviceData.unsupportedCaps.add(NoEGLImage);
+
+    return deviceData.eglImage;
 }
 
 std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format, RStorageType storageType, RGLDevice *allocator) noexcept
@@ -165,10 +204,9 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
     auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, formatInfo, alphaType, {DRM_FORMAT_MOD_INVALID})) };
     image->m_self = image;
-    auto *threadData { static_cast<ThreadDeviceData*>(image->m_threadDataManager->getData(allocator)) };
-    threadData->fb = info.id;
-    threadData->hasFb = true;
-    threadData->fbOwnership = CZOwnership::Borrow;
+    auto *contextData { static_cast<ContextData*>(image->m_contextDataManager->getData(allocator)) };
+    contextData->glFb = info.id;
+    contextData->fbOwnership = CZOwnership::Borrow;
     return image;
 }
 
@@ -187,56 +225,86 @@ std::shared_ptr<RDRMFramebuffer> RGLImage::drmFb(RDevice *device) const noexcept
     if (!device)
         device = core().mainDevice();
 
-    auto *dev { static_cast<RGLDevice*>(device) };
-    auto &data { m_devicesMap[dev] };
+    auto &data { m_devicesMap[device->asGL()] };
+
+    /* Already has one */
 
     if (data.drmFb)
         return data.drmFb;
 
+    /* Already failed before */
+
+    if (data.unsupportedCaps.has(NoDRMFb))
+        return {};
+
+    /* Attempt to create one */
+
     data.drmFb = RDRMFramebuffer::MakeFromGBMBo(gbmBo(device));
+
+    if (!data.drmFb)
+        data.unsupportedCaps.add(NoDRMFb);
+
     return data.drmFb;
 }
 
 sk_sp<SkImage> RGLImage::skImage(RDevice *device) const noexcept
 {
-    // TODO: Save hint if failed to prevent testing again
-
     if (!device)
         device = core().mainDevice();
 
-    auto *threadData { static_cast<ThreadDeviceData*>(m_threadDataManager->getData(device->asGL())) };
+    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device->asGL())) };
 
-    if (threadData->skImage)
-        return threadData->skImage;
+    /* Already has one */
+
+    if (contextData->skImage)
+        return contextData->skImage;
+
+    auto &deviceData { m_devicesMap[device->asGL()] };
+
+    /* Already failed before */
+
+    if (deviceData.unsupportedCaps.has(NoSkImage))
+        return {};
+
+    /* Attempt to create one */
 
     auto skContext { device->asGL()->skContext() };
 
     if (!skContext)
+    {
+        deviceData.unsupportedCaps.add(NoSkImage);
         return {};
+    }
 
     auto tex { texture((RGLDevice*)device) };
 
     if (tex.id == 0)
+    {
+        deviceData.unsupportedCaps.add(NoSkImage);
         return {};
+    }
 
     auto *glFormat { RGLFormat::FromDRM(formatInfo().format) };
 
     if (!glFormat)
+    {
+        deviceData.unsupportedCaps.add(NoSkImage);
         return {};
+    }
 
-    GrGLTextureInfo skTextureInfo;
-    GrBackendTexture skTexture;
+    GrGLTextureInfo skTextureInfo {};
     skTextureInfo.fFormat = glFormat->internalFormat;
     skTextureInfo.fID = tex.id;
     skTextureInfo.fTarget = tex.target;
 
+    GrBackendTexture skTexture;
     skTexture = GrBackendTextures::MakeGL(
         size().width(),
         size().height(),
         skgpu::Mipmapped::kNo,
         skTextureInfo);
 
-    threadData->skImage = SkImages::BorrowTextureFrom(
+    contextData->skImage = SkImages::BorrowTextureFrom(
         skContext.get(),
         skTexture,
         GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
@@ -246,35 +314,56 @@ sk_sp<SkImage> RGLImage::skImage(RDevice *device) const noexcept
         nullptr,
         nullptr);
 
-    return threadData->skImage;
+    if (!contextData->skImage)
+        deviceData.unsupportedCaps.add(NoSkImage);
+
+    return contextData->skImage;
 }
 
 sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
 {
-    // TODO: Save hint if failed to prevent testing again
-
     if (!device)
         device = core().mainDevice();
 
-    auto *threadData { static_cast<ThreadDeviceData*>(m_threadDataManager->getData(device->asGL())) };
+    /* Already has one */
 
-    if (threadData->skSurface)
-        return threadData->skSurface;
+    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device->asGL())) };
+
+    if (contextData->skSurface)
+        return contextData->skSurface;
+
+    auto &deviceData { m_devicesMap[device->asGL()] };
+
+    /* Already failed before */
+
+    if (deviceData.unsupportedCaps.has(NoSkSurface))
+        return {};
+
+    /* Attempt to create one */
 
     auto skContext { device->asGL()->skContext() };
 
     if (!skContext)
+    {
+        deviceData.unsupportedCaps.add(NoSkSurface);
         return {};
+    }
 
     auto fb { glFb((RGLDevice*)device) };
 
     if (!fb.has_value())
+    {
+        deviceData.unsupportedCaps.add(NoSkSurface);
         return {};
+    }
 
     auto *glFormat { RGLFormat::FromDRM(formatInfo().format) };
 
     if (!glFormat)
+    {
+        deviceData.unsupportedCaps.add(NoSkSurface);
         return {};
+    }
 
     const GrGLFramebufferInfo fbInfo
     {
@@ -291,7 +380,7 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
     // TODO: Add pixel geometry to constructor
     static SkSurfaceProps skSurfaceProps(0, kUnknown_SkPixelGeometry);
 
-    threadData->skSurface = SkSurfaces::WrapBackendRenderTarget(
+    contextData->skSurface = SkSurfaces::WrapBackendRenderTarget(
         skContext.get(),
         backendTarget,
         fbInfo.fFBOID == 0 ? GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin : GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
@@ -299,7 +388,30 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
         skSRGB,
         &skSurfaceProps);
 
-    return threadData->skSurface;
+    if (!contextData->skSurface)
+        deviceData.unsupportedCaps.add(NoSkSurface);
+
+    return contextData->skSurface;
+}
+
+bool RGLImage::checkDeviceCap(DeviceCap cap, RDevice *device) const noexcept
+{
+    if (!device)
+        device = m_core->mainDevice();
+
+    switch (cap)
+    {
+    case DeviceCap::RPassSrc:
+        return texture(device->asGL()).id != 0;
+    case DeviceCap::RSKPassSrc:
+        return skImage(device->asGL()) != nullptr;
+    case DeviceCap::RPassDst:
+        return glFb(device->asGL()).has_value();
+    case DeviceCap::RSKPassDst:
+        return skSurface(device->asGL()) != nullptr;
+    }
+
+    return false;
 }
 
 bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
@@ -607,8 +719,8 @@ RGLImage::GlobalDeviceDataMap::~GlobalDeviceDataMap() noexcept
     }
 }
 
-RGLImage::ThreadDeviceData::~ThreadDeviceData() noexcept
+RGLImage::ContextData::~ContextData() noexcept
 {
-    if (fbOwnership == CZOwnership::Own && fb)
-        glDeleteFramebuffers(1, &fb);
+    if (fbOwnership == CZOwnership::Own && glFb.has_value())
+        glDeleteFramebuffers(1, &glFb.value());
 }
