@@ -280,48 +280,13 @@ static void initEGL() noexcept
 }
 
 static std::mutex mutex;
-/*
-struct Test
+static std::shared_ptr<RCore> core;
+
+void thread()
 {
-    ~Test() {
-
-        printf("WEAK %d\n", self.expired());
-    }
-
-    std::weak_ptr<Test> self;
-};*/
-
-int main()
-{
-    setenv("CZ_REAM_LOG_LEVEL", "6", 0);
-    setenv("CZ_REAM_EGL_LOG_LEVEL", "6", 0);
-
-    app.wlDisplay = wl_display_connect(NULL);
-
-    if (!app.wlDisplay)
-    {
-        RLog(CZFatal, CZLN, "Failed to create wl_display");
-        return EXIT_FAILURE;
-    }
-
-    app.wlRegistry = wl_display_get_registry(app.wlDisplay);
-    wl_registry_add_listener(app.wlRegistry, &wlRegistryLis, NULL);
-    wl_display_roundtrip(app.wlDisplay);
-    assert("Failed to get wl_compositor v6" && app.wlCompositor);
-    assert("Failed to get xdg_wm_base" && app.wlCompositor);
-
-    RCore::Options options {};
-    options.graphicsAPI = RGraphicsAPI::GL;
-    options.platformHandle = RWLPlatformHandle::Make(app.wlDisplay);
-    auto core { RCore::Make(options) };
-
-    initEGL();
-
     Window win {};
-
     auto buff = std::vector<UInt8>();
     buff.resize(100*100*4);
-
     for (size_t x = 0; x < 100; x++)
     {
         for (size_t y = 0; y < 100; y++)
@@ -374,45 +339,68 @@ int main()
     testImage = RImage::Make({100, 100}, { DRM_FORMAT_ABGR8888, { DRM_FORMAT_MOD_INVALID } });
     assert(testImage);
     assert(testImage->writePixels({
-        .offset = {0, 0},
-        .stride = 100 * 4,
-        .pixels = buff.data(),
-        .region = SkRegion(SkIRect::MakeWH(100, 100)),
-        .format = DRM_FORMAT_ABGR8888,
-    }));
+                                   .offset = {0, 0},
+                                   .stride = 100 * 4,
+                                   .pixels = buff.data(),
+                                   .region = SkRegion(SkIRect::MakeWH(100, 100)),
+                                   .format = DRM_FORMAT_ABGR8888,
+                                   }));
 
-    //wl_event_queue *queue = wl_display_create_queue(app.wlDisplay);
+    for (int i = 0; i < 50; i++)
+    {
+        mutex.lock();
+        wl_display_dispatch(app.wlDisplay);
+        win.update();
+        core->clearGarbage();
+        mutex.unlock();
+        usleep(50000);
+    }
+}
 
-    std::thread([core]{
+int main()
+{
+    setenv("CZ_REAM_LOG_LEVEL", "6", 0);
+    setenv("CZ_REAM_EGL_LOG_LEVEL", "6", 0);
 
-         //usleep(3000);
-        Window win {};
+    app.wlDisplay = wl_display_connect(NULL);
 
-        //wl_proxy_set_queue((wl_proxy*)win.wlSurface, queue);
+    if (!app.wlDisplay)
+    {
+        RLog(CZFatal, CZLN, "Failed to create wl_display");
+        return EXIT_FAILURE;
+    }
 
-        for (int i = 0; i < 50; i++)
-        {
-            mutex.lock();
-            //std::cout << "A" << std::endl;
-            //wl_display_dispatch_queue(app.wlDisplay, queue);
-            wl_display_dispatch(app.wlDisplay);
-            win.update();
-            core->clearGarbage();
-            mutex.unlock();
-            usleep(50000);
-        }
+    app.wlRegistry = wl_display_get_registry(app.wlDisplay);
+    wl_registry_add_listener(app.wlRegistry, &wlRegistryLis, NULL);
+    wl_display_roundtrip(app.wlDisplay);
+    assert("Failed to get wl_compositor v6" && app.wlCompositor);
+    assert("Failed to get xdg_wm_base" && app.wlCompositor);
+
+    std::thread([]{
+
+        RCore::Options options {};
+        options.graphicsAPI = RGraphicsAPI::GL;
+        options.platformHandle = RWLPlatformHandle::Make(app.wlDisplay);
+        core = RCore::Make(options);
+        initEGL();
+        thread();
     }).detach();
 
-    /*
+    usleep(10000000);
+
     std::thread([]{
-        usleep(3000000);
-        abort();
-    }).detach();*/
+        thread();
+    }).detach();
+
+    std::thread([]{
+        thread();
+    }).detach();
+
+    Window win {};
 
     for (int i = 0; i < 100; i++)
     {
         mutex.lock();
-        //std::cout << "B" << std::endl;
         wl_display_dispatch(app.wlDisplay);
         win.update();
         core->clearGarbage();
@@ -420,6 +408,12 @@ int main()
         usleep(50000);
     }
 
-    core->asGL()->freeThread();
+    std::thread([]{
+        auto c { core };
+        thread();
+    }).detach();
+
+    usleep(10000000);
+
     return 0;
 }

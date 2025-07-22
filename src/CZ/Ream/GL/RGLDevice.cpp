@@ -12,8 +12,6 @@
 #include <CZ/skia/gpu/ganesh/gl/GrGLAssembleInterface.h>
 #include <CZ/skia/gpu/ganesh/gl/GrGLDirectContext.h>
 
-#include <mutex>
-
 using namespace CZ;
 
 static auto skInterface = GrGLMakeAssembledInterface(nullptr, (GrGLGetProc)*[](void *, const char *p) -> void * {
@@ -393,7 +391,7 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
 
 bool RGLDevice::initPainter() noexcept
 {
-    m_threadData = RGLContextDataManager::Make([](RGLDevice *device) -> RGLContextData *
+    m_threadData = RGLContextDataManager::MakeInternal([](RGLDevice *device) -> RGLContextData *
     {
         return new ThreadData(device);
     });

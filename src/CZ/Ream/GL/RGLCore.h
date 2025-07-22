@@ -4,7 +4,6 @@
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/EGL/REGLExtensions.h>
 #include <CZ/Ream/GL/RGLExtensions.h>
-#include <thread>
 
 class CZ::RGLCore : public RCore
 {
@@ -28,8 +27,6 @@ private:
     RGLCore(const Options &options) noexcept;
     REGLClientExtensions m_clientEGLExtensions {};
     REGLClientProcs m_clientEGLProcs {};
-    std::unordered_map<std::thread::id, RGLThreadDataManager*> m_threadDataManagers;
-    std::vector<RGLContextDataManager*> m_contextDataManagers;
 };
 
 #endif // RGLCORE_H

@@ -124,7 +124,10 @@ std::shared_ptr<RGLImage> RImage::asGL() const noexcept
 
 RImage::~RImage() noexcept
 {
-    RLog(CZTrace, "- ({}) RImage", --count);
+    --count;
+
+    if (count == 0)
+        RLog(CZTrace, "RImage count reached: 0");
 }
 
 RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept :
@@ -141,5 +144,5 @@ RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const
     assert(!modifiers.empty());
     assert(device);
     assert(core);
-    RLog(CZTrace, "+ ({}) RImage", ++count);
+    ++count;
 }

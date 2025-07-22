@@ -60,13 +60,16 @@ RSKPass RSurface::beginSKPass(RDevice *device) const noexcept
 
 RSurface::~RSurface() noexcept
 {
-    RLog(CZTrace, "- ({}) RSurface", --count);
+    --count;
+
+    if (count == 0)
+        RLog(CZTrace, "RSurface count reached: 0");
 }
 
 RSurface::RSurface(std::shared_ptr<RImage> image, Int32 scale) noexcept :
     m_image(image), m_scale(scale)
 {
-    RLog(CZTrace, "+ ({}) RSurface", ++count);
+    ++count;
 }
 
 void RSurface::calculateSizeFromImage() noexcept

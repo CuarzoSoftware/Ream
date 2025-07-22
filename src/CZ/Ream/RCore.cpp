@@ -9,10 +9,7 @@ using namespace CZ;
 
 static std::weak_ptr<RCore> s_core;
 
-RCore::RCore(const Options &options) noexcept : m_options(options)
-{
-    RLog(CZTrace, "+ (1) RCore");
-}
+RCore::RCore(const Options &options) noexcept : m_options(options) {}
 
 std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
 {
@@ -79,7 +76,7 @@ std::shared_ptr<RGLCore> RCore::asGL() noexcept
 
 RCore::~RCore() noexcept
 {
-    RLog(CZTrace, "- (0) RCore");
+    RLog(CZTrace, "RCore destroyed");
 }
 
 std::shared_ptr<CZ::RCore> RCore::Get() noexcept

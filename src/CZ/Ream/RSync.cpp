@@ -6,8 +6,6 @@
 
 using namespace CZ;
 
-static UInt32 count { 0 };
-
 std::shared_ptr<RSync> RSync::FromExternal(int fd, RDevice *device) noexcept
 {
     auto core { RCore::Get() };
@@ -48,15 +46,12 @@ RSync::RSync(std::shared_ptr<RCore> core, RDevice *device, int fd, bool isExtern
 {
     assert(device);
     assert(core);
-    //device->log(CZTrace, "+ ({}) RSync", ++count);
 }
 
 RSync::~RSync() noexcept
 {
     if (m_fd >= 0)
         close(m_fd);
-
-    //device()->log(CZTrace, "- ({}) RSync", --count);
 }
 
 int RSync::fd() const noexcept
