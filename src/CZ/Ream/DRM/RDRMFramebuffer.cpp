@@ -11,7 +11,7 @@
 
 using namespace CZ;
 
-static void closeHandles(int drmFd, UInt32 *handles, size_t n) noexcept
+static void CloseHandles(int drmFd, UInt32 *handles, size_t n) noexcept
 {
     std::unordered_set<UInt32> closedHandles;
 
@@ -25,6 +25,65 @@ static void closeHandles(int drmFd, UInt32 *handles, size_t n) noexcept
     }
 }
 
+static bool CreateFb(RDevice *dev, int n, UInt32 w, UInt32 h, RFormat fmt, const RModifier *mods, const UInt32 *handles, const UInt32 *strides, const UInt32 *offsets, UInt32 *outId, bool *outHasMod) noexcept
+{
+    if (dev->caps().AddFb2Modifiers)
+    {
+        UInt32 flags { 0 };
+
+        if (mods[0] && mods[0] != DRM_FORMAT_MOD_INVALID)
+            flags = DRM_MODE_FB_MODIFIERS;
+
+        if (drmModeAddFB2WithModifiers(dev->drmFd(), w, h, fmt, handles, strides, offsets, mods, outId, flags) == 0)
+        {
+            *outHasMod = flags != 0;
+            return true;
+        }
+    }
+
+    if (mods[0] == DRM_FORMAT_MOD_INVALID || mods[0] == DRM_FORMAT_MOD_LINEAR)
+    {
+        if (drmModeAddFB2(dev->drmFd(), w, h, fmt, handles, strides, offsets, outId, 0) == 0)
+        {
+            *outHasMod = false;
+            return true;
+        }
+    }
+
+    if ((mods[0] == DRM_FORMAT_MOD_INVALID || mods[0] == DRM_FORMAT_MOD_LINEAR) && n == 1)
+    {
+        const RFormatInfo *info { RDRMFormat::GetInfo(fmt) };
+
+        if (info)
+        {
+            if (drmModeAddFB(dev->drmFd(), w, h, info->depth, info->bpp, strides[0], handles[0], outId) == 0)
+            {
+                *outHasMod = false;
+                return true;
+            }
+        }
+
+        const RFormat prev { fmt };
+        fmt = RDRMFormat::GetAlphaSubstitute(fmt);
+
+        if (fmt != prev)
+        {
+            info = RDRMFormat::GetInfo(fmt);
+
+            if (info)
+            {
+                if (drmModeAddFB(dev->drmFd(), w, h, info->depth, info->bpp, strides[0], handles[0], outId) == 0)
+                {
+                    *outHasMod = false;
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
 std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromGBMBo(std::shared_ptr<RGBMBo> bo) noexcept
 {
     if (!bo)
@@ -34,12 +93,10 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromGBMBo(std::shared_ptr<
     }
 
     auto core { bo->core() };
-
     UInt32 id { 0 };
     bool hasModifier;
-    bool pass { false };
-    UInt32 handles[4] {};
-    RModifier modifiers[4] {};
+    UInt32 handles[4] { 0, 0, 0, 0 };
+    RModifier modifiers[4] { 0, 0, 0, 0 };
     RFormat format { bo->dmaInfo().format };
     RDevice *device { bo->allocator() };
 
@@ -49,97 +106,7 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromGBMBo(std::shared_ptr<
         modifiers[i] = bo->modifier();
     }
 
-    if (device->caps().AddFb2Modifiers && (bo->hasModifier() || bo->modifier() == DRM_FORMAT_MOD_LINEAR))
-    {
-        if (drmModeAddFB2WithModifiers(
-            device->drmFd(),
-            bo->dmaInfo().width,
-            bo->dmaInfo().height,
-            format,
-            handles,
-            bo->dmaInfo().stride,
-            bo->dmaInfo().offset,
-            modifiers,
-            &id,
-            DRM_MODE_FB_MODIFIERS) == 0)
-        {
-            pass = true;
-            hasModifier = true;
-            goto end;
-        }
-    }
-
-    if (!bo->hasModifier())
-    {
-        if (drmModeAddFB2(
-            device->drmFd(),
-            bo->dmaInfo().width,
-            bo->dmaInfo().height,
-            format,
-            handles,
-            bo->dmaInfo().stride,
-            bo->dmaInfo().offset,
-            &id,
-            0) == 0)
-        {
-            pass = true;
-            hasModifier = false;
-            goto end;
-        }
-    }
-
-    if (!bo->hasModifier() && bo->planeCount() == 1)
-    {
-        const RFormatInfo *info { RDRMFormat::GetInfo(format) };
-
-        if (info)
-        {
-            if (drmModeAddFB(
-                device->drmFd(),
-                bo->dmaInfo().width,
-                bo->dmaInfo().height,
-                info->depth,
-                info->bpp,
-                bo->dmaInfo().stride[0],
-                handles[0],
-                &id) == 0)
-            {
-                pass = true;
-                hasModifier = false;
-                goto end;
-            }
-        }
-
-        format = RDRMFormat::GetAlphaSubstitute(format);
-
-        if (format != bo->dmaInfo().format)
-        {
-            info = RDRMFormat::GetInfo(format);
-
-            if (info)
-            {
-                if (drmModeAddFB(
-                    device->drmFd(),
-                    bo->dmaInfo().width,
-                    bo->dmaInfo().height,
-                    info->depth,
-                    info->bpp,
-                    bo->dmaInfo().stride[0],
-                    handles[0],
-                    &id) == 0)
-                {
-                    pass = true;
-                    hasModifier = false;
-                    goto end;
-                }
-
-                id = 0;
-            }
-        }
-    }
-end:
-
-    if (!pass)
+    if (!CreateFb(bo->allocator(), bo->planeCount(), bo->dmaInfo().width, bo->dmaInfo().height, format, modifiers, handles, bo->dmaInfo().stride, bo->dmaInfo().offset, &id, &hasModifier))
     {
         device->log(CZError, CZLN, "Failed to create RDRMFramebuffer from RGBMBo");
         return {};
@@ -170,10 +137,8 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromDMA(const RDMABufferIn
     if (!importer)
         importer = core->mainDevice();
 
-
     UInt32 id { 0 };
     bool hasModifier;
-    bool pass { false };
     UInt32 handles[4] { 0, 0, 0, 0 };
     RModifier modifiers[4] {};
     RFormat format { dmaInfo.format };
@@ -184,108 +149,17 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromDMA(const RDMABufferIn
         if (drmPrimeFDToHandle(device->drmFd(), dmaInfo.fd[i], &handles[i]) != 0)
         {
             device->log(CZError, CZLN, "drmPrimeFDToHandle failed");
-            closeHandles(device->drmFd(), handles, i+1);
+            CloseHandles(device->drmFd(), handles, i+1);
             return {};
         }
 
         modifiers[i] = dmaInfo.modifier;
     }
 
-    if (device->caps().AddFb2Modifiers && dmaInfo.modifier != DRM_FORMAT_MOD_INVALID)
-    {
-        if (drmModeAddFB2WithModifiers(
-                device->drmFd(),
-                dmaInfo.width,
-                dmaInfo.height,
-                format,
-                handles,
-                dmaInfo.stride,
-                dmaInfo.offset,
-                modifiers,
-                &id,
-                DRM_MODE_FB_MODIFIERS) == 0)
-        {
-            pass = true;
-            hasModifier = true;
-            goto end;
-        }
-    }
-
-    if (dmaInfo.modifier == DRM_FORMAT_MOD_INVALID || dmaInfo.modifier == DRM_FORMAT_MOD_LINEAR)
-    {
-        if (drmModeAddFB2(
-                device->drmFd(),
-                dmaInfo.width,
-                dmaInfo.height,
-                format,
-                handles,
-                dmaInfo.stride,
-                dmaInfo.offset,
-                &id,
-                0) == 0)
-        {
-            pass = true;
-            hasModifier = false;
-            goto end;
-        }
-
-        if (dmaInfo.planeCount == 1)
-        {
-            const RFormatInfo *info { RDRMFormat::GetInfo(format) };
-
-            if (info)
-            {
-                if (drmModeAddFB(
-                        device->drmFd(),
-                        dmaInfo.width,
-                        dmaInfo.height,
-                        info->depth,
-                        info->bpp,
-                        dmaInfo.stride[0],
-                        handles[0],
-                        &id) == 0)
-                {
-                    pass = true;
-                    hasModifier = false;
-                    goto end;
-                }
-            }
-
-            format = RDRMFormat::GetAlphaSubstitute(format);
-
-            if (format != dmaInfo.format)
-            {
-                info = RDRMFormat::GetInfo(format);
-
-                if (info)
-                {
-                    if (drmModeAddFB(
-                            device->drmFd(),
-                            dmaInfo.width,
-                            dmaInfo.height,
-                            info->depth,
-                            info->bpp,
-                            dmaInfo.stride[0],
-                            handles[0],
-                            &id) == 0)
-                    {
-                        pass = true;
-                        hasModifier = false;
-                        goto end;
-                    }
-
-                    id = 0;
-                }
-            }
-        }
-    }
-
-end:
-
-    if (!pass)
+    if (!CreateFb(device, dmaInfo.planeCount, dmaInfo.width, dmaInfo.height, format, modifiers, handles, dmaInfo.stride, dmaInfo.offset, &id, &hasModifier))
     {
         device->log(CZError, CZLN, "Failed to create RDRMFramebuffer from RGBMBo");
-        closeHandles(device->drmFd(), handles, dmaInfo.planeCount);
+        CloseHandles(device->drmFd(), handles, dmaInfo.planeCount);
         return {};
     }
 
@@ -299,6 +173,45 @@ end:
         format,
         dmaInfo.modifier, hasModifier,
         handlesVec, CZOwnership::Own));
+}
+
+std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::WrapHandle(SkISize size, UInt32 stride, RFormat format, RModifier modifier, UInt32 handle, CZOwnership ownership, RDevice *device) noexcept
+{
+    auto core { RCore::Get() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    if (!device)
+        device = core->mainDevice();
+
+    UInt32 handles[4] { handle, 0, 0, 0 };
+    const RModifier mods[4] { modifier, 0, 0, 0 };
+    const UInt32 strides[4] { stride, 0, 0, 0 };
+    const UInt32 offsets[4] { 0, 0, 0, 0 };
+
+    UInt32 id;
+    bool hasModifier;
+
+    if (!CreateFb(device, 1, size.width(), size.height(), format, mods, handles, strides, offsets, &id, &hasModifier))
+    {
+        device->log(CZError, CZLN, "Failed to create RDRMFramebuffer from handles");
+        if (ownership == CZOwnership::Own)
+            CloseHandles(device->drmFd(), handles, 1);
+        return {};
+    }
+
+    std::vector<UInt32> handlesVec;
+    handlesVec.emplace_back(handle);
+
+    return std::shared_ptr<RDRMFramebuffer>(new RDRMFramebuffer(
+        core, device, id,
+        size, format,
+        modifier, hasModifier,
+        handlesVec, ownership));
 }
 
 RDRMFramebuffer::RDRMFramebuffer(std::shared_ptr<RCore> core,
@@ -324,5 +237,5 @@ RDRMFramebuffer::~RDRMFramebuffer() noexcept
     drmModeRmFB(m_device->drmFd(), m_id);
 
     if (m_handlesOwn == CZOwnership::Own)
-        closeHandles(m_device->drmFd(), m_handles.data(), m_handles.size());
+        CloseHandles(m_device->drmFd(), m_handles.data(), m_handles.size());
 }

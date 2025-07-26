@@ -37,6 +37,9 @@ public:
      */
     static std::shared_ptr<RDRMFramebuffer> MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevice *importer = nullptr) noexcept;
 
+    static std::shared_ptr<RDRMFramebuffer> WrapHandle(SkISize size, UInt32 stride, RFormat format, RModifier modifier, UInt32 handle,
+                                                       CZOwnership ownership, RDevice *device) noexcept;
+
     bool hasModifier() const noexcept { return m_hasModifier; };
     RModifier modifier() const noexcept { return m_modifier; }
     RFormat format() const noexcept { return m_format; }

@@ -251,9 +251,12 @@ bool RGLDevice::initEGLDisplayDRM() noexcept
         return false;
     }
 
-    UInt64 value;
+    UInt64 value {};
     drmGetCap(m_drmFd, DRM_CAP_ADDFB2_MODIFIERS, &value);
     m_caps.AddFb2Modifiers = value == 1;
+    value = {};
+    drmGetCap(m_drmFd, DRM_CAP_DUMB_BUFFER, &value);
+    m_caps.DumbBuffer = value == 1;
 
     //KHR_platform_gbm or MESA_platform_gbm already validated
     m_eglDisplay = core().clientEGLProcs().eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_KHR, m_gbmDevice, NULL);

@@ -36,6 +36,7 @@ public:
     {
         /// Supports creating DRM framebuffers with explicit format modifiers.
         bool AddFb2Modifiers;
+        bool DumbBuffer;
 
         /// Supports RSync-based client-side synchronization.
         bool SyncCPU;
