@@ -175,6 +175,8 @@ void main()
 
     #ifdef HAS_A
         gl_FragColor.a = factorA;
+    #else
+        gl_FragColor.a = 1.0;
     #endif
 
 #endif

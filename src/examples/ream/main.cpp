@@ -285,6 +285,43 @@ static std::shared_ptr<RCore> core;
 void thread()
 {
     Window win {};
+
+    for (int i = 0; i < 50; i++)
+    {
+        mutex.lock();
+        wl_display_dispatch(app.wlDisplay);
+        win.update();
+        core->clearGarbage();
+        mutex.unlock();
+        usleep(50000);
+    }
+}
+
+int main()
+{
+    setenv("CZ_REAM_LOG_LEVEL", "6", 0);
+    setenv("CZ_REAM_EGL_LOG_LEVEL", "6", 0);
+
+    app.wlDisplay = wl_display_connect(NULL);
+
+    if (!app.wlDisplay)
+    {
+        RLog(CZFatal, CZLN, "Failed to create wl_display");
+        return EXIT_FAILURE;
+    }
+
+    app.wlRegistry = wl_display_get_registry(app.wlDisplay);
+    wl_registry_add_listener(app.wlRegistry, &wlRegistryLis, NULL);
+    wl_display_roundtrip(app.wlDisplay);
+    assert("Failed to get wl_compositor v6" && app.wlCompositor);
+    assert("Failed to get xdg_wm_base" && app.wlCompositor);
+
+    RCore::Options options {};
+    options.graphicsAPI = RGraphicsAPI::GL;
+    options.platformHandle = RWLPlatformHandle::Make(app.wlDisplay);
+    core = RCore::Make(options);
+    initEGL();
+
     auto buff = std::vector<UInt8>();
     buff.resize(100*100*4);
     for (size_t x = 0; x < 100; x++)
@@ -346,52 +383,6 @@ void thread()
                                    .format = DRM_FORMAT_ABGR8888,
                                    }));
 
-    for (int i = 0; i < 50; i++)
-    {
-        mutex.lock();
-        wl_display_dispatch(app.wlDisplay);
-        win.update();
-        core->clearGarbage();
-        mutex.unlock();
-        usleep(50000);
-    }
-}
-
-int main()
-{
-    setenv("CZ_REAM_LOG_LEVEL", "6", 0);
-    setenv("CZ_REAM_EGL_LOG_LEVEL", "6", 0);
-
-    app.wlDisplay = wl_display_connect(NULL);
-
-    if (!app.wlDisplay)
-    {
-        RLog(CZFatal, CZLN, "Failed to create wl_display");
-        return EXIT_FAILURE;
-    }
-
-    app.wlRegistry = wl_display_get_registry(app.wlDisplay);
-    wl_registry_add_listener(app.wlRegistry, &wlRegistryLis, NULL);
-    wl_display_roundtrip(app.wlDisplay);
-    assert("Failed to get wl_compositor v6" && app.wlCompositor);
-    assert("Failed to get xdg_wm_base" && app.wlCompositor);
-
-    std::thread([]{
-
-        RCore::Options options {};
-        options.graphicsAPI = RGraphicsAPI::GL;
-        options.platformHandle = RWLPlatformHandle::Make(app.wlDisplay);
-        core = RCore::Make(options);
-        initEGL();
-        thread();
-    }).detach();
-
-    usleep(10000000);
-
-    std::thread([]{
-        thread();
-    }).detach();
-
     std::thread([]{
         thread();
     }).detach();
@@ -407,13 +398,6 @@ int main()
         mutex.unlock();
         usleep(50000);
     }
-
-    std::thread([]{
-        auto c { core };
-        thread();
-    }).detach();
-
-    usleep(10000000);
 
     return 0;
 }

@@ -65,18 +65,18 @@ std::shared_ptr<RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format, RDe
     }
     else
     {
-        if (format.modifiers().contains(DRM_FORMAT_MOD_INVALID))
-        {
-            dmaInfo.modifier = DRM_FORMAT_MOD_INVALID;
-            hasModifier = false;
-            bo = gbm_bo_create(allocator->gbmDevice(), size.width(), size.height(), format.format(), GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
-        }
-
         if (!bo && format.modifiers().contains(DRM_FORMAT_MOD_LINEAR))
         {
             dmaInfo.modifier = DRM_FORMAT_MOD_LINEAR;
             hasModifier = false;
             bo = gbm_bo_create(allocator->gbmDevice(), size.width(), size.height(), format.format(), GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR);
+        }
+
+        if (format.modifiers().contains(DRM_FORMAT_MOD_INVALID))
+        {
+            dmaInfo.modifier = DRM_FORMAT_MOD_INVALID;
+            hasModifier = false;
+            bo = gbm_bo_create(allocator->gbmDevice(), size.width(), size.height(), format.format(), GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
         }
     }
 

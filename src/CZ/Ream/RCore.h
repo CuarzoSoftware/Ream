@@ -47,6 +47,7 @@ public:
 protected:
     RCore(const Options &options) noexcept;
     virtual bool init() noexcept = 0;
+    void logInfo() noexcept;
     Options m_options;
     RDevice *m_mainDevice { nullptr };
     std::vector<RDevice*> m_devices;

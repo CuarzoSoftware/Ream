@@ -318,13 +318,14 @@ skipMask:
 
     std::vector<GLfloat> vbo { genVBO(region) };
     glEnableVertexAttribArray(prog->loc().pos);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vbo.data());
+    glVertexAttribPointer(prog->loc().pos, 2, GL_FLOAT, GL_FALSE, 0, vbo.data());
     const auto size { surface->image()->size() };
     glViewport(0, 0, size.width(), size.height());
     setScissors(surface.get(), fb == 0, region);
     glBlendEquation(GL_FUNC_ADD);
     glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
     glDisableVertexAttribArray(prog->loc().pos);
+    glUseProgram(0);
     return true;
 }
 
@@ -431,6 +432,7 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
     }
 
     prog->bind();
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, fb.value());
     setDrawColorUniforms(features, prog, colorF);
 
@@ -441,7 +443,7 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
 
     std::vector<GLfloat> vbo { genVBO(region) };
     glEnableVertexAttribArray(prog->loc().pos);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vbo.data());
+    glVertexAttribPointer(prog->loc().pos, 2, GL_FLOAT, GL_FALSE, 0, vbo.data());
 
     setDrawColorBlendFunc(features);
 
@@ -450,15 +452,16 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
 
     glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
     glDisableVertexAttribArray(prog->loc().pos);
+    glUseProgram(0);
     return true;
 }
 
 void RGLPainter::beginPass() noexcept
 {
+    auto current { RGLMakeCurrent::FromDevice(device(), false) };
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    glEnableVertexAttribArray(0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1.0f);

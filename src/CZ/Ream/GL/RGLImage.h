@@ -111,14 +111,7 @@ private:
         ~GlobalDeviceDataMap() noexcept;
     };
 
-    RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept
-        : RImage(core, (RDevice*)device, size, formatInfo, alphaType, modifiers)
-    {
-
-        m_contextDataManager = RGLContextDataManager::Make([](RGLDevice *device) -> RGLContextData* {
-            return new ContextData(device);
-        });
-    }
+    RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept;
 
     CZBitset<PF> m_pf {};
     RGLFormat m_glFormat;

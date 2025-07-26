@@ -1,8 +1,10 @@
 #include <CZ/skia/core/SkCanvas.h>
 #include <CZ/skia/gpu/ganesh/GrDirectContext.h>
 #include <CZ/skia/gpu/ganesh/GrRecordingContext.h>
-#include <CZ/Ream/RSync.h>
 #include <CZ/Ream/SK/RSKPass.h>
+#include <CZ/Ream/GL/RGLMakeCurrent.h>
+#include <CZ/Ream/RDevice.h>
+#include <CZ/Ream/RSync.h>
 #include <CZ/Ream/RImage.h>
 
 using namespace CZ;
@@ -15,6 +17,7 @@ bool RSKPass::end() noexcept
     m_canvas->getSurface()->recordingContext()->asDirectContext()->flush();
     m_image->setWriteSync(RSync::Make(m_device));
     m_image.reset();
+    m_glCurrent.reset();
     return true;
 }
 
@@ -41,6 +44,9 @@ RSKPass::RSKPass(std::shared_ptr<RImage> image, RDevice *device) noexcept :
 
     if (image->writeSync())
         image->writeSync()->gpuWait(device);
+
+    if (device->asGL())
+        m_glCurrent.reset(new RGLMakeCurrent(RGLMakeCurrent::FromDevice(device->asGL(), true)));
 
     skSurface->recordingContext()->asDirectContext()->resetContext();
     m_canvas = skSurface->getCanvas();

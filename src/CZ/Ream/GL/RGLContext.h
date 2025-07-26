@@ -105,7 +105,7 @@ private:
     RGLContextDataManager(const AllocFunc &func) noexcept;
     void freeCurrentThreadData() noexcept;
     // Stored data foeach [thread, device]
-    std::unordered_map<std::thread::id, std::unordered_map<RGLDevice*, RGLContextData*>> m_data;
+    std::unordered_map<pthread_t, std::unordered_map<RGLDevice*, RGLContextData*>> m_data;
     AllocFunc m_allocFunc;
     std::weak_ptr<RGLContextDataManager> m_self;
 };

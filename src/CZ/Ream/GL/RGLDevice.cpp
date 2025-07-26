@@ -1,16 +1,19 @@
-#include <Utils/CZStringUtils.h>
 #include <CZ/Ream/WL/RWLPlatformHandle.h>
 #include <CZ/Ream/SK/RSKContext.h>
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLPainter.h>
 #include <CZ/Ream/RLog.h>
-#include <fcntl.h>
-#include <gbm.h>
-#include <xf86drm.h>
 
 #include <CZ/skia/gpu/ganesh/gl/GrGLAssembleInterface.h>
 #include <CZ/skia/gpu/ganesh/gl/GrGLDirectContext.h>
+
+#include <CZ/Utils/CZStringUtils.h>
+
+#include <fcntl.h>
+#include <gbm.h>
+#include <xf86drm.h>
+#include <drm_fourcc.h>
 
 using namespace CZ;
 
@@ -25,7 +28,19 @@ RGLDevice *RGLDevice::Make(RGLCore &core, int drmFd, void *userData) noexcept
     auto dev { new RGLDevice(core, drmFd, userData)};
 
     if (dev->init())
+    {
+        const char *env { std::getenv("CZ_REAM_EGL_LOG_LEVEL") };
+
+        if (env && static_cast<UInt32>(atoi(env)) >= CZTrace)
+        {
+            dev->log(CZDebug, "EGL DMA Texture Formats:");
+            dev->m_dmaTextureFormats.log();
+
+            dev->log(CZDebug, "EGL DMA Render Formats:");
+            dev->m_dmaRenderFormats.log();
+        }
         return dev;
+    }
 
     delete dev;
     return nullptr;
@@ -86,6 +101,7 @@ bool RGLDevice::initWL() noexcept
         initEGLContext() &&
         initGLExtensions() &&
         initEGLDisplayProcs() &&
+        initDMAFormats() &&
         initPainter())
         return true;
 
@@ -132,6 +148,23 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
     const char *deviceExtensions { core().clientEGLProcs().eglQueryDeviceStringEXT(eglDevice(), EGL_EXTENSIONS) };
     m_eglDeviceExtensions.EXT_device_drm_render_node = CZStringUtils::CheckExtension(deviceExtensions, "EGL_EXT_device_drm_render_node");
+    m_eglDeviceExtensions.EXT_device_drm = CZStringUtils::CheckExtension(deviceExtensions, "EGL_EXT_device_drm");
+
+    if (eglDeviceExtensions().EXT_device_drm)
+    {
+        const char *primaryNode = core().clientEGLProcs().eglQueryDeviceStringEXT(eglDevice(), EGL_DRM_DEVICE_FILE_EXT);
+
+        if (primaryNode)
+        {
+            int fd { open(primaryNode, O_RDONLY) };
+
+            if (fd >= 0)
+            {
+                setDRMDriverName(fd);
+                close(fd);
+            }
+        }
+    }
 
     if (!eglDeviceExtensions().EXT_device_drm_render_node)
     {
@@ -182,6 +215,7 @@ bool RGLDevice::initDRM() noexcept
         initEGLContext() &&
         initGLExtensions() &&
         initEGLDisplayProcs() &&
+        initDMAFormats() &&
         initPainter())
         return true;
 
@@ -205,7 +239,9 @@ bool RGLDevice::initEGLDisplayDRM() noexcept
     if (m_drmNode.empty())
         m_drmNode = "Unknown Device";
     else
-        log = RLog.newWithContext(m_drmNode);
+        log = RLog.newWithContext(CZStringUtils::SubStrAfterLastOf(m_drmNode, "/"));
+
+    setDRMDriverName(m_drmFd);
 
     m_gbmDevice = gbm_create_device(m_drmFd);
 
@@ -276,9 +312,18 @@ bool RGLDevice::initEGLDisplayExtensions() noexcept
     exts.KHR_image_pixmap = CZStringUtils::CheckExtension(extensions, "EGL_KHR_image_pixmap");
     exts.KHR_gl_texture_2D_image = CZStringUtils::CheckExtension(extensions, "EGL_KHR_gl_texture_2D_image");
     exts.KHR_gl_renderbuffer_image = CZStringUtils::CheckExtension(extensions, "EGL_KHR_gl_renderbuffer_image");
-    exts.KHR_wait_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_wait_sync");
-    exts.KHR_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_fence_sync");
-    exts.ANDROID_native_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_ANDROID_native_fence_sync");
+
+    if (drmDriver() != RDriver::nvidia)
+    {
+        m_caps.SyncCPU = exts.KHR_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_fence_sync");
+
+        if (exts.KHR_fence_sync)
+        {
+            m_caps.SyncGPU = exts.KHR_wait_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_wait_sync");
+            m_caps.SyncImport = m_caps.SyncExport = exts.ANDROID_native_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_ANDROID_native_fence_sync");
+        }
+    }
+
     exts.IMG_context_priority = CZStringUtils::CheckExtension(extensions, "EGL_IMG_context_priority");
     return true;
 }
@@ -365,6 +410,7 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
             procs.eglCreateSyncKHR = (PFNEGLCREATESYNCKHRPROC)eglGetProcAddress("eglCreateSyncKHR");
             procs.eglDestroySyncKHR = (PFNEGLDESTROYSYNCKHRPROC)eglGetProcAddress("eglDestroySyncKHR");
             procs.eglClientWaitSyncKHR = (PFNEGLCLIENTWAITSYNCKHRPROC)eglGetProcAddress("eglClientWaitSyncKHR");
+            procs.eglGetSyncAttribKHR = (PFNEGLGETSYNCATTRIBKHRPROC)eglGetProcAddress("eglGetSyncAttribKHR");
         }
 
         if (exts.ANDROID_native_fence_sync)
@@ -389,6 +435,76 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
     return true;
 }
 
+bool RGLDevice::initDMAFormats() noexcept
+{
+    if (!m_eglDisplayExtensions.EXT_image_dma_buf_import)
+    {
+        log(CZInfo, "EGL DMA Import: false");
+        return true;
+    }
+
+    EGLint n;
+    std::vector<EGLint> formats;
+
+    if (!m_eglDisplayExtensions.EXT_image_dma_buf_import_modifiers)
+        goto fallback;
+
+    if (!m_eglDisplayProcs.eglQueryDmaBufFormatsEXT(m_eglDisplay, 0, nullptr, &n) || n <= 0)
+        goto fallback;
+
+    formats.resize(n);
+
+    if (!m_eglDisplayProcs.eglQueryDmaBufFormatsEXT(m_eglDisplay, n, formats.data(), &n))
+        goto fallback;
+
+    for (auto fmt : formats)
+    {
+        EGLBoolean allExternal { true };
+        std::vector<EGLuint64KHR> mods;
+        std::vector<EGLBoolean> externalOnly;
+        n = 0;
+        if (!m_eglDisplayProcs.eglQueryDmaBufModifiersEXT(m_eglDisplay, fmt, 0, nullptr, nullptr, &n) || n == 0)
+            goto fallback_modifiers;
+
+        mods.resize(n);
+        externalOnly.resize(n);
+
+        if (!m_eglDisplayProcs.eglQueryDmaBufModifiersEXT(m_eglDisplay, fmt, n, mods.data(), externalOnly.data(), &n))
+            goto fallback_modifiers;
+
+        for (size_t i = 0; i < mods.size(); i++)
+        {
+            allExternal &= externalOnly[i];
+            m_dmaTextureFormats.add(fmt, mods[i]);
+
+            if (!externalOnly[i])
+                m_dmaRenderFormats.add(fmt, mods[i]);
+        }
+
+    fallback_modifiers:
+        if (n == 0)
+        {
+            m_dmaRenderFormats.add(fmt, DRM_FORMAT_MOD_LINEAR);
+            m_dmaTextureFormats.add(fmt, DRM_FORMAT_MOD_LINEAR);
+        }
+
+        m_dmaTextureFormats.add(fmt, DRM_FORMAT_MOD_INVALID);
+
+        if (n == 0 || !allExternal)
+            m_dmaRenderFormats.add(fmt, DRM_FORMAT_MOD_INVALID);
+    }
+
+    return true;
+fallback:
+    log(CZInfo, "EGL DMA Import: Without Modifiers");
+    m_dmaRenderFormats.add(DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_INVALID);
+    m_dmaRenderFormats.add(DRM_FORMAT_XRGB8888, DRM_FORMAT_MOD_INVALID);
+    m_dmaRenderFormats.add(DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR);
+    m_dmaRenderFormats.add(DRM_FORMAT_XRGB8888, DRM_FORMAT_MOD_LINEAR);
+    m_dmaTextureFormats = m_dmaRenderFormats;
+    return true;
+}
+
 bool RGLDevice::initPainter() noexcept
 {
     m_threadData = RGLContextDataManager::MakeInternal([](RGLDevice *device) -> RGLContextData *
@@ -397,6 +513,34 @@ bool RGLDevice::initPainter() noexcept
     });
 
     return painter() != nullptr;
+}
+
+void RGLDevice::setDRMDriverName(int fd) noexcept
+{
+    drmVersion *version { drmGetVersion(fd) };
+
+    if (version)
+    {
+        if (strcmp(version->name, "i915") == 0)
+            m_driver = RDriver::i915;
+        else if (strcmp(version->name, "nouveau") == 0)
+            m_driver = RDriver::nouveau;
+        else if (strcmp(version->name, "lima") == 0)
+            m_driver = RDriver::lima;
+        else if (strcmp(version->name, "nvidia-drm") == 0)
+            m_driver = RDriver::nvidia;
+        else if (strcmp(version->name, "nvidia") == 0)
+            m_driver = RDriver::nvidia;
+        else if (strcmp(version->name, "amdgpu") == 0)
+            m_driver = RDriver::amdgpu;
+        else if (strcmp(version->name, "radeon") == 0)
+            m_driver = RDriver::radeon;
+
+        if (version->name)
+            m_drmDriverName = version->name;
+
+        drmFreeVersion(version);
+    }
 }
 
 RPainter *RGLDevice::painter() const noexcept

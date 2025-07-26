@@ -1,6 +1,7 @@
 #include <CZ/Ream/SK/RSKFormat.h>
 #include <CZ/Ream/GL/RGLImage.h>
 #include <CZ/Ream/RDMABufferInfo.h>
+#include <CZ/Ream/RResourceTracker.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
 
@@ -12,8 +13,6 @@
 #include <CZ/skia/modules/svg/include/SkSVGDOM.h>
 
 using namespace CZ;
-
-static UInt32 count { 0 };
 
 std::shared_ptr<RImage> RImage::Make(SkISize size, const RDRMFormat &format, RStorageType storageType, RDevice *allocator) noexcept
 {
@@ -124,10 +123,7 @@ std::shared_ptr<RGLImage> RImage::asGL() const noexcept
 
 RImage::~RImage() noexcept
 {
-    --count;
-
-    if (count == 0)
-        RLog(CZTrace, "RImage count reached: 0");
+    RResourceTrackerSub(RResourceType::RImageRes);
 }
 
 RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept :
@@ -144,5 +140,5 @@ RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const
     assert(!modifiers.empty());
     assert(device);
     assert(core);
-    ++count;
+    RResourceTrackerAdd(RResourceType::RImageRes);
 }

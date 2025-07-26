@@ -39,6 +39,7 @@ namespace CZ
 
     struct REGLDeviceExtensions
     {
+        bool EXT_device_drm;
         bool EXT_device_drm_render_node;
     };
 
@@ -62,6 +63,7 @@ namespace CZ
         PFNEGLDESTROYSYNCKHRPROC eglDestroySyncKHR;
         PFNEGLWAITSYNCKHRPROC eglWaitSyncKHR;
         PFNEGLCLIENTWAITSYNCKHRPROC eglClientWaitSyncKHR;
+        PFNEGLGETSYNCATTRIBKHRPROC eglGetSyncAttribKHR;
         PFNEGLDUPNATIVEFENCEFDANDROIDPROC eglDupNativeFenceFDANDROID;
     };
 };

@@ -1,6 +1,8 @@
 #include <CZ/Ream/DRM/RDRMFormat.h>
+#include <cstdio>
 #include <drm_fourcc.h>
 #include <unordered_map>
+#include <xf86drm.h>
 
 using namespace CZ;
 
@@ -67,6 +69,36 @@ public:
         emplace(DRM_FORMAT_XVYU16161616, RFormatInfo{ .format = DRM_FORMAT_XVYU16161616, .bytesPerBlock = 8, .blockWidth = 1, .blockHeight = 1, .bpp = 64, .depth = 48, .planes = 1, .alpha = false});
     }
 };
+
+/* DRM get-name function results require manual freeing, but storing them here makes the leak harmless. */
+static std::unordered_map<RFormat, std::string_view> FormatNames;
+static std::unordered_map<RModifier, std::string_view> ModifierNames;
+
+std::string_view RDRMFormat::FormatName(RFormat format) noexcept
+{
+    auto &name { FormatNames[format] };
+
+    if (name.empty())
+    {
+        char *drmName { drmGetFormatName(format) };
+        name = drmName ? drmName : "Unknown";
+    }
+
+    return name;
+}
+
+std::string_view RDRMFormat::ModifierName(RModifier modifier) noexcept
+{
+    auto &name { ModifierNames[modifier] };
+
+    if (name.empty())
+    {
+        char *drmName { drmGetFormatModifierName(modifier) };
+        name = drmName ? drmName : "Unknown";
+    }
+
+    return name;
+}
 
 const RFormatInfo *RDRMFormat::GetInfo(RFormat format) noexcept
 {
@@ -151,7 +183,7 @@ RDRMFormatSet RDRMFormatSet::Intersect(const RDRMFormatSet &a, const RDRMFormatS
     return newSet;
 }
 
-RDRMFormatSet RDRMFormatSet::Intersect(const RDRMFormatSet &a, const std::flat_set<RFormat> &b) noexcept
+RDRMFormatSet RDRMFormatSet::Intersect(const RDRMFormatSet &a, const REAM_FLAT_SET<RFormat> &b) noexcept
 {
     RDRMFormatSet newSet {};
 
@@ -160,4 +192,108 @@ RDRMFormatSet RDRMFormatSet::Intersect(const RDRMFormatSet &a, const std::flat_s
             newSet.m_formats.emplace(format);
 
     return newSet;
+}
+
+bool RDRMFormatSet::has(RFormat format, RModifier modifier) const noexcept
+{
+    auto it { m_formats.find(format) };
+    if (it == m_formats.end())
+        return false;
+
+    return it->modifiers().contains(modifier);
+}
+
+bool RDRMFormatSet::add(RFormat format, RModifier modifier) noexcept
+{
+    auto it { m_formats.find(format) };
+
+    if (it == m_formats.end())
+    {
+        RDRMFormat newFormat { format, { modifier } };
+        m_formats.insert(newFormat);
+        return true;
+    }
+    else
+        return it->addModifier(modifier);
+}
+
+bool RDRMFormatSet::remove(RFormat format, RModifier modifier) noexcept
+{
+    auto it { m_formats.find(format) };
+
+    if (it == m_formats.end())
+        return false;
+    else
+    {
+        const bool ret { it->removeModifier(modifier) };
+        if (it->modifiers().empty())
+            m_formats.erase(it);
+        return ret;
+    }
+}
+
+bool RDRMFormatSet::removeFormat(RFormat format) noexcept
+{
+    auto it { m_formats.find(format) };
+
+    if (it == m_formats.end())
+        return false;
+    else
+    {
+        m_formats.erase(it);
+        return true;
+    }
+}
+
+bool RDRMFormatSet::removeModifier(RModifier modifier) noexcept
+{
+    bool removedOne { false };
+
+start:
+    for (auto &format : m_formats)
+    {
+        removedOne |= format.removeModifier(modifier);
+
+        if (format.modifiers().empty())
+        {
+            m_formats.erase(format);
+            goto start;
+        }
+    }
+
+    return removedOne;
+}
+
+bool RDRMFormatSet::addModifier(RModifier modifier) noexcept
+{
+    bool addedOne { false };
+
+    for (auto &format : m_formats)
+        addedOne |= format.addModifier(modifier);
+
+    return addedOne;
+}
+
+void RDRMFormatSet::log() const noexcept
+{
+    if (formats().empty())
+    {
+        printf("Empty\n");
+        return;
+    }
+
+    for (const auto &format : formats())
+    {
+        printf("%s: [", RDRMFormat::FormatName(format.format()).data());
+
+        for (auto it = format.modifiers().begin(); it != format.modifiers().end(); it++)
+        {
+            if (it == std::prev(format.modifiers().end()))
+                printf("%s", RDRMFormat::ModifierName(*it).data());
+            else
+                printf("%s, ", RDRMFormat::ModifierName(*it).data());
+        }
+
+        printf("]\n");
+    }
 }

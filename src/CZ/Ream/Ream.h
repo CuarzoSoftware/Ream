@@ -2,6 +2,7 @@
 #define CZ_REAM_H
 
 #include <CZ/CZ.h>
+#include <string_view>
 
 namespace CZ
 {
@@ -26,11 +27,15 @@ namespace CZ
         VK
     };
 
+    std::string_view RGraphicsAPIString(RGraphicsAPI api) noexcept;
+
     enum class RPlatform
     {
         DRM,
         Wayland
     };
+
+    std::string_view RPlatformString(RPlatform platform) noexcept;
 
     class RDRMFormat;
     class RDRMFramebuffer;

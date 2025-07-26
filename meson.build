@@ -26,6 +26,7 @@ drm_dep         = dependency('libdrm', version: '>= 2.4.113')
 drm_headers_dep = drm_dep.partial_dependency(compile_args: true, includes: true)
 cz_core_dep     = dependency('cz-core')
 cz_skia_dep     = dependency('cz-skia')
+boost_dep       = dependency('boost', modules : ['container'])
 
 # -------------- HEADERS --------------
 
@@ -56,7 +57,8 @@ cz_ream = library(
         gbm_dep,
         drm_dep,
         cz_core_dep,
-        cz_skia_dep
+        cz_skia_dep,
+        boost_dep
     ],
     soversion: VERSION_MAJOR,
     install : true)

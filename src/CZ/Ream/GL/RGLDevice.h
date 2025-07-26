@@ -39,7 +39,10 @@ private:
     bool initEGLContext() noexcept;
     bool initGLExtensions() noexcept;
     bool initEGLDisplayProcs() noexcept;
+    bool initDMAFormats() noexcept;
     bool initPainter() noexcept;
+
+    void setDRMDriverName(int fd) noexcept;
 
     RPainter *painter() const noexcept override;
 

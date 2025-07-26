@@ -24,22 +24,22 @@ public:
     RGLDevice *device() const noexcept { return m_device; }
     ~REGLImage() noexcept;
 private:
-    REGLImage(std::shared_ptr<RGLCore> core, RGLDevice *device, EGLImage image) noexcept;
+    REGLImage(std::shared_ptr<RGLCore> core, RGLDevice *device, EGLImage image, GLenum target) noexcept;
 
     class CtxData : public RGLContextData
     {
     public:
         CtxData(RGLDevice *device) noexcept : device(device) {};
         ~CtxData() noexcept;
+        GLuint rbo { 0 };
         GLuint fb { 0 };
         RGLDevice *device { nullptr };
     };
 
+    std::shared_ptr<RGLCore> m_core;
     EGLImage m_eglImage;
     mutable RGLTexture m_tex {};
-    mutable GLuint m_rbo { 0 };
     RGLDevice *m_device;
-    std::shared_ptr<RGLCore> m_core;
     std::shared_ptr<RGLContextDataManager> m_ctxDataManager;
 };
 

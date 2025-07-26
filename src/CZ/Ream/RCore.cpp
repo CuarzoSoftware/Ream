@@ -1,15 +1,42 @@
+#include <CZ/Ream/RDevice.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
 
+#include <CZ/Ream/RResourceTracker.h>
+
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/VK/RVKCore.h>
+
 #include <cstring>
 
 using namespace CZ;
 
 static std::weak_ptr<RCore> s_core;
 
-RCore::RCore(const Options &options) noexcept : m_options(options) {}
+RCore::RCore(const Options &options) noexcept : m_options(options)
+{
+    RResourceTrackerAdd(RCoreRes);
+}
+
+void RCore::logInfo() noexcept
+{
+    RLog(CZInfo, "--------------- Ream ---------------");
+    RLog(CZInfo, "Graphics API: {}", RGraphicsAPIString(graphicsAPI()));
+    RLog(CZInfo, "Platform: {}", RPlatformString(platform()));
+    RLog(CZInfo, "Main Device: {}", mainDevice()->drmNode());
+    RLog(CZInfo, "Devices:");
+    for (auto *dev : devices())
+    {
+        RLog(CZInfo, "    {}:", dev->drmNode());
+        RLog(CZInfo, "        Driver: {}", dev->drmDriverName());
+        RLog(CZInfo, "        GBM: {}", dev->gbmDevice() != nullptr);
+        RLog(CZInfo, "        Sync GPU: {}", dev->caps().SyncGPU);
+        RLog(CZInfo, "        Sync CPU: {}", dev->caps().SyncCPU);
+        RLog(CZInfo, "        Sync Import: {}", dev->caps().SyncImport);
+        RLog(CZInfo, "        Sync Export: {}", dev->caps().SyncExport);
+    }
+    RLog(CZInfo, "------------------------------------");
+}
 
 std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
 {
@@ -48,7 +75,10 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
         s_core = core;
 
         if (core->init())
+        {
+            core->logInfo();
             return core;
+        }
 
         if (gAPI != RGraphicsAPI::Auto)
             goto fail;
@@ -59,7 +89,10 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
         s_core = core;
 
         if (core->init())
+        {
+            core->logInfo();
             return core;
+        }
     }
 
 fail:
@@ -77,9 +110,10 @@ std::shared_ptr<RGLCore> RCore::asGL() noexcept
 RCore::~RCore() noexcept
 {
     RLog(CZTrace, "RCore destroyed");
+    RResourceTrackerSub(RCoreRes);
 }
 
-std::shared_ptr<CZ::RCore> RCore::Get() noexcept
+std::shared_ptr<RCore> RCore::Get() noexcept
 {
     return s_core.lock();
 }

@@ -12,8 +12,10 @@ RGLMakeCurrent RGLMakeCurrent::FromDevice(RGLDevice *device, bool keepSurfaces) 
         return { EGL_NO_DISPLAY, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT };
     }
 
-    if (keepSurfaces)
-        return { device->eglDisplay(), eglGetCurrentSurface(EGL_DRAW), eglGetCurrentSurface(EGL_READ), device->eglContext() };
+    auto ctx { device->eglContext() };
+
+    if (keepSurfaces && eglGetCurrentDisplay() == device->eglDisplay() && ctx != EGL_NO_CONTEXT)
+        return { device->eglDisplay(), eglGetCurrentSurface(EGL_DRAW), eglGetCurrentSurface(EGL_READ), ctx };
     else
-        return { device->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, device->eglContext() };
+        return { device->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, ctx };
 }

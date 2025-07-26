@@ -1,6 +1,7 @@
 #include <CZ/skia/gpu/ganesh/GrDirectContext.h>
 #include <CZ/skia/gpu/ganesh/GrRecordingContext.h>
 #include <CZ/Ream/SK/RSKPass.h>
+#include <CZ/Ream/RResourceTracker.h>
 #include <CZ/Ream/RLog.h>
 #include <CZ/Ream/RSurface.h>
 #include <CZ/Ream/RCore.h>
@@ -11,8 +12,6 @@
 #include <CZ/Ream/RPass.h>
 
 using namespace CZ;
-
-static UInt32 count { 0 };
 
 std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image, Int32 scale) noexcept
 {
@@ -60,16 +59,13 @@ RSKPass RSurface::beginSKPass(RDevice *device) const noexcept
 
 RSurface::~RSurface() noexcept
 {
-    --count;
-
-    if (count == 0)
-        RLog(CZTrace, "RSurface count reached: 0");
+    RResourceTrackerSub(RSurfaceRes);
 }
 
 RSurface::RSurface(std::shared_ptr<RImage> image, Int32 scale) noexcept :
     m_image(image), m_scale(scale)
 {
-    ++count;
+    RResourceTrackerAdd(RSurfaceRes);
 }
 
 void RSurface::calculateSizeFromImage() noexcept

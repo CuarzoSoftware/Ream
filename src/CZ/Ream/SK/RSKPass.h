@@ -62,6 +62,7 @@ public:
 private:
     friend class RSurface;
     RSKPass(std::shared_ptr<RImage> image = nullptr, RDevice *device = nullptr) noexcept;
+    std::shared_ptr<RGLMakeCurrent> m_glCurrent;
     RDevice *m_device {};
     SkCanvas *m_canvas {};
     std::shared_ptr<RImage> m_image;

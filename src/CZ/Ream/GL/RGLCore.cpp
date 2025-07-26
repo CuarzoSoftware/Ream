@@ -44,7 +44,8 @@ static void EGLLog(EGLenum error, const char *command, EGLint type, EGLLabelKHR 
         break;
     }
 
-    logEGL(level, "command: {}, error: {}, message: {}", command, RGLStrings::EGLError(error), msg);
+    if (command && msg)
+        logEGL(level, "command: {}, error: {}, message: {}", command, RGLStrings::EGLError(error), msg);
 }
 
 bool RGLCore::initClientEGLExtensions() noexcept

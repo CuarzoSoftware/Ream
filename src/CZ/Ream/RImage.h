@@ -2,6 +2,7 @@
 #define RIMAGE_H
 
 #include <CZ/Ream/RObject.h>
+#include <CZ/Ream/RDMABufferInfo.h>
 #include <CZ/Ream/DRM/RDRMFormat.h>
 #include <CZ/skia/core/SkSize.h>
 #include <CZ/skia/core/SkRegion.h>
@@ -51,14 +52,14 @@ namespace CZ
     };
 
     /**
-     * @brief Describes a region to be copied from a pixel buffer.
-     *
-     * Specifies a set of rectangles and an offset for copying pixel data between buffers.
+     * @brief Describes a region to be copied from/to a pixel buffer.
      */
     struct RPixelBufferRegion
     {
         /**
          * @brief Offset in pixels applied to each source rect before copying.
+         *
+         * @note The offset is only applied to the source.
          *
          * For example:
          * - To copy src(10, 10, 100, 100) to dest(0, 0, 100, 100),
@@ -70,12 +71,18 @@ namespace CZ
         SkIPoint offset;
 
         /**
-         * @brief Stride in bytes of the source pixel buffer.
+         * @brief Stride in bytes of the pixel buffer.
+         *
+         * - If used in RImage::writePixels() it represents the stride of the source buffer.
+         * - If used in RImage::readPixels() it represents the stride of the destination buffer.
          */
         UInt32 stride;
 
         /**
-         * @brief Pointer to the top-left corner of the source pixel data.
+         * @brief Pointer to the top-left corner of the pixel buffer.
+         *
+         * - If used in RImage::writePixels() it represents the source buffer.
+         * - If used in RImage::readPixels() it represents the destination buffer.
          */
         UInt8 *pixels;
 
@@ -84,7 +91,9 @@ namespace CZ
          */
         SkRegion region;
 
-        // DRM Format
+        /**
+         * @brief The DRM format of the 'pixels' parameter.
+         */
         RFormat format;
 
         static constexpr UInt8 *AddressAt(UInt8 *origin, SkIPoint offset, UInt32 bytesPerPixel, UInt32 stride) noexcept
@@ -202,7 +211,7 @@ protected:
     std::weak_ptr<RImage> m_self;
     std::shared_ptr<RSync> m_readSync;
     std::shared_ptr<RSync> m_writeSync;
-    std::unique_ptr<RDMABufferInfo> m_dmaInfo;
+    std::optional<RDMABufferInfo> m_dmaInfo;
     CZOwnership m_dmaInfoOwn;
 };
 

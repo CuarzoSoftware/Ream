@@ -70,7 +70,18 @@ std::shared_ptr<REGLImage> REGLImage::MakeFromDMA(const RDMABufferInfo &info, RG
     if (!device)
         device = glCore->mainDevice();
 
-    // TODO: Validate
+    GLenum target { GL_TEXTURE_2D };
+
+    if (!device->dmaTextureFormats().has(info.format, info.modifier))
+    {
+        device->log(CZError, CZLN, "Unsupported format {} - {}", RDRMFormat::FormatName(info.format), RDRMFormat::ModifierName(info.modifier));
+        return {};
+    }
+
+    if (!device->dmaRenderFormats().has(info.format, info.modifier))
+        target = GL_TEXTURE_EXTERNAL_OES;
+
+    auto current { RGLMakeCurrent::FromDevice(device, false) };
 
     size_t atti { 0 };
     EGLint attribs[50];
@@ -114,7 +125,7 @@ std::shared_ptr<REGLImage> REGLImage::MakeFromDMA(const RDMABufferInfo &info, RG
         return {};
     }
 
-    return std::shared_ptr<REGLImage>(new REGLImage(glCore, device, image));
+    return std::shared_ptr<REGLImage>(new REGLImage(glCore, device, image, target));
 }
 
 RGLTexture REGLImage::texture() const noexcept
@@ -124,7 +135,6 @@ RGLTexture REGLImage::texture() const noexcept
 
     auto current { RGLMakeCurrent::FromDevice(m_device, false) };
     glGenTextures(1, &m_tex.id);
-    m_tex.target = GL_TEXTURE_2D;
 
     // TODO: Check EGL formats
     glBindTexture(m_tex.target, m_tex.id);
@@ -142,17 +152,17 @@ GLuint REGLImage::fb() const noexcept
 
     auto current { RGLMakeCurrent::FromDevice(m_device, false) };
 
-    if (!m_rbo)
+    if (!data->rbo)
     {
-        glGenRenderbuffers(1, &m_rbo);
-        glBindRenderbuffer(GL_RENDERBUFFER, m_rbo);
+        glGenRenderbuffers(1, &data->rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, data->rbo);
         m_device->eglDisplayProcs().glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER, m_eglImage);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
     }
 
     glGenFramebuffers(1, &data->fb);
     glBindFramebuffer(GL_FRAMEBUFFER, data->fb);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, m_rbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, data->rbo);
     const GLenum status { glCheckFramebufferStatus(GL_FRAMEBUFFER) };
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -168,23 +178,23 @@ GLuint REGLImage::fb() const noexcept
 REGLImage::~REGLImage() noexcept
 {
     m_ctxDataManager->freeData(m_device);
-
     auto current { RGLMakeCurrent::FromDevice(m_device, false) };
 
-    if (m_rbo)
-        glDeleteRenderbuffers(1, &m_rbo);
-
     if (m_tex.id)
+    {
+        glBindTexture(m_tex.target, 0);
         glDeleteTextures(1, &m_tex.id);
+    }
 
     eglDestroyImage(m_device->eglDisplay(), m_eglImage);
 }
 
-REGLImage::REGLImage(std::shared_ptr<RGLCore> core, RGLDevice *device, EGLImage image) noexcept :
+REGLImage::REGLImage(std::shared_ptr<RGLCore> core, RGLDevice *device, EGLImage image, GLenum target) noexcept :
+    m_core(core),
     m_eglImage(image),
-    m_device(device),
-    m_core(core)
+    m_device(device)
 {
+    m_tex.target = target;
     assert(image != EGL_NO_IMAGE);
     assert(device);
     assert(core);
@@ -199,4 +209,7 @@ REGLImage::CtxData::~CtxData() noexcept
 {
     if (fb)
         glDeleteFramebuffers(1, &fb);
+
+    if (rbo)
+        glDeleteRenderbuffers(1, &rbo);
 }

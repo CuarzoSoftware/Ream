@@ -10,9 +10,9 @@ class GLFromDRMMap : public std::unordered_map<RFormat, RGLFormat>
 public:
     GLFromDRMMap() noexcept
     {
-        emplace(DRM_FORMAT_ARGB8888,      RGLFormat{ .format = GL_BGRA_EXT, .internalFormat = GL_RGBA8_OES,         .type = GL_UNSIGNED_BYTE });
-        emplace(DRM_FORMAT_XRGB8888,      RGLFormat{ .format = GL_BGRA_EXT, .internalFormat = GL_RGB8_OES,          .type = GL_UNSIGNED_BYTE });
-        emplace(DRM_FORMAT_XBGR8888,      RGLFormat{ .format = GL_RGBA,     .internalFormat = GL_RGB8_OES,          .type = GL_UNSIGNED_BYTE });
+        emplace(DRM_FORMAT_ARGB8888,      RGLFormat{ .format = GL_BGRA_EXT, .internalFormat = GL_BGRA8_EXT,         .type = GL_UNSIGNED_BYTE });
+        emplace(DRM_FORMAT_XRGB8888,      RGLFormat{ .format = GL_BGRA_EXT, .internalFormat = GL_BGRA8_EXT,         .type = GL_UNSIGNED_BYTE });
+        emplace(DRM_FORMAT_XBGR8888,      RGLFormat{ .format = GL_RGBA,     .internalFormat = GL_RGBA8_OES,         .type = GL_UNSIGNED_BYTE });
         emplace(DRM_FORMAT_ABGR8888,      RGLFormat{ .format = GL_RGBA,     .internalFormat = GL_RGBA8_OES,         .type = GL_UNSIGNED_BYTE });
         emplace(DRM_FORMAT_BGR888,        RGLFormat{ .format = GL_RGB,      .internalFormat = GL_RGB8_OES,          .type = GL_UNSIGNED_BYTE });
 

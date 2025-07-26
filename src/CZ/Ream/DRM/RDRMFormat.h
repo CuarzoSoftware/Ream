@@ -3,7 +3,10 @@
 
 #include <CZ/Ream/Ream.h>
 #include <CZ/Utils/CZMathUtils.h>
-#include <flat_set>
+#include <boost/container/flat_set.hpp>
+#include <string_view>
+
+#define REAM_FLAT_SET boost::container::flat_set
 
 namespace CZ
 {
@@ -120,6 +123,11 @@ namespace CZ
     class RDRMFormat
     {
     public:
+
+        /* Return the format name or "Unknown" if not found */
+        static std::string_view FormatName(RFormat format) noexcept;
+        static std::string_view ModifierName(RModifier modifier) noexcept;
+
         /**
          * @brief Retrieves detailed information about a DRM format.
          *
@@ -145,8 +153,12 @@ namespace CZ
          * @param format The DRM format.
          * @param modifiers A list of supported modifiers for the format.
          */
-        constexpr RDRMFormat(RFormat format, std::initializer_list<RModifier> modifiers) noexcept
-            : m_format(format), m_modifiers(modifiers) {}
+        RDRMFormat(RFormat format, std::initializer_list<RModifier> modifiers) noexcept
+            : m_format(format)
+        {
+            for (auto mod : modifiers)
+                m_modifiers.emplace(mod);
+        }
 
         /**
          * @brief Returns the DRM format.
@@ -161,7 +173,7 @@ namespace CZ
         /**
          * @brief Returns the set of modifiers associated with this format.
          */
-        const std::flat_set<RModifier> &modifiers() const noexcept { return m_modifiers; }
+        const REAM_FLAT_SET<RModifier> &modifiers() const noexcept { return m_modifiers; }
 
         /**
          * @brief Adds a modifier to the set.
@@ -222,7 +234,7 @@ namespace CZ
             return m_modifiers.erase(modifier) > 0;
         }
         RFormat m_format;
-        mutable std::flat_set<RModifier> m_modifiers;
+        mutable REAM_FLAT_SET<RModifier> m_modifiers;
     };
 
     /**
@@ -238,7 +250,7 @@ namespace CZ
         /**
          * @brief Returns the internal set of formats with their modifiers.
          */
-        const std::flat_set<RDRMFormat, RDRMFormat::Less> &formats() const noexcept { return m_formats; }
+        const REAM_FLAT_SET<RDRMFormat, RDRMFormat::Less> &formats() const noexcept { return m_formats; }
 
         /**
          * @brief Computes the union of two format sets.
@@ -269,7 +281,7 @@ namespace CZ
          * @param b Set of DRM formats.
          * @return A new set with formats present in both inputs.
          */
-        static RDRMFormatSet Intersect(const RDRMFormatSet &a, const std::flat_set<RFormat> &b) noexcept;
+        static RDRMFormatSet Intersect(const RDRMFormatSet &a, const REAM_FLAT_SET<RFormat> &b) noexcept;
 
         /**
          * @brief Checks if a specific format+modifier combination is present.
@@ -278,14 +290,7 @@ namespace CZ
          * @param modifier The modifier to check.
          * @return true if the format and modifier exist in the set, false otherwise.
          */
-        bool has(RFormat format, RModifier modifier) const noexcept
-        {
-            auto it { m_formats.find(format) };
-            if (it == m_formats.end())
-                return false;
-
-            return it->modifiers().contains(modifier);
-        }
+        bool has(RFormat format, RModifier modifier) const noexcept;
 
         /**
          * @brief Adds a format+modifier pair to the set.
@@ -297,19 +302,7 @@ namespace CZ
          * @param modifier The modifier to add.
          * @return true if the combination was newly added, false if it already existed.
          */
-        bool add(RFormat format, RModifier modifier) noexcept
-        {
-            auto it { m_formats.find(format) };
-
-            if (it == m_formats.end())
-            {
-                RDRMFormat newFormat { format, { modifier } };
-                m_formats.insert(newFormat);
-                return true;
-            }
-            else
-                return it->addModifier(modifier);
-        }
+        bool add(RFormat format, RModifier modifier) noexcept;
 
         /**
          * @brief Removes a specific modifier from a format.
@@ -320,20 +313,7 @@ namespace CZ
          * @param modifier The modifier to remove.
          * @return true if the modifier was removed, false if it was not found.
          */
-        bool remove(RFormat format, RModifier modifier) noexcept
-        {
-            auto it { m_formats.find(format) };
-
-            if (it == m_formats.end())
-                return false;
-            else
-            {
-                const bool ret { it->removeModifier(modifier) };
-                if (it->modifiers().empty())
-                    m_formats.erase(it);
-                return ret;
-            }
-        }
+        bool remove(RFormat format, RModifier modifier) noexcept;
 
         /**
          * @brief Removes all modifiers for a given format, effectively removing the format.
@@ -341,18 +321,7 @@ namespace CZ
          * @param format The DRM format to remove.
          * @return true if the format was removed, false if it was not present.
          */
-        bool removeFormat(RFormat format) noexcept
-        {
-            auto it { m_formats.find(format) };
-
-            if (it == m_formats.end())
-                return false;
-            else
-            {
-                m_formats.erase(it);
-                return true;
-            }
-        }
+        bool removeFormat(RFormat format) noexcept;
 
         /**
          * @brief Removes the given modifier from all formats.
@@ -362,24 +331,7 @@ namespace CZ
          * @param modifier The modifier to remove.
          * @return true if at least one modifier was removed, false otherwise.
          */
-        bool removeModifier(RModifier modifier) noexcept
-        {
-            bool removedOne { false };
-
-            start:
-            for (auto &format : m_formats)
-            {
-                removedOne |= format.removeModifier(modifier);
-
-                if (format.modifiers().empty())
-                {
-                    m_formats.erase(format);
-                    goto start;
-                }
-            }
-
-            return removedOne;
-        }
+        bool removeModifier(RModifier modifier) noexcept;
 
         /**
          * @brief Adds the given modifier to all existing formats.
@@ -387,17 +339,11 @@ namespace CZ
          * @param modifier The modifier to add.
          * @return true if the modifier was added to at least one format; false otherwise.
          */
-        bool addModifier(RModifier modifier) noexcept
-        {
-            bool addedOne { false };
+        bool addModifier(RModifier modifier) noexcept;
 
-            for (auto &format : m_formats)
-                addedOne |= format.addModifier(modifier);
-
-            return addedOne;
-        }
+        void log() const noexcept;
     private:
-        std::flat_set<RDRMFormat, RDRMFormat::Less> m_formats;
+        REAM_FLAT_SET<RDRMFormat, RDRMFormat::Less> m_formats;
     };
 }
 

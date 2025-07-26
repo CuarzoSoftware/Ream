@@ -3,6 +3,7 @@
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
 #include <CZ/Ream/RLog.h>
+#include <fcntl.h>
 
 using namespace CZ;
 
@@ -27,11 +28,10 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
     if (!device)
         device = glCore->mainDevice();
 
-    if (!device->eglDisplayProcs().eglCreateSyncKHR)
-    {
-        device->log(CZError, CZLN, "Missing eglCreateSyncKHR proc");
+    auto curr { RGLMakeCurrent::FromDevice(device, true) };
+
+    if (!device->caps().SyncCPU)
         return {};
-    }
 
     static const EGLint attribs[3]
     {
@@ -40,25 +40,28 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
         EGL_NONE
     };
 
-    auto curr { RGLMakeCurrent::FromDevice(device, true) };
-    EGLSyncKHR sync { device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_NATIVE_FENCE_ANDROID, attribs) };
     int dupFd { -1 };
+    EGLSyncKHR sync { EGL_NO_SYNC_KHR };
+
+    if (device->caps().SyncExport)
+        sync = device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_NATIVE_FENCE_ANDROID, attribs);
 
     if (sync != EGL_NO_SYNC_KHR)
     {
+        glFlush();
+
         if (device->eglDisplayProcs().eglDupNativeFenceFDANDROID)
-        {
-            glFlush();
             dupFd = device->eglDisplayProcs().eglDupNativeFenceFDANDROID(device->eglDisplay(), sync);
-        }
     }
     else
+    {
         sync = device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_FENCE_KHR, &attribs[2]);
 
-    if (sync == EGL_NO_SYNC_KHR)
-    {
-        device->log(CZError, CZLN, "Failed to create EGLSync");
-        return {};
+        if (sync == EGL_NO_SYNC_KHR)
+        {
+            device->log(CZError, CZLN, "Failed to create EGLSync");
+            return {};
+        }
     }
 
     return std::shared_ptr<RGLSync>(new RGLSync(core, device, sync, dupFd, false));
@@ -86,15 +89,11 @@ std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexce
         device = glCore->mainDevice();
 
     if (fd < 0)
-    {
-        device->log(CZError, CZLN, "Invalid fd");
         return {};
-    }
 
-    if (!device->eglDisplayProcs().eglCreateSyncKHR)
+    if (!device->caps().SyncImport)
     {
         close(fd);
-        device->log(CZError, CZLN, "Missing eglCreateSyncKHR proc");
         return {};
     }
 
@@ -107,7 +106,6 @@ std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexce
 
     auto curr { RGLMakeCurrent::FromDevice(device, true) };
     EGLSyncKHR sync { device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_NATIVE_FENCE_ANDROID, attribs) };
-    int dupFd { -1 };
 
     if (sync == EGL_NO_SYNC_KHR)
     {
@@ -116,10 +114,7 @@ std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexce
         return {};
     }
 
-    if (device->eglDisplayProcs().eglDupNativeFenceFDANDROID)
-        dupFd = device->eglDisplayProcs().eglDupNativeFenceFDANDROID(device->eglDisplay(), sync);
-
-    return std::shared_ptr<RGLSync>(new RGLSync(core, device, sync, dupFd, true));
+    return std::shared_ptr<RGLSync>(new RGLSync(core, device, sync, -1, true));
 }
 
 RGLSync::RGLSync(std::shared_ptr<RCore> core, RGLDevice *device, EGLSyncKHR sync, int fd, bool isExternal) noexcept :
@@ -141,15 +136,12 @@ bool RGLSync::gpuWait(RDevice *waiter) const noexcept
         waiter = m_core->mainDevice();
 
     if (!waiter->caps().SyncGPU)
-    {
-        waiter->log(CZError, CZLN, "SyncGPU cap not available");
         return false;
-    }
 
     if (device() == waiter)
     {
         // OpenGL guarantees command ordering within the same context and thread
-        if (false && !isExternal() && std::this_thread::get_id() == m_threadId)
+        if (!isExternal() && std::this_thread::get_id() == m_threadId)
             return true;
         else
         {
@@ -158,11 +150,18 @@ bool RGLSync::gpuWait(RDevice *waiter) const noexcept
         }
     }
 
-    auto sync { RGLSync::FromExternal(fd(), (RGLDevice*)waiter) };
+    if (!device()->caps().SyncExport || !waiter->caps().SyncImport)
+        return false;
+
+    const int fence { fd() };
+
+    if (fence < 0) return false;
+
+    auto sync { RGLSync::FromExternal(fence, (RGLDevice*)waiter) };
 
     if (!sync)
     {
-        waiter->log(CZError, CZLN, "Failed to create RGLSync from external fence");
+        waiter->log(CZError, CZLN, "Failed to create RGLSync from external fence (fd: {})", fence);
         return false;
     }
 
