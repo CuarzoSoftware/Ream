@@ -42,6 +42,7 @@ public:
     bool checkDeviceCap(DeviceCap cap, RDevice *device = nullptr) const noexcept override;
 
     bool writePixels(const RPixelBufferRegion &region) noexcept override;
+    bool readPixels(const RPixelBufferRegion &region) noexcept override;
 
     RGLDevice *allocator() const noexcept
     {
@@ -55,6 +56,9 @@ private:
 
     bool writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept;
     bool writePixelsNative(const RPixelBufferRegion &region) noexcept;
+    bool readPixelsGBMmapRead(const RPixelBufferRegion &region) noexcept;
+    bool readPixelsNative(const RPixelBufferRegion &region) noexcept;
+
     void assignReadWriteFormats() noexcept;
 
     /* If set, re-checks can be omitted */

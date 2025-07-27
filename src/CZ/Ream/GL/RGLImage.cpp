@@ -450,6 +450,34 @@ bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
     return false;
 }
 
+bool RGLImage::readPixels(const RPixelBufferRegion &region) noexcept
+{
+    if (region.region.isEmpty()) return true;
+
+    if (!readFormats().contains(region.format))
+    {
+        RLog(CZError, CZLN, "Unsupported read format: {}", RDRMFormat::FormatName(region.format));
+        return false;
+    }
+
+    const auto bounds { region.region.getBounds().makeOffset(region.offset) };
+
+    if (bounds.fLeft < 0 || bounds .fTop <  0 || bounds.fRight > size().width() || bounds.fBottom > size().height())
+    {
+        RLog(CZError, CZLN, "Invalid region + offset");
+        return false;
+    }
+
+    if (readPixelsGBMmapRead(region))
+        return true;
+
+    if (readPixelsNative(region))
+        return true;
+
+    RLog(CZDebug, CZLN, "readPixels failed src format: {}, dst format: {}", RDRMFormat::FormatName(formatInfo().format), RDRMFormat::FormatName(region.format));
+    return false;
+}
+
 std::shared_ptr<RGLImage> RGLImage::MakeWithGBMStorage(SkISize size, const RDRMFormat &format, RGLDevice *allocator) noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
@@ -679,6 +707,145 @@ bool RGLImage::writePixelsNative(const RPixelBufferRegion &region) noexcept
     glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
     glBindTexture(tex.target, 0);
     setWriteSync(RSync::Make(allocator()));
+    return true;
+}
+
+bool RGLImage::readPixelsGBMmapRead(const RPixelBufferRegion &region) noexcept
+{
+    if (region.format != formatInfo().format)
+        return false;
+
+    auto bo { gbmBo(allocator()) };
+
+    if (!bo || !bo->supportsMapRead())
+    {
+        for (auto *dev : m_core->devices())
+        {
+            if (dev == allocator())
+                continue;
+
+            bo = gbmBo(dev);
+
+            if (bo && bo->supportsMapRead())
+                break;
+        }
+    }
+
+    if (!bo || !bo->supportsMapRead())
+        return false;
+
+    const auto bpb { formatInfo().bytesPerBlock };
+    UInt32 srcStride;
+    void *mapData {};
+    UInt8 *src = (UInt8*)gbm_bo_map(bo->bo(), 0, 0, size().width(), size().height(), GBM_BO_TRANSFER_READ, &srcStride, &mapData);
+
+    SkRegion::Iterator iter (region.region);
+    while (!iter.done())
+    {
+        SkIRect r = iter.rect();
+
+        int srcX = r.x() + region.offset.x();
+        int srcY = r.y() + region.offset.y();
+        int width = r.width();
+        int height = r.height();
+
+        if (srcX < 0 || srcY < 0 || width <= 0 || height <= 0)
+        {
+            iter.next();
+            continue;
+        }
+
+        for (int row = 0; row < height; ++row)
+        {
+            const UInt8* srcRow = src + (srcY + row) * srcStride + srcX * bpb;
+            UInt8* dstRow = region.pixels + (r.y() + row) * region.stride + r.x() * bpb;
+            std::memcpy(dstRow, srcRow, width * bpb);
+        }
+
+        iter.next();
+    }
+
+    gbm_bo_unmap(bo->bo(), mapData);
+
+    return true;
+}
+
+bool RGLImage::readPixelsNative(const RPixelBufferRegion &region) noexcept
+{
+    RGLDevice *device { nullptr };
+    std::optional<GLuint> fb;
+    GLenum glFormat { GL_RGBA };
+
+    if (region.format == DRM_FORMAT_XRGB8888 || region.format == DRM_FORMAT_ARGB8888)
+        glFormat = GL_BGRA_EXT;
+
+    for (RDevice *dev : m_core->devices())
+    {
+        if (glFormat == GL_BGRA_EXT && !dev->asGL()->glExtensions().EXT_read_format_bgra)
+            continue;
+
+        fb = glFb(dev->asGL());
+
+        if (fb.has_value())
+        {
+            device = dev->asGL();
+            break;
+        }
+    }
+
+    if (!device)
+        return false;
+
+    if (writeSync())
+        writeSync()->cpuWait();
+
+    const auto current { RGLMakeCurrent::FromDevice(device, true) };
+    glBindFramebuffer(GL_FRAMEBUFFER, fb.value());
+
+    // Loop through each rect in the region
+    SkRegion::Iterator iter(region.region);
+
+    if (fb.value() == 0)
+    {
+        while (!iter.done())
+        {
+            SkIRect r = iter.rect();
+
+            int srcX = r.x() + region.offset.x();
+            int srcY = r.y() + region.offset.y();
+            int width = r.width();
+            int height = r.height();
+
+            UInt8 *dst = region.pixels + r.y() * region.stride + r.x() * 4;
+
+            for (int row = 0; row < height; ++row)
+                glReadPixels(srcX, size().height() - (srcY + row) - 1, width, 1, glFormat, GL_UNSIGNED_BYTE, dst + row * region.stride);
+
+            iter.next();
+        }
+    }
+    else
+    {
+        while (!iter.done())
+        {
+            SkIRect r = iter.rect();
+
+            int srcX = r.x() + region.offset.x();
+            int srcY = r.y() + region.offset.y();
+            int width = r.width();
+            int height = r.height();
+
+            UInt8 *dst = region.pixels + r.y() * region.stride + r.x() * 4;
+
+            for (int row = 0; row < height; ++row)
+                glReadPixels(srcX, srcY + row, width, 1, glFormat, GL_UNSIGNED_BYTE, dst + row * region.stride);
+
+            iter.next();
+        }
+    }
+
+    setWriteSync(RSync::Make(device));
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     return true;
 }
 

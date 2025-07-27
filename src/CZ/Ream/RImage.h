@@ -140,6 +140,7 @@ public:
     virtual bool checkDeviceCap(DeviceCap cap, RDevice *device = nullptr) const noexcept = 0;
 
     virtual bool writePixels(const RPixelBufferRegion &region) noexcept = 0;
+    virtual bool readPixels(const RPixelBufferRegion &region) noexcept = 0;
 
     SkISize size() const noexcept
     {
