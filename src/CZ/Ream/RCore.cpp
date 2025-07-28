@@ -20,22 +20,28 @@ RCore::RCore(const Options &options) noexcept : m_options(options)
 
 void RCore::logInfo() noexcept
 {
-    RLog(CZInfo, "--------------- Ream ---------------");
-    RLog(CZInfo, "Graphics API: {}", RGraphicsAPIString(graphicsAPI()));
-    RLog(CZInfo, "Platform: {}", RPlatformString(platform()));
-    RLog(CZInfo, "Main Device: {}", mainDevice()->drmNode());
-    RLog(CZInfo, "Devices:");
-    for (auto *dev : devices())
+    if (RLog.level() >= CZInfo)
     {
-        RLog(CZInfo, "    {}:", dev->drmNode());
-        RLog(CZInfo, "        Driver: {}", dev->drmDriverName());
-        RLog(CZInfo, "        GBM: {}", dev->gbmDevice() != nullptr);
-        RLog(CZInfo, "        Sync GPU: {}", dev->caps().SyncGPU);
-        RLog(CZInfo, "        Sync CPU: {}", dev->caps().SyncCPU);
-        RLog(CZInfo, "        Sync Import: {}", dev->caps().SyncImport);
-        RLog(CZInfo, "        Sync Export: {}", dev->caps().SyncExport);
+        printf("\n");
+        RLog(CZInfo, "--------------- Ream ---------------");
+        RLog(CZInfo, "Graphics API: {}", RGraphicsAPIString(graphicsAPI()));
+        RLog(CZInfo, "Platform: {}", RPlatformString(platform()));
+        RLog(CZInfo, "Main Device: {}", mainDevice()->drmNode());
+        RLog(CZInfo, "Devices:");
+        for (auto *dev : devices())
+        {
+            RLog(CZInfo, "    {}:", dev->drmNode());
+            RLog(CZInfo, "        Driver: {}", dev->drmDriverName());
+            RLog(CZInfo, "        GBM: {}", dev->gbmDevice() != nullptr);
+            RLog(CZInfo, "        AddFb2Modifiers: {}", dev->caps().AddFb2Modifiers);
+            RLog(CZInfo, "        DumbBuffer: {}", dev->caps().DumbBuffer);
+            RLog(CZInfo, "        Sync GPU: {}", dev->caps().SyncGPU);
+            RLog(CZInfo, "        Sync CPU: {}", dev->caps().SyncCPU);
+            RLog(CZInfo, "        Sync Import: {}", dev->caps().SyncImport);
+            RLog(CZInfo, "        Sync Export: {}", dev->caps().SyncExport);
+        }
+        RLog(CZInfo, "------------------------------------\n");
     }
-    RLog(CZInfo, "------------------------------------");
 }
 
 std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept

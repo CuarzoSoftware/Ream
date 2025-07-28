@@ -74,7 +74,7 @@ std::shared_ptr<REGLImage> REGLImage::MakeFromDMA(const RDMABufferInfo &info, RG
 
     if (!device->dmaTextureFormats().has(info.format, info.modifier))
     {
-        device->log(CZError, CZLN, "Unsupported format {} - {}", RDRMFormat::FormatName(info.format), RDRMFormat::ModifierName(info.modifier));
+        device->log(CZDebug, CZLN, "Unsupported format {} - {}", RDRMFormat::FormatName(info.format), RDRMFormat::ModifierName(info.modifier));
         return {};
     }
 
@@ -121,7 +121,7 @@ std::shared_ptr<REGLImage> REGLImage::MakeFromDMA(const RDMABufferInfo &info, RG
 
     if (image == EGL_NO_IMAGE)
     {
-        device->log(CZError, CZLN, "Failed to create EGLImage");
+        device->log(CZDebug, CZLN, "Failed to create EGLImage");
         return {};
     }
 
@@ -168,7 +168,7 @@ GLuint REGLImage::fb() const noexcept
 
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
-        m_device->log(CZError, CZLN, "Failed to create GL fb");
+        m_device->log(CZDebug, CZLN, "Failed to create GL fb");
         glDeleteFramebuffers(1, &data->fb);
         data->fb = 0;
     }

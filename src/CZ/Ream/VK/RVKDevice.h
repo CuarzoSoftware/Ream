@@ -7,6 +7,7 @@
 class CZ::RVKDevice final : public RDevice
 {
 public:
+    void wait() noexcept override { /* TODO */ }
     RVKCore &core() noexcept { return (RVKCore&)m_core; }
     VkPhysicalDevice physicalDevice() const noexcept { return m_physicalDevice; }
 private:

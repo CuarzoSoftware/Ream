@@ -51,6 +51,8 @@ public:
 
     ~RDevice() noexcept;
 
+    virtual void wait() noexcept = 0;
+
     // Could be -1
     int drmFd() const noexcept { return m_drmFd; }
 

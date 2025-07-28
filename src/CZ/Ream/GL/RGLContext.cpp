@@ -102,7 +102,6 @@ struct CZ::RGLThreadDataManager
     RGLThreadDataManager() noexcept
     {
         threads.threadDataManagers.emplace(pthread_self(), this);
-        RLog(CZWarning, "+ {}", pthread_self());
     }
 
     void clearGarbage() noexcept
@@ -211,7 +210,7 @@ struct CZ::RGLThreadDataManager
             else
             {
                 eglMakeCurrent(device->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, data.context);
-                device->log(CZInfo, "Shared GL context created for thread {}", pthread_self());
+                device->log(CZTrace, "Shared GL context created for thread {}", pthread_self());
                 data.skContext = GrDirectContexts::MakeGL(skInterface, CZ::GetSKContextOptions());
 
                 if (!data.skContext)
@@ -279,6 +278,12 @@ sk_sp<GrDirectContext> RGLDevice::skContext() const noexcept
         return t->getDeviceData((RGLDevice*)this)->skContext;
 
     return nullptr;
+}
+
+void RGLDevice::wait() noexcept
+{
+    auto current { RGLMakeCurrent::FromDevice(this, false) };
+    glFinish();
 }
 
 std::shared_ptr<RGLContextDataManager> RGLContextDataManager::Make(AllocFunc func) noexcept

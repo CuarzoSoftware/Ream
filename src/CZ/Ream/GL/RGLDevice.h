@@ -21,6 +21,7 @@ public:
     const REGLDisplayExtensions &eglDisplayExtensions() const noexcept { return m_eglDisplayExtensions; }
     const REGLDeviceExtensions &eglDeviceExtensions() const noexcept { return m_eglDeviceExtensions; }
     const RGLExtensions &glExtensions() const noexcept { return m_glExtensions; }
+    void wait() noexcept override;
 private:
     friend class RGLCore;
     friend struct RGLThreadDataManager;
