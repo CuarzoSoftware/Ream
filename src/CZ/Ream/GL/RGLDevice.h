@@ -41,6 +41,7 @@ private:
     bool initGLExtensions() noexcept;
     bool initEGLDisplayProcs() noexcept;
     bool initDMAFormats() noexcept;
+    bool initFormats() noexcept;
     bool initPainter() noexcept;
 
     void setDRMDriverName(int fd) noexcept;

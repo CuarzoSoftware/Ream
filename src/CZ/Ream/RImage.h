@@ -108,103 +108,84 @@ namespace CZ
         Native,
         GBM
     };
+
+    /// Device-specific caps
+    enum RImageCap : UInt32
+    {
+        /// Can be used as a src image by an RPass (RPass::drawImage())
+        RImageCap_Src       = 1u << 0,
+
+        /// Can be used as a render destination in an RPass (accepted by RSurface::WrapImage)
+        RImageCap_Dst       = 1u << 1,
+
+        /// Can be used as a src image by an RSKPass (has an SkImage)
+        RImageCap_SkImage   = 1u << 2,
+
+        /// Can be used as a render destination in an RSKPass (has an SkSurface)
+        RImageCap_SkSurface = 1u << 3,
+        RImageCap_DRMFb     = 1u << 4,
+        RImageCap_GBMBo     = 1u << 5,
+    };
+
+    struct RImageConstraints
+    {
+        /* Required caps for each device */
+        std::unordered_map<RDevice*, CZBitset<RImageCap>> caps;
+
+        /* Required read formats (must support at least one) */
+        std::unordered_set<RFormat> readFormats;
+
+        /* Required write formats (must support at least one) */
+        std::unordered_set<RFormat> writeFormats;
+
+        /* The allocator device, if nullptr, RCore::mainDevice() is used */
+        RDevice *allocator { nullptr };
+    };
 }
 
 class CZ::RImage : public RObject
 {
 public:
-    /// Device-specific caps
-    enum class DeviceCap
-    {
-        /// Can be used as a src image by an RPass (RPass::drawImage())
-        RPassSrc,
-
-        /// Can be used as a src image by an RSKPass (has an SkImage)
-        RSKPassSrc,
-
-        /// Can be used as a render destination in an RPass (accepted by RSurface::WrapImage)
-        RPassDst,
-
-        /// Can be used as a render destination in an RSKPass (has an SkSurface)
-        RSKPassDst
-    };
-
-    [[nodiscard]] static std::shared_ptr<RImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RDevice *allocator = nullptr) noexcept;
-    [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RDevice *allocator = nullptr) noexcept;
-    [[nodiscard]] static std::shared_ptr<RImage> LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size = {0, 0}, RDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RImage> Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RImage> LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size = {0, 0}, const RImageConstraints *constraints = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RImage> FromDMA(const RDMABufferInfo &info, CZOwnership ownership, const RImageConstraints *constraints = nullptr) noexcept;
 
     virtual std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept = 0;
     virtual std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept = 0;
     virtual sk_sp<SkImage> skImage(RDevice *device = nullptr) const noexcept = 0;
     virtual sk_sp<SkSurface> skSurface(RDevice *device = nullptr) const noexcept = 0;
-    virtual bool checkDeviceCap(DeviceCap cap, RDevice *device = nullptr) const noexcept = 0;
 
+    // If caps == ret then all tested caps are supported
+    virtual CZBitset<RImageCap> checkDeviceCaps(CZBitset<RImageCap> caps, RDevice *device = nullptr) const noexcept = 0;
     virtual bool writePixels(const RPixelBufferRegion &region) noexcept = 0;
     virtual bool readPixels(const RPixelBufferRegion &region) noexcept = 0;
 
-    SkISize size() const noexcept
-    {
-        return m_size;
-    }
-
+    SkISize size() const noexcept { return m_size; }
     const RFormatInfo &formatInfo() const noexcept { return *m_formatInfo; }
-
     const std::unordered_set<RFormat> &readFormats() const noexcept { return m_readFormats; };
     const std::unordered_set<RFormat> &writeFormats() const noexcept { return m_writeFormats; }
-
-    SkAlphaType alphaType() const noexcept
-    {
-        return m_alphaType;
-    }
-
-    // For each plane
-    const std::vector<RModifier> &modifiers() const noexcept
-    {
-        return m_modifiers;
-    }
-
-    RDevice *allocator() const noexcept
-    {
-        return m_allocator;
-    }
-
-    RCore &core() const noexcept
-    {
-        return *m_core.get();
-    }
-
-    void setReadSync(std::shared_ptr<RSync> sync) noexcept
-    {
-        m_readSync = sync;
-    }
+    SkAlphaType alphaType() const noexcept { return m_alphaType; }
+    RModifier modifier() const noexcept { return m_modifier; }
+    RDevice *allocator() const noexcept { return m_allocator; }
+    std::shared_ptr<RCore> core() const noexcept { return m_core; }
 
     // Signaled when no longer beind read
-    std::shared_ptr<RSync> readSync() noexcept
-    {
-        return m_readSync;
-    }
-
-    void setWriteSync(std::shared_ptr<RSync> sync) noexcept
-    {
-        m_writeSync = sync;
-    }
+    std::shared_ptr<RSync> readSync() noexcept { return m_readSync; }
+    void setReadSync(std::shared_ptr<RSync> sync) noexcept { m_readSync = sync;}
 
     // Signaled when pending write operations end
-    std::shared_ptr<RSync> writeSync() noexcept
-    {
-        return m_writeSync;
-    }
+    std::shared_ptr<RSync> writeSync() noexcept { return m_writeSync; }
+    void setWriteSync(std::shared_ptr<RSync> sync) noexcept { m_writeSync = sync; }
 
     std::shared_ptr<RGLImage> asGL() const noexcept;
-
     ~RImage() noexcept;
-
 protected:
-    RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept;
+    RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifiers) noexcept;
     SkISize m_size;
     const RFormatInfo *m_formatInfo;
     SkAlphaType m_alphaType;
-    std::vector<RModifier> m_modifiers;
+    RModifier m_modifier;
     RDevice *m_allocator;
     std::unordered_set<RFormat> m_readFormats;
     std::unordered_set<RFormat> m_writeFormats;

@@ -14,21 +14,25 @@
 
 using namespace CZ;
 
-std::shared_ptr<RImage> RImage::Make(SkISize size, const RDRMFormat &format, RStorageType storageType, RDevice *allocator) noexcept
+std::shared_ptr<RImage> RImage::Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
     auto core { RCore::Get() };
 
-    assert(core);
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
 
     if (core->graphicsAPI() == RGraphicsAPI::GL)
-        return RGLImage::Make(size, format, storageType, (RGLDevice*)allocator);
+        return RGLImage::Make(size, format, constraints);
 
     return {};
 }
 
-std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, RStorageType storageType, RDevice *allocator) noexcept
+std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
-    auto image { Make(info.size, format, storageType, allocator) };
+    auto image { Make(info.size, format, constraints) };
 
     if (!image)
         return {};
@@ -45,7 +49,7 @@ std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &info, con
     return image;
 }
 
-std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size, RDevice *allocator) noexcept
+std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size, const RImageConstraints *constraints) noexcept
 {
     const SkColorType skFormat { RSKFormat::FromDRM(format.format()) };
 
@@ -113,7 +117,23 @@ std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, cons
     pixInfo.stride = bitmap.pixelRef()->rowBytes();
     pixInfo.format = format.format();
     pixInfo.size = pixelSize;
-    return MakeFromPixels(pixInfo, format, RStorageType::Auto, allocator);
+    return MakeFromPixels(pixInfo, format, constraints);
+}
+
+std::shared_ptr<RImage> RImage::FromDMA(const RDMABufferInfo &info, CZOwnership ownership, const RImageConstraints *constraints) noexcept
+{
+    auto core { RCore::Get() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    if (core->graphicsAPI() == RGraphicsAPI::GL)
+        return RGLImage::FromDMA(info, ownership, constraints);
+
+    return {};
 }
 
 std::shared_ptr<RGLImage> RImage::asGL() const noexcept
@@ -126,18 +146,17 @@ RImage::~RImage() noexcept
     RResourceTrackerSub(RResourceType::RImageRes);
 }
 
-RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept :
+RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept :
     m_size(size),
     m_formatInfo(formatInfo),
     m_alphaType(alphaType),
-    m_modifiers(modifiers),
+    m_modifier(modifier),
     m_allocator(device),
     m_core(core)
 {
     assert(formatInfo);
     assert(SkAlphaTypeIsValid(alphaType));
     assert(!size.isEmpty());
-    assert(!modifiers.empty());
     assert(device);
     assert(core);
     RResourceTrackerAdd(RResourceType::RImageRes);

@@ -75,11 +75,64 @@ static std::shared_ptr<RGLCore> ValidateMake(SkISize size, RFormat format, SkAlp
     return glCore;
 }
 
+static bool ValidateConstraints(std::shared_ptr<RGLImage> image, const RImageConstraints *constraints) noexcept
+{
+    if (!constraints)
+        return true;
+
+    bool hasReadFormat { constraints->readFormats.empty() };
+
+    for (auto fmt : constraints->readFormats)
+    {
+        if (image->readFormats().contains(fmt))
+        {
+            hasReadFormat = true;
+            break;
+        }
+    }
+
+    if (!hasReadFormat)
+    {
+        RLog(CZTrace, "None of the required RImage read formats are available");
+        return false;
+    }
+
+    bool hasWriteFormat { constraints->writeFormats.empty() };
+
+    for (auto fmt : constraints->writeFormats)
+    {
+        if (image->writeFormats().contains(fmt))
+        {
+            hasWriteFormat = true;
+            break;
+        }
+    }
+
+    if (!hasWriteFormat)
+    {
+        RLog(CZTrace, "None of the required RImage write formats are available");
+        return false;
+    }
+
+    for (const auto &dev : constraints->caps)
+    {
+        assert(dev.first != nullptr && "nullptr was passed to RImageConstraints::caps");
+
+        if (dev.second != image->checkDeviceCaps(dev.second, dev.first))
+        {
+            dev.first->log(CZTrace, "Required RImage caps not met");
+            return false;
+        }
+    }
+
+    return true;
+}
+
 RGLTexture RGLImage::texture(RGLDevice *device) const noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
     if (!device)
-        device = core().asGL()->mainDevice();
+        device = core()->asGL()->mainDevice();
 
     auto &deviceData { m_devicesMap[device] };
 
@@ -104,7 +157,7 @@ std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
     if (!device)
-        device = core().asGL()->mainDevice();
+        device = core()->asGL()->mainDevice();
 
     auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device)) };
 
@@ -148,7 +201,7 @@ std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
     if (!device)
-        device = core().asGL()->mainDevice();
+        device = core()->asGL()->mainDevice();
 
     auto &deviceData { m_devicesMap[device] };
 
@@ -173,23 +226,13 @@ std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
     return deviceData.eglImage;
 }
 
-std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format, RStorageType storageType, RGLDevice *allocator) noexcept
+std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
+    std::shared_ptr<RGLImage> image { MakeWithGBMStorage(size, format, constraints) };
 
-    std::shared_ptr<RGLImage> image;
-
-    if (storageType == RStorageType::Auto)
-    {
-        image = MakeWithGBMStorage(size, format, allocator);
-
-        if (!image)
-            image = MakeWithNativeStorage(size, format, allocator);
-    }
-    else if (storageType == RStorageType::GBM)
-        image = MakeWithGBMStorage(size, format, allocator);
-    else
-        image = MakeWithNativeStorage(size, format, allocator);
+    if (!image)
+        image = MakeWithNativeStorage(size, format, constraints);
 
     return image;
 }
@@ -207,11 +250,55 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
     // TODO: Validate
 
-    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, formatInfo, alphaType, {DRM_FORMAT_MOD_INVALID})) };
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, formatInfo, alphaType, DRM_FORMAT_MOD_INVALID)) };
     image->m_self = image;
     auto *contextData { static_cast<ContextData*>(image->m_contextDataManager->getData(allocator)) };
     contextData->glFb = info.id;
     contextData->fbOwnership = CZOwnership::Borrow;
+    return image;
+}
+
+std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwnership ownership, const RImageConstraints *constraints) noexcept
+{
+    std::lock_guard<std::recursive_mutex> lock(mutex);
+
+    std::optional<RDMABufferInfo> infoCopy;
+
+    if (ownership == CZOwnership::Borrow)
+    {
+        if (!info.isValid())
+            return {};
+
+        infoCopy = info;
+    }
+    else
+    {
+        infoCopy = info.dup();
+
+        if (!infoCopy.has_value())
+            return {};
+    }
+
+    const RFormatInfo *formatInfo;
+    SkAlphaType alphaType;
+    RGLDevice *allocator { nullptr };
+
+    if (constraints)
+        allocator = (RGLDevice*)constraints->allocator;
+
+    const auto size { SkISize::Make(info.width, info.height) };
+
+    auto core { ValidateMake(size, info.format, kUnknown_SkAlphaType, &allocator, &formatInfo, &alphaType) };
+    if (!core) return {};
+
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, info.modifier)) };
+    image->m_self = image;
+    image->m_dmaInfoOwn = CZOwnership::Own;
+    image->m_dmaInfo = infoCopy;
+
+    if (!ValidateConstraints(image, constraints))
+        return {};
+
     return image;
 }
 
@@ -220,7 +307,7 @@ std::shared_ptr<RGBMBo> RGLImage::gbmBo(RDevice *device) const noexcept
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
     if (!device)
-        device = core().mainDevice();
+        device = core()->mainDevice();
 
     auto *dev { static_cast<RGLDevice*>(device) };
     auto &data { m_devicesMap[dev] };
@@ -232,7 +319,7 @@ std::shared_ptr<RDRMFramebuffer> RGLImage::drmFb(RDevice *device) const noexcept
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
     if (!device)
-        device = core().mainDevice();
+        device = core()->mainDevice();
 
     auto &data { m_devicesMap[device->asGL()] };
 
@@ -264,7 +351,7 @@ sk_sp<SkImage> RGLImage::skImage(RDevice *device) const noexcept
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
     if (!device)
-        device = core().mainDevice();
+        device = core()->mainDevice();
 
     auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device->asGL())) };
 
@@ -336,7 +423,7 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
     if (!device)
-        device = core().mainDevice();
+        device = core()->mainDevice();
 
     /* Already has one */
 
@@ -404,26 +491,34 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
     return contextData->skSurface;
 }
 
-bool RGLImage::checkDeviceCap(DeviceCap cap, RDevice *device) const noexcept
+CZBitset<RImageCap> RGLImage::checkDeviceCaps(CZBitset<RImageCap> caps, RDevice *device) const noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
     if (!device)
         device = m_core->mainDevice();
 
-    switch (cap)
-    {
-    case DeviceCap::RPassSrc:
-        return texture(device->asGL()).id != 0;
-    case DeviceCap::RSKPassSrc:
-        return skImage(device->asGL()) != nullptr;
-    case DeviceCap::RPassDst:
-        return glFb(device->asGL()).has_value();
-    case DeviceCap::RSKPassDst:
-        return skSurface(device->asGL()) != nullptr;
-    }
+    CZBitset<RImageCap> out {};
 
-    return false;
+    if (caps.has(RImageCap_Src))
+        out.setFlag(RImageCap_Src, texture(device->asGL()).id != 0);
+
+    if (caps.has(RImageCap_Dst))
+        out.setFlag(RImageCap_Dst, glFb(device->asGL()).has_value());
+
+    if (caps.has(RImageCap_SkImage))
+        out.setFlag(RImageCap_SkImage, skImage(device->asGL()) != nullptr);
+
+    if (caps.has(RImageCap_SkSurface))
+        out.setFlag(RImageCap_SkSurface, skSurface(device->asGL()) != nullptr);
+
+    if (caps.has(RImageCap_DRMFb))
+        out.setFlag(RImageCap_DRMFb, drmFb(device) != nullptr);
+
+    if (caps.has(RImageCap_GBMBo))
+        out.setFlag(RImageCap_GBMBo, gbmBo(device) != nullptr);
+
+    return out;
 }
 
 bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
@@ -478,12 +573,15 @@ bool RGLImage::readPixels(const RPixelBufferRegion &region) noexcept
     return false;
 }
 
-std::shared_ptr<RGLImage> RGLImage::MakeWithGBMStorage(SkISize size, const RDRMFormat &format, RGLDevice *allocator) noexcept
+std::shared_ptr<RGLImage> RGLImage::MakeWithGBMStorage(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
-
     const RFormatInfo *formatInfo;
     SkAlphaType alphaType;
+    RGLDevice *allocator { nullptr };
+
+    if (constraints)
+        allocator = (RGLDevice*)constraints->allocator;
 
     auto core { ValidateMake(size, format.format(), kUnknown_SkAlphaType, &allocator, &formatInfo, &alphaType) };
 
@@ -501,38 +599,53 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithGBMStorage(SkISize size, const RDRMF
 
     if (!data.gbmBo)
     {
-        allocator->log(CZError, CZLN, "Failed to create gbm_bo");
+        allocator->log(CZDebug, CZLN, "Failed to create gbm_bo");
         return {};
     }
 
-    std::vector<RModifier> modifiers;
-    modifiers.resize(data.gbmBo->planeCount());
-    for (int i = 0; i < data.gbmBo->planeCount(); i++)
-        modifiers[i] = data.gbmBo->modifier();
-
-    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, modifiers)) };
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, data.gbmBo->modifier())) };
     image->m_dmaInfo = data.gbmBo->dmaInfo();
     image->m_pf.add(PFStorageGBM);
     image->m_self = image;
     image->m_devicesMap.emplace(allocator, data);
     image->assignReadWriteFormats();
+
+    if (!ValidateConstraints(image, constraints))
+        return {};
+
     return image;
 }
 
-std::shared_ptr<RGLImage> RGLImage::MakeWithNativeStorage(SkISize size, const RDRMFormat &format, RGLDevice *allocator) noexcept
+std::shared_ptr<RGLImage> RGLImage::MakeWithNativeStorage(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
+    if (!format.modifiers().contains(DRM_FORMAT_MOD_INVALID))
+        return {};
+
     const RFormatInfo *formatInfo;
     SkAlphaType alphaType;
+    RGLDevice *allocator { nullptr };
+
+    if (constraints)
+        allocator = (RGLDevice*)constraints->allocator;
 
     auto core { ValidateMake(size, format.format(), kUnknown_SkAlphaType, &allocator, &formatInfo, &alphaType) };
 
     if (!core) return {};
 
+    if (constraints)
+    {
+        for (const auto &dev : constraints->caps)
+            if (dev.first != allocator && dev.second.get() != 0)
+                return {};
+
+        allocator = (RGLDevice*)constraints->allocator;
+    }
+
     if (formatInfo->pixelsPerBlock() != 1)
     {
-        allocator->log(CZError, CZLN, "Block formats are not supported: {}", RDRMFormat::FormatName(format.format()));
+        allocator->log(CZDebug, CZLN, "Block formats are not supported: {}", RDRMFormat::FormatName(format.format()));
         return {};
     }
 
@@ -544,7 +657,13 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithNativeStorage(SkISize size, const RD
         return {};
     }
 
-    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, { DRM_FORMAT_MOD_INVALID })) };
+    if (glFormat->format != GL_RGBA && glFormat->format != GL_RGB)
+    {
+        if (glFormat->format != GL_BGRA_EXT || !allocator->glExtensions().EXT_texture_format_BGRA8888)
+            return {};
+    }
+
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, DRM_FORMAT_MOD_INVALID)) };
     image->m_pf.add(PFStorageNative);
     image->m_self = image;
 
@@ -558,6 +677,10 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithNativeStorage(SkISize size, const RD
     glTexImage2D(data.texture.target, 0, glFormat->internalFormat, size.width(), size.height(), 0, glFormat->format, glFormat->type, NULL);
     glBindTexture(data.texture.target, 0);
     image->assignReadWriteFormats();
+
+    if (!ValidateConstraints(image, constraints))
+        return {};
+
     return image;
 }
 
@@ -894,8 +1017,8 @@ void RGLImage::assignReadWriteFormats() noexcept
     }
 }
 
-RGLImage::RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept
-    : RImage(core, (RDevice*)device, size, formatInfo, alphaType, modifiers)
+RGLImage::RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept
+    : RImage(core, (RDevice*)device, size, formatInfo, alphaType, modifier)
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
 

@@ -32,14 +32,16 @@ public:
     std::optional<GLuint> glFb(RGLDevice *device = nullptr) const noexcept;
     std::shared_ptr<REGLImage> eglImage(RGLDevice *device = nullptr) const noexcept;
 
-    [[nodiscard]] static std::shared_ptr<RGLImage> Make(SkISize size, const RDRMFormat &format, RStorageType storageType = RStorageType::Auto, RGLDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> FromDMA(const RDMABufferInfo &info, CZOwnership ownership, const RImageConstraints *constraints = nullptr) noexcept;
+
 
     std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept override;
     std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept override;
     sk_sp<SkImage> skImage(RDevice *device = nullptr) const noexcept override;
     sk_sp<SkSurface> skSurface(RDevice *device = nullptr) const noexcept override;
-    bool checkDeviceCap(DeviceCap cap, RDevice *device = nullptr) const noexcept override;
+    CZBitset<RImageCap> checkDeviceCaps(CZBitset<RImageCap> caps, RDevice *device = nullptr) const noexcept override;
 
     bool writePixels(const RPixelBufferRegion &region) noexcept override;
     bool readPixels(const RPixelBufferRegion &region) noexcept override;
@@ -51,8 +53,8 @@ public:
 
 private:
 
-    [[nodiscard]] static std::shared_ptr<RGLImage> MakeWithGBMStorage(SkISize size, const RDRMFormat &format, RGLDevice *allocator = nullptr) noexcept;
-    [[nodiscard]] static std::shared_ptr<RGLImage> MakeWithNativeStorage(SkISize size, const RDRMFormat &format, RGLDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> MakeWithGBMStorage(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> MakeWithNativeStorage(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept;
 
     bool writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept;
     bool writePixelsNative(const RPixelBufferRegion &region) noexcept;
@@ -115,7 +117,7 @@ private:
         ~GlobalDeviceDataMap() noexcept;
     };
 
-    RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, const std::vector<RModifier> &modifiers) noexcept;
+    RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept;
 
     CZBitset<PF> m_pf {};
     RGLFormat m_glFormat;

@@ -34,6 +34,8 @@ public:
      */
     struct Caps
     {
+        bool Rendering;
+
         /// Supports creating DRM framebuffers with explicit format modifiers.
         bool AddFb2Modifiers;
         bool DumbBuffer;
@@ -81,6 +83,10 @@ public:
     // If a format/modifier pair exists in textures but not here, then its external only
     const RDRMFormatSet &dmaRenderFormats() const noexcept { return m_dmaRenderFormats; }
 
+    // DMA + Native ones
+    const RDRMFormatSet &textureFormats() const noexcept { return m_textureFormats; }
+    const RDRMFormatSet &renderFormats() const noexcept { return m_renderFormats; }
+
     CZLogger log { RLog };
 protected:
     friend class SRMCore;
@@ -97,6 +103,8 @@ protected:
     gbm_device *m_gbmDevice { nullptr };
     RDRMFormatSet m_dmaTextureFormats;
     RDRMFormatSet m_dmaRenderFormats;
+    RDRMFormatSet m_textureFormats;
+    RDRMFormatSet m_renderFormats;
     CZWeak<SRMDevice> m_srmDevice;
 };
 

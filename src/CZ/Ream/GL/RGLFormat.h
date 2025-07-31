@@ -1,5 +1,5 @@
-#ifndef RGLFORMAT_H
-#define RGLFORMAT_H
+#ifndef CZ_RGLFORMAT_H
+#define CZ_RGLFORMAT_H
 
 #include <CZ/Ream/Ream.h>
 #include <GLES2/gl2.h>
@@ -16,5 +16,4 @@ namespace CZ
     };
 }
 
-
-#endif // RGLFORMAT_H
+#endif // CZ_RGLFORMAT_H

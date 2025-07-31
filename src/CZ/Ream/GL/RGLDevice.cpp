@@ -102,6 +102,7 @@ bool RGLDevice::initWL() noexcept
         initGLExtensions() &&
         initEGLDisplayProcs() &&
         initDMAFormats() &&
+        initFormats() &&
         initPainter())
         return true;
 
@@ -216,6 +217,7 @@ bool RGLDevice::initDRM() noexcept
         initGLExtensions() &&
         initEGLDisplayProcs() &&
         initDMAFormats() &&
+        initFormats() &&
         initPainter())
         return true;
 
@@ -462,6 +464,9 @@ bool RGLDevice::initDMAFormats() noexcept
 
     for (auto fmt : formats)
     {
+        if (!RDRMFormat::GetInfo(fmt))
+            continue;
+
         EGLBoolean allExternal { true };
         std::vector<EGLuint64KHR> mods;
         std::vector<EGLBoolean> externalOnly;
@@ -505,6 +510,21 @@ fallback:
     m_dmaRenderFormats.add(DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_LINEAR);
     m_dmaRenderFormats.add(DRM_FORMAT_XRGB8888, DRM_FORMAT_MOD_LINEAR);
     m_dmaTextureFormats = m_dmaRenderFormats;
+    return true;
+}
+
+bool RGLDevice::initFormats() noexcept
+{
+    m_textureFormats = m_dmaTextureFormats;
+    m_renderFormats = m_dmaRenderFormats;
+
+    m_textureFormats.add(DRM_FORMAT_ABGR8888, DRM_FORMAT_MOD_INVALID);
+    m_textureFormats.add(DRM_FORMAT_BGR888, DRM_FORMAT_MOD_INVALID);
+
+    if (glExtensions().EXT_texture_format_BGRA8888)
+        m_textureFormats.add(DRM_FORMAT_ARGB8888, DRM_FORMAT_MOD_INVALID);
+
+    m_renderFormats.add(DRM_FORMAT_ABGR8888, DRM_FORMAT_MOD_INVALID);
     return true;
 }
 

@@ -5,8 +5,13 @@
 #include <CZ/Utils/CZMathUtils.h>
 #include <boost/container/flat_set.hpp>
 #include <string_view>
+#include <drm_fourcc.h>
 
 #define REAM_FLAT_SET boost::container::flat_set
+
+#ifndef DRM_FORMAT_A8
+#define DRM_FORMAT_A8 fourcc_code('A', '8', ' ', ' ')
+#endif
 
 namespace CZ
 {
