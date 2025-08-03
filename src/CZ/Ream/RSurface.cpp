@@ -1,5 +1,6 @@
 #include <CZ/skia/gpu/ganesh/GrDirectContext.h>
 #include <CZ/skia/gpu/ganesh/GrRecordingContext.h>
+#include <CZ/Ream/RMatrixUtils.h>
 #include <CZ/Ream/SK/RSKPass.h>
 #include <CZ/Ream/RResourceTracker.h>
 #include <CZ/Ream/RLog.h>
@@ -13,7 +14,7 @@
 
 using namespace CZ;
 
-std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image, Int32 scale) noexcept
+std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image) noexcept
 {
     if (!image)
     {
@@ -21,18 +22,11 @@ std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image, Int
         return {};
     }
 
-    if (scale <= 0)
-    {
-        RLog(CZWarning, CZLN, "Invalid scale factor <= 0. Replacing it with 1...");
-        scale = 1;
-    }
-
     if (image->alphaType() == kUnpremul_SkAlphaType)
         RLog(CZWarning, CZLN, "The destination RImage is unpremultiplied alpha, but RSurface/Skia will still output premultiplied results");
 
-    auto surface { std::shared_ptr<RSurface>(new RSurface(image, scale)) };
+    auto surface { std::shared_ptr<RSurface>(new RSurface(image)) };
     surface->m_self = surface;
-    surface->calculateSizeFromImage();
     return surface;
 }
 
@@ -54,7 +48,20 @@ RSKPass RSurface::beginSKPass(RDevice *device) const noexcept
     if (!device)
         device = RCore::Get()->mainDevice();
 
-    return { m_image, device };
+    return { RMatrixUtils::VirtualToImage(transform(), viewport(), dst()), m_image, device };
+}
+
+bool RSurface::setGeometry(SkRect viewport, SkRect dst, CZTransform transform) noexcept
+{
+    if (!viewport.isSorted() || !dst.isSorted() ||
+        viewport.isEmpty() || dst.isEmpty() ||
+        !viewport.isFinite() || !dst.isFinite())
+        return false;
+
+    m_viewport = viewport;
+    m_dst = dst;
+    m_transform = transform;
+    return true;
 }
 
 RSurface::~RSurface() noexcept
@@ -62,24 +69,10 @@ RSurface::~RSurface() noexcept
     RResourceTrackerSub(RSurfaceRes);
 }
 
-RSurface::RSurface(std::shared_ptr<RImage> image, Int32 scale) noexcept :
-    m_image(image), m_scale(scale)
+RSurface::RSurface(std::shared_ptr<RImage> image) noexcept :
+    m_image(image)
 {
+    assert(m_image);
     RResourceTrackerAdd(RSurfaceRes);
-}
-
-void RSurface::calculateSizeFromImage() noexcept
-{
-    if (!m_image) return;
-
-    m_size.set(
-        image()->size().width() / scale(),
-        image()->size().height() / scale());
-
-    if (CZ::Is90Transform(transform()))
-    {
-        const Int32 w { size().width() };
-        m_size.fWidth = size().height();
-        m_size.fHeight = w;
-    }
+    setGeometry(SkRect::Make(m_image->size()), SkRect::Make(m_image->size()), CZTransform::Normal);
 }

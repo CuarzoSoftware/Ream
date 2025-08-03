@@ -10,6 +10,9 @@
 #include <CZ/skia/core/SkStream.h>
 #include <CZ/skia/core/SkImageInfo.h>
 #include <CZ/skia/core/SkBitmap.h>
+#include <CZ/skia/core/SkImage.h>
+#include <CZ/skia/codec/SkEncodedImageFormat.h>
+#include <CZ/skia/codec/SkCodec.h>
 #include <CZ/skia/modules/svg/include/SkSVGDOM.h>
 
 using namespace CZ;
@@ -49,25 +52,95 @@ std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &info, con
     return image;
 }
 
-std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size, const RImageConstraints *constraints) noexcept
+static std::shared_ptr<RImage> LoadImage(SkColorType skFormat, const std::filesystem::path &path, const RDRMFormat &format, SkISize size, const RImageConstraints *constraints) noexcept
 {
-    const SkColorType skFormat { RSKFormat::FromDRM(format.format()) };
+    SkBitmap bitmap;
+    SkSize finalSize = SkSize::Make(SkIntToScalar(size.width()), SkIntToScalar(size.height()));
+    bool haveFinalSize = (size.width() > 0 && size.height() > 0);
 
-    if (skFormat == kUnknown_SkColorType)
+    sk_sp<SkData> data = SkData::MakeFromFileName(path.c_str());
+    if (!data)
     {
-        RLog(CZError, CZLN, "Could not find DRM -> SkColorType mapping");
+        RLog(CZError, CZLN, "Failed to open image file: {}", path.c_str());
         return {};
     }
 
-    auto core { RCore::Get() };
+    auto codec = SkCodec::MakeFromData(data);
 
-    if (!core)
+    if (!codec)
     {
-        RLog(CZError, CZLN, "Missing RCore");
+        RLog(CZError, CZLN, "Failed to create codec for image file: {}", path.c_str());
         return {};
     }
 
+    SkISize srcSize = codec->dimensions();
+
+    if (!haveFinalSize)
+        finalSize.set(SkIntToScalar(srcSize.width()), SkIntToScalar(srcSize.height()));
+
+    if (finalSize.fWidth <= 0 || finalSize.fHeight <= 0)
+    {
+        RLog(CZError, CZLN, "The image has invalid dimensions: {}", path.c_str());
+        return {};
+    }
+
+    SkISize finalPixelSize = SkISize::Make(
+        SkScalarCeilToInt(finalSize.fWidth),
+        SkScalarCeilToInt(finalSize.fHeight)
+        );
+
+    // Decode into a temporary SkImage first (preserves original orientation/color),
+    // then draw it into the target bitmap with scaling/conversion.
+    sk_sp<SkImage> srcImage = SkImages::DeferredFromEncodedData(data);
+
+    if (!srcImage)
+    {
+        RLog(CZError, CZLN, "Failed to decode image file: {}", path.c_str());
+        return {};
+    }
+
+    SkImageInfo info = SkImageInfo::Make(
+        finalPixelSize,
+        skFormat,
+        kPremul_SkAlphaType
+        );
+
+    if (!bitmap.tryAllocPixels(info)) {
+        RLog(CZError, CZLN, "Failed to allocate SkBitmap pixels for raster image");
+        return {};
+    }
+
+    SkCanvas canvas{ bitmap };
+    canvas.clear(SK_ColorTRANSPARENT);
+
+    // Draw the source image (full) into the target rect with filtering.
+    SkRect srcRect = SkRect::MakeIWH(srcSize.width(), srcSize.height());
+    SkRect dstRect = SkRect::MakeIWH(finalPixelSize.width(), finalPixelSize.height());
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    canvas.drawImageRect(srcImage, srcRect, dstRect, SkSamplingOptions(), &paint, SkCanvas::kFast_SrcRectConstraint);
+
+
+    // At this point bitmap has the rendered image (SVG or raster), in desired format/size.
+    if (!bitmap.pixelRef() || !bitmap.readyToDraw()) {
+        RLog(CZError, CZLN, "Bitmap not ready after image processing: {}", path.c_str());
+        return {};
+    }
+
+    const SkISize pixelSize{ bitmap.pixelRef()->width(), bitmap.pixelRef()->height() };
+
+    RPixelBufferInfo pixInfo{};
+    pixInfo.pixels = static_cast<UInt8*>(bitmap.pixelRef()->pixels());
+    pixInfo.stride = bitmap.pixelRef()->rowBytes();
+    pixInfo.format = format.format();
+    pixInfo.size = pixelSize;
+    return RImage::MakeFromPixels(pixInfo, format, constraints);
+}
+
+static std::shared_ptr<RImage> LoadSVG(SkColorType skFormat, const std::filesystem::path &path, const RDRMFormat &format, SkISize size, const RImageConstraints *constraints) noexcept
+{
     auto stream { SkMemoryStream::MakeFromFile(path.c_str()) };
+
     auto dom { SkSVGDOM::MakeFromStream(*stream) };
 
     if (!dom)
@@ -89,12 +162,12 @@ std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, cons
     }
 
     SkImageInfo info
-    {
-        SkImageInfo::Make(
-            finalSize.toCeil(),
-            skFormat,
-            kPremul_SkAlphaType)
-    };
+        {
+            SkImageInfo::Make(
+                finalSize.toCeil(),
+                skFormat,
+                kPremul_SkAlphaType)
+        };
 
     SkBitmap bitmap;
     if (!bitmap.tryAllocPixels(info))
@@ -117,7 +190,32 @@ std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, cons
     pixInfo.stride = bitmap.pixelRef()->rowBytes();
     pixInfo.format = format.format();
     pixInfo.size = pixelSize;
-    return MakeFromPixels(pixInfo, format, constraints);
+    return RImage::MakeFromPixels(pixInfo, format, constraints);
+}
+
+
+std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size, const RImageConstraints *constraints) noexcept
+{
+    const SkColorType skFormat { RSKFormat::FromDRM(format.format()) };
+
+    if (skFormat == kUnknown_SkColorType)
+    {
+        RLog(CZError, CZLN, "Could not find DRM -> SkColorType mapping");
+        return {};
+    }
+
+    auto core { RCore::Get() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    std::shared_ptr<RImage> image { LoadImage(skFormat, path, format, size, constraints) };
+    if (image) return image;
+    image = LoadSVG(skFormat, path, format, size, constraints);
+    return image;
 }
 
 std::shared_ptr<RImage> RImage::FromDMA(const RDMABufferInfo &info, CZOwnership ownership, const RImageConstraints *constraints) noexcept

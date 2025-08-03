@@ -61,7 +61,7 @@ public:
     RSKPass& operator=(RSKPass&&) noexcept = default;
 private:
     friend class RSurface;
-    RSKPass(std::shared_ptr<RImage> image = nullptr, RDevice *device = nullptr) noexcept;
+    RSKPass(const SkMatrix &matrix, std::shared_ptr<RImage> image = nullptr, RDevice *device = nullptr) noexcept;
     std::shared_ptr<RGLMakeCurrent> m_glCurrent;
     RDevice *m_device {};
     SkCanvas *m_canvas {};

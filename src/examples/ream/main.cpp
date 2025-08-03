@@ -165,7 +165,7 @@ void Window::update() noexcept
         info.format = DRM_FORMAT_ARGB8888;
         info.id = 0;
 
-        surf = RSurface::WrapImage(RGLImage::BorrowFramebuffer(info, dev), scale);
+        surf = RSurface::WrapImage(RGLImage::BorrowFramebuffer(info, dev));
 
         /*
         const GrGLFramebufferInfo fbInfo

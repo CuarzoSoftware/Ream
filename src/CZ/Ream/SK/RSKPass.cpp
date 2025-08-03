@@ -14,6 +14,7 @@ bool RSKPass::end() noexcept
     if (!isValid())
         return false;
 
+    m_canvas->restore();
     m_canvas->getSurface()->recordingContext()->asDirectContext()->flush();
     m_image->setWriteSync(RSync::Make(m_device));
     m_image.reset();
@@ -21,7 +22,7 @@ bool RSKPass::end() noexcept
     return true;
 }
 
-RSKPass::RSKPass(std::shared_ptr<RImage> image, RDevice *device) noexcept :
+RSKPass::RSKPass(const SkMatrix &matrix, std::shared_ptr<RImage> image, RDevice *device) noexcept :
     m_device(device),
     m_image(image)
 {
@@ -50,4 +51,6 @@ RSKPass::RSKPass(std::shared_ptr<RImage> image, RDevice *device) noexcept :
 
     skSurface->recordingContext()->asDirectContext()->resetContext();
     m_canvas = skSurface->getCanvas();
+    m_canvas->save();
+    m_canvas->setMatrix(matrix);
 }

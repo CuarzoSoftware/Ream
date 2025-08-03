@@ -47,7 +47,7 @@ bool RPainter::clearSurface() noexcept
     setBlendMode(RBlendMode::Src);
     setFactor();
     setOpacity(1.f);
-    const bool ret { drawColor(SkRegion(SkIRect::MakePtSize(surface->pos(), surface->size()))) };
+    const bool ret { drawColor(SkRegion(surface->viewport().roundOut())) };
     restore();
     return ret;
 }
@@ -69,9 +69,6 @@ bool RPainter::endPass() noexcept
         device()->log(CZError, CZLN, "endPass() failed, missing RSurface image");
         return false;
     }
-
-    if (m_canvas)
-        m_canvas->getSurface()->recordingContext()->asDirectContext()->flush();
 
     image->setWriteSync(RSync::Make(device()));
     return true;

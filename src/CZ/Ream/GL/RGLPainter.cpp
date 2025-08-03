@@ -7,6 +7,7 @@
 #include <CZ/Ream/GL/RGLProgram.h>
 #include <CZ/Ream/RSurface.h>
 #include <CZ/Ream/RSync.h>
+#include <CZ/Ream/RMatrixUtils.h>
 #include <CZ/skia/core/SkMatrix.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -15,49 +16,70 @@ using namespace CZ;
 
 void RGLPainter::calcPosProj(RSurface *surface, bool flipY, SkScalar *outMat) const noexcept
 {
-    SkMatrix mat { SkMatrix::I() };
-    mat.preScale(
-        2.f / SkScalar(surface->size().width()),
-        2.f / SkScalar(surface->size().height()));
-    mat.postTranslate(-1.0f, -1.f);
-    if (flipY)
-        mat.postScale(1.f, -1.f);
+    SkMatrix mat { RMatrixUtils::VirtualToNDC(
+        surface->transform(),
+        surface->viewport(),
+        surface->dst(),
+        surface->image()->size(),
+        flipY) };
     mat.get9(outMat);
 }
 
 void RGLPainter::calcImageProj(const RDrawImageInfo &info, SkScalar *outMat) const noexcept
 {
-    SkMatrix mat = SkMatrix::I();
-    mat.postTranslate(-info.dst.x(), -info.dst.y());
-    Float32 sx = info.src.width() / SkScalar(info.dst.width());
-    Float32 sy = info.src.height() / SkScalar(info.dst.height());
-    mat.postScale(sx, sy);
-    mat.postTranslate(info.src.x(), info.src.y());
-    mat.postScale(
-        info.srcScale / SkScalar(info.image->size().width()),
-        info.srcScale / SkScalar(info.image->size().height()));
+    SkMatrix mat = RMatrixUtils::VirtualToUV(SkRect::Make(info.dst), info.srcTransform, info.srcScale, info.src, info.image->size());
     mat.get9(outMat);
 }
 
 void RGLPainter::setScissors(RSurface *surface, bool flipY, const SkRegion &region) const noexcept
 {
-    glEnable(GL_SCISSOR_TEST);
-    const SkIRect bounds { region.getBounds().makeOffset(-surface->pos()) };
+    // Map the region's bounds (virtual) through the pipeline to framebuffer pixel space.
+    SkRect virtualBounds { SkRect::Make(region.getBounds()) };
 
-    if (flipY)
-    {
-        glScissor(
-            bounds.x() * surface->scale(),
-            (surface->size().height() - bounds.bottom()) * surface->scale(),
-            bounds.width() * surface->scale(),
-            bounds.height() * surface->scale());
+    SkMatrix toFB = RMatrixUtils::VirtualToImage(
+        surface->transform(), surface->viewport(), surface->dst());
+
+    SkRect mapped;
+    toFB.mapRect(&mapped, virtualBounds); // axis-aligned bounding box after rotation/flip
+
+    // If drawing to default framebuffer, the draw path applied a Y-flip to go from
+    // framebuffer(bottom-left) to virtual(top-left). Here we need the scissor in
+    // GL window coords (bottom-left), so *invert* that flip: y -> fbHeight - y.
+    if (flipY) {
+        // mapped is in top-left-style pixel space; convert to bottom-left.
+        SkScalar top = mapped.top();
+        SkScalar bottom = mapped.bottom();
+
+        // After flip: new_y = fbHeight - bottom  (because bottom is larger in top-left)
+        SkScalar flippedTop = surface->image()->size().height() - bottom;
+        SkScalar flippedBottom = surface->image()->size().height() - top;
+        mapped.setLTRB(
+            mapped.left(),
+            flippedTop,
+            mapped.right(),
+            flippedBottom
+            );
     }
-    else
-        glScissor(
-            bounds.x() * surface->scale(),
-            bounds.y() * surface->scale(),
-            bounds.width() * surface->scale(),
-            bounds.height() * surface->scale());
+
+    // Integerize: floor min, ceil max to ensure we cover the entire region.
+    int x0 = static_cast<int>(std::floor(mapped.left()));
+    int y0 = static_cast<int>(std::floor(mapped.top()));
+    int x1 = static_cast<int>(std::ceil(mapped.right()));
+    int y1 = static_cast<int>(std::ceil(mapped.bottom()));
+
+    // Clip to framebuffer bounds [0, fbWidth) x [0, fbHeight)
+    x0 = std::clamp(x0, 0, surface->image()->size().width());
+    y0 = std::clamp(y0, 0, surface->image()->size().height());
+    x1 = std::clamp(x1, 0, surface->image()->size().width());
+    y1 = std::clamp(y1, 0, surface->image()->size().height());
+
+    int w = x1 - x0;
+    int h = y1 - y0;
+    if (w <= 0 || h <= 0) {
+        return;//return false; // nothing to draw
+    }
+
+    glScissor(x0, y0, w, h);
 }
 
 void RGLPainter::bindTexture(RGLTexture tex, GLuint uniform, const RDrawImageInfo &info, GLuint slot) const noexcept
@@ -374,7 +396,7 @@ std::vector<GLfloat> RGLPainter::genVBO(const SkRegion &region) const noexcept
 
 SkRegion RGLPainter::calcDrawImageRegion(RSurface *surface, const RDrawImageInfo &imageInfo, const SkRegion *clip, const RDrawImageInfo *maskInfo) const noexcept
 {
-    SkRegion region { SkIRect::MakePtSize(surface->pos(), surface->size()) };
+    SkRegion region { surface->viewport().roundOut() };
     region.op(imageInfo.dst, SkRegion::Op::kIntersect_Op);
 
     if (maskInfo)
@@ -396,7 +418,7 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
     if (!surface || !surface->image())
         return false;
 
-    const SkIRect clipRect { SkIRect::MakePtSize(surface->pos(), surface->size()) };
+    const SkIRect clipRect { surface->viewport().roundOut() };
 
     SkRegion region;
 

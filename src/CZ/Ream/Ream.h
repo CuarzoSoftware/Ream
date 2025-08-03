@@ -55,6 +55,7 @@ namespace CZ
     class RSync;
     class RSurface;
     class RPass;
+    class RMatrixUtils;
     struct RPresentationTime;
     struct RDMABufferInfo;
 

@@ -279,18 +279,16 @@ public:
      */
     RDevice* device() const noexcept { return m_device; }
 
-    SkCanvas *canvas() const noexcept { return m_canvas; }
     bool endPass() noexcept;
 protected:
-    virtual void beginPass() noexcept = 0;
-    State m_state {};
-    std::vector<State> m_history;
     friend class RSurface;
     friend class RPass;
     friend class RSKPass;
+    virtual void beginPass() noexcept = 0;
+    State m_state {};
+    std::vector<State> m_history;
     RPainter(RDevice *device) noexcept : m_device(device) {}
     std::weak_ptr<RSurface> m_surface;
-    SkCanvas *m_canvas {};
     RDevice *m_device;
 };
 
