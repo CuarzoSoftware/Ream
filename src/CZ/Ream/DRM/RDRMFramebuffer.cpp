@@ -121,7 +121,7 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromGBMBo(std::shared_ptr<
         { bo->dmaInfo().width, bo->dmaInfo().height },
         format,
         bo->dmaInfo().modifier,
-        hasModifier, handlesVec, CZOwnership::Borrow));
+        hasModifier, handlesVec, CZOwn::Borrow));
 }
 
 std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevice *importer) noexcept
@@ -172,10 +172,10 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromDMA(const RDMABufferIn
         { dmaInfo.width, dmaInfo.height },
         format,
         dmaInfo.modifier, hasModifier,
-        handlesVec, CZOwnership::Own));
+        handlesVec, CZOwn::Own));
 }
 
-std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::WrapHandle(SkISize size, UInt32 stride, RFormat format, RModifier modifier, UInt32 handle, CZOwnership ownership, RDevice *device) noexcept
+std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::WrapHandle(SkISize size, UInt32 stride, RFormat format, RModifier modifier, UInt32 handle, CZOwn ownership, RDevice *device) noexcept
 {
     auto core { RCore::Get() };
 
@@ -199,7 +199,7 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::WrapHandle(SkISize size, UInt3
     if (!CreateFb(device, 1, size.width(), size.height(), format, mods, handles, strides, offsets, &id, &hasModifier))
     {
         device->log(CZError, CZLN, "Failed to create RDRMFramebuffer from handles");
-        if (ownership == CZOwnership::Own)
+        if (ownership == CZOwn::Own)
             CloseHandles(device->drmFd(), handles, 1);
         return {};
     }
@@ -219,7 +219,7 @@ RDRMFramebuffer::RDRMFramebuffer(std::shared_ptr<RCore> core,
                                  SkISize size, RFormat format,
                                  RModifier modifier, bool hasModifier,
                                  const std::vector<UInt32> &handles,
-                                 CZOwnership handlesOwnership) noexcept :
+                                 CZOwn handlesOwnership) noexcept :
     m_id(id),
     m_size(size),
     m_device(device),
@@ -236,6 +236,6 @@ RDRMFramebuffer::~RDRMFramebuffer() noexcept
 {
     drmModeRmFB(m_device->drmFd(), m_id);
 
-    if (m_handlesOwn == CZOwnership::Own)
+    if (m_handlesOwn == CZOwn::Own)
         CloseHandles(m_device->drmFd(), m_handles.data(), m_handles.size());
 }

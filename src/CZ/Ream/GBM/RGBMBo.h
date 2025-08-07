@@ -1,7 +1,8 @@
 #ifndef RGBMBO_H
 #define RGBMBO_H
 
-#include <CZ/CZ.h>
+#include <CZ/Cuarzo.h>
+#include <CZ/CZOwn.h>
 #include <CZ/Ream/RObject.h>
 #include <CZ/Ream/RDMABufferInfo.h>
 #include <memory>
@@ -126,10 +127,10 @@ public:
      */
     std::shared_ptr<RCore> core() const noexcept { return m_core; }
 private:
-    RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOwnership ownership, bool hasModifier, const RDMABufferInfo &dmaInfo) noexcept;
+    RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOwn ownership, bool hasModifier, const RDMABufferInfo &dmaInfo) noexcept;
     gbm_bo *m_bo;
     RDMABufferInfo m_dmaInfo;
-    CZOwnership m_ownership;
+    CZOwn m_ownership;
     RDevice *m_allocator;
     std::shared_ptr<RCore> m_core;
     // 2: unchecked, 1: supported, 0: unsupported

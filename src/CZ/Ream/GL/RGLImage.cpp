@@ -149,7 +149,7 @@ RGLTexture RGLImage::texture(RGLDevice *device) const noexcept
         return deviceData.texture;
 
     deviceData.texture = image->texture();
-    deviceData.textureOwnership = CZOwnership::Borrow;
+    deviceData.textureOwnership = CZOwn::Borrow;
     return deviceData.texture;
 }
 
@@ -192,7 +192,7 @@ std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
         return contextData->glFb;
     }
 
-    contextData->fbOwnership = CZOwnership::Borrow;
+    contextData->fbOwnership = CZOwn::Borrow;
     return contextData->glFb;
 }
 
@@ -254,17 +254,17 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
     image->m_self = image;
     auto *contextData { static_cast<ContextData*>(image->m_contextDataManager->getData(allocator)) };
     contextData->glFb = info.id;
-    contextData->fbOwnership = CZOwnership::Borrow;
+    contextData->fbOwnership = CZOwn::Borrow;
     return image;
 }
 
-std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwnership ownership, const RImageConstraints *constraints) noexcept
+std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints) noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
     std::optional<RDMABufferInfo> infoCopy;
 
-    if (ownership == CZOwnership::Borrow)
+    if (ownership == CZOwn::Borrow)
     {
         if (!info.isValid())
             return {};
@@ -293,7 +293,7 @@ std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwners
 
     auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, info.modifier)) };
     image->m_self = image;
-    image->m_dmaInfoOwn = CZOwnership::Own;
+    image->m_dmaInfoOwn = CZOwn::Own;
     image->m_dmaInfo = infoCopy;
 
     if (!ValidateConstraints(image, constraints))
@@ -669,7 +669,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithNativeStorage(SkISize size, const RD
 
     const auto current { RGLMakeCurrent::FromDevice(allocator, false) };
     GlobalDeviceData &data { image->m_devicesMap.emplace(allocator, GlobalDeviceData{}).first->second };
-    data.textureOwnership = CZOwnership::Own;
+    data.textureOwnership = CZOwn::Own;
     data.device = allocator;
     data.texture.target = GL_TEXTURE_2D;
     glGenTextures(1, &data.texture.id);
@@ -1036,7 +1036,7 @@ RGLImage::GlobalDeviceDataMap::~GlobalDeviceDataMap() noexcept
         const auto &it { begin() };
         auto &data { it->second };
 
-        if (data.textureOwnership == CZOwnership::Own && data.texture.id != 0)
+        if (data.textureOwnership == CZOwn::Own && data.texture.id != 0)
         {
             auto current { RGLMakeCurrent::FromDevice(data.device, false) };
             glDeleteTextures(1, &data.texture.id);
@@ -1050,6 +1050,6 @@ RGLImage::ContextData::~ContextData() noexcept
 {
     std::lock_guard<std::recursive_mutex> lock(mutex);
 
-    if (fbOwnership == CZOwnership::Own && glFb.has_value())
+    if (fbOwnership == CZOwn::Own && glFb.has_value())
         glDeleteFramebuffers(1, &glFb.value());
 }

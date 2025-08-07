@@ -82,7 +82,7 @@ std::shared_ptr<RDumbBuffer> RDumbBuffer::Make(SkISize size, const RDRMFormat &f
         return {};
     }
 
-    auto fb { RDRMFramebuffer::WrapHandle(size, stride, format.format(), DRM_FORMAT_MOD_LINEAR, handle, CZOwnership::Borrow, allocator) };
+    auto fb { RDRMFramebuffer::WrapHandle(size, stride, format.format(), DRM_FORMAT_MOD_LINEAR, handle, CZOwn::Borrow, allocator) };
 
     if (!fb)
     {

@@ -218,7 +218,7 @@ std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, cons
     return image;
 }
 
-std::shared_ptr<RImage> RImage::FromDMA(const RDMABufferInfo &info, CZOwnership ownership, const RImageConstraints *constraints) noexcept
+std::shared_ptr<RImage> RImage::FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints) noexcept
 {
     auto core { RCore::Get() };
 

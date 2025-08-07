@@ -106,7 +106,7 @@ std::shared_ptr<RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format, RDe
         }
     }
 
-    return std::shared_ptr<RGBMBo>(new RGBMBo(core, allocator, bo, CZOwnership::Own, hasModifier, dmaInfo));
+    return std::shared_ptr<RGBMBo>(new RGBMBo(core, allocator, bo, CZOwn::Own, hasModifier, dmaInfo));
 }
 
 std::shared_ptr<RGBMBo> RGBMBo::MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevice *importer) noexcept
@@ -187,7 +187,7 @@ std::shared_ptr<RGBMBo> RGBMBo::MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevi
         return {};
     }
 
-    return std::shared_ptr<RGBMBo>(new RGBMBo(core, importer, bo, CZOwnership::Own, hasModifier, dmaDup.value()));
+    return std::shared_ptr<RGBMBo>(new RGBMBo(core, importer, bo, CZOwn::Own, hasModifier, dmaDup.value()));
 }
 
 gbm_bo_handle RGBMBo::planeHandle(int planeIndex) const noexcept
@@ -238,11 +238,11 @@ RGBMBo::~RGBMBo() noexcept
     for (int i = 0; i < planeCount(); i++)
         close(m_dmaInfo.fd[i]);
 
-    if (m_ownership == CZOwnership::Own)
+    if (m_ownership == CZOwn::Own)
         gbm_bo_destroy(m_bo);
 }
 
-RGBMBo::RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOwnership ownership, bool hasModifier, const RDMABufferInfo &dmaInfo) noexcept :
+RGBMBo::RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOwn ownership, bool hasModifier, const RDMABufferInfo &dmaInfo) noexcept :
     m_bo(bo), m_dmaInfo(dmaInfo), m_ownership(ownership), m_allocator(allocator), m_core(core), m_hasModifier(hasModifier)
 {
     assert(core);

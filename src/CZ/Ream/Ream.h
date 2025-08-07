@@ -1,7 +1,7 @@
 #ifndef CZ_REAM_H
 #define CZ_REAM_H
 
-#include <CZ/CZ.h>
+#include <CZ/Cuarzo.h>
 #include <string_view>
 
 namespace CZ

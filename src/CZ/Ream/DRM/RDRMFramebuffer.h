@@ -4,6 +4,7 @@
 #include <memory>
 #include <CZ/Ream/RObject.h>
 #include <CZ/skia/core/SkSize.h>
+#include <CZ/CZOwn.h>
 
 class CZ::RDRMFramebuffer final : public RObject
 {
@@ -38,7 +39,7 @@ public:
     static std::shared_ptr<RDRMFramebuffer> MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevice *importer = nullptr) noexcept;
 
     static std::shared_ptr<RDRMFramebuffer> WrapHandle(SkISize size, UInt32 stride, RFormat format, RModifier modifier, UInt32 handle,
-                                                       CZOwnership ownership, RDevice *device) noexcept;
+                                                       CZOwn ownership, RDevice *device) noexcept;
 
     bool hasModifier() const noexcept { return m_hasModifier; };
     RModifier modifier() const noexcept { return m_modifier; }
@@ -53,7 +54,7 @@ private:
                     SkISize size, RFormat format,
                     RModifier modifier, bool hasModifier,
                     const std::vector<UInt32> &handles,
-                    CZOwnership handlesOwnership) noexcept;
+                    CZOwn handlesOwnership) noexcept;
     UInt32 m_id;
     SkISize m_size {};
     RDevice *m_device;
@@ -62,7 +63,7 @@ private:
     std::shared_ptr<RGBMBo> m_gbmBo;
     std::shared_ptr<RCore> m_core;
     std::vector<UInt32> m_handles;
-    CZOwnership m_handlesOwn;
+    CZOwn m_handlesOwn;
     bool m_hasModifier;
 };
 

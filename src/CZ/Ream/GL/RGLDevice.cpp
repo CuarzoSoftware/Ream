@@ -14,6 +14,7 @@
 #include <gbm.h>
 #include <xf86drm.h>
 #include <drm_fourcc.h>
+#include <sys/stat.h>
 
 using namespace CZ;
 
@@ -76,10 +77,16 @@ RGLDevice::~RGLDevice()
 
     if (core().platform() == RPlatform::Wayland)
     {
-        if (drmFd())
+        if (drmFd() >= 0)
         {
             close(drmFd());
             m_drmFd = -1;
+        }
+
+        if (drmFdReadOnly() >= 0)
+        {
+            close(drmFdReadOnly());
+            m_drmFdReadOnly = -1;
         }
     }
 }
@@ -157,13 +164,10 @@ bool RGLDevice::initEGLDisplayWL() noexcept
 
         if (primaryNode)
         {
-            int fd { open(primaryNode, O_RDONLY) };
+            m_drmFdReadOnly = open(primaryNode, O_RDONLY);
 
-            if (fd >= 0)
-            {
-                setDRMDriverName(fd);
-                close(fd);
-            }
+            if (m_drmFdReadOnly >= 0)
+                setDRMDriverName(m_drmFdReadOnly);
         }
     }
 
@@ -192,20 +196,21 @@ bool RGLDevice::initEGLDisplayWL() noexcept
         return true;
     }
 
+    struct stat stat;
+    if (fstat(drmFd, &stat) == 0)
+        m_id = stat.st_rdev;
+
     gbm_device *gbm { gbm_create_device(drmFd) };
 
     if (!gbm)
     {
         log(CZWarning, CZLN, "Failed to create gbm_device from DRM node {}. GBM allocator disabled", nodeName);
-        goto failGBM;
+        return true;
     }
 
     m_drmFd = drmFd;
     m_gbmDevice = gbm;
     m_drmNode = nodeName;
-    return true;
-failGBM:
-    close(drmFd);
     return true;
 }
 
@@ -228,6 +233,10 @@ bool RGLDevice::initEGLDisplayDRM() noexcept
 {
     drmDevicePtr device;
 
+    struct stat stat;
+    if (fstat(m_drmFd, &stat) == 0)
+        m_id = stat.st_rdev;
+
     if (drmGetDevice(m_drmFd, &device) == 0)
     {
         if (device->available_nodes & (1 << DRM_NODE_PRIMARY) && device->nodes[DRM_NODE_PRIMARY])
@@ -241,7 +250,10 @@ bool RGLDevice::initEGLDisplayDRM() noexcept
     if (m_drmNode.empty())
         m_drmNode = "Unknown Device";
     else
+    {
+        m_drmFdReadOnly = open(m_drmNode.c_str(), O_RDONLY | O_CLOEXEC);
         log = RLog.newWithContext(CZStringUtils::SubStrAfterLastOf(m_drmNode, "/"));
+    }
 
     setDRMDriverName(m_drmFd);
 

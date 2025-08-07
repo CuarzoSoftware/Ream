@@ -55,10 +55,12 @@ public:
 
     virtual void wait() noexcept = 0;
 
-    // Could be -1
+    // Can be -1
     int drmFd() const noexcept { return m_drmFd; }
-
+    int drmFdReadOnly() const noexcept { return m_drmFdReadOnly; }
     void *drmUserData() const noexcept { return m_drmUserData; }
+
+    dev_t id() const noexcept { return m_id; }
 
     // e.g. /dev/dri/card0 or empty
     const std::string &drmNode() const noexcept { return m_drmNode; }
@@ -95,7 +97,9 @@ protected:
     RDevice(RCore &core) noexcept;;
     RCore &m_core;
     int m_drmFd { -1 };
+    int m_drmFdReadOnly { -1 };
     void *m_drmUserData {};
+    dev_t m_id {};
     Caps m_caps {};
     std::string m_drmNode;
     std::string m_drmDriverName { "Unknown" };

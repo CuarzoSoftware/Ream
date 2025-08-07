@@ -10,6 +10,7 @@
 #include <CZ/skia/core/SkImage.h>
 #include <CZ/skia/core/SkSurface.h>
 #include <CZ/CZWeak.h>
+#include <CZ/CZOwn.h>
 #include <filesystem>
 #include <memory>
 #include <unordered_set>
@@ -149,7 +150,7 @@ public:
     [[nodiscard]] static std::shared_ptr<RImage> Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RImage> LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size = {0, 0}, const RImageConstraints *constraints = nullptr) noexcept;
-    [[nodiscard]] static std::shared_ptr<RImage> FromDMA(const RDMABufferInfo &info, CZOwnership ownership, const RImageConstraints *constraints = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RImage> FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints = nullptr) noexcept;
 
     virtual std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept = 0;
     virtual std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept = 0;
@@ -194,7 +195,7 @@ protected:
     std::shared_ptr<RSync> m_readSync;
     std::shared_ptr<RSync> m_writeSync;
     std::optional<RDMABufferInfo> m_dmaInfo;
-    CZOwnership m_dmaInfoOwn;
+    CZOwn m_dmaInfoOwn;
 };
 
 #endif // RIMAGE_H

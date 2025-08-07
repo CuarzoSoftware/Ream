@@ -34,7 +34,7 @@ public:
 
     [[nodiscard]] static std::shared_ptr<RGLImage> Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
-    [[nodiscard]] static std::shared_ptr<RGLImage> FromDMA(const RDMABufferInfo &info, CZOwnership ownership, const RImageConstraints *constraints = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints = nullptr) noexcept;
 
 
     std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept override;
@@ -87,10 +87,10 @@ private:
     {
         CZBitset<UnsupportedDeviceCap> unsupportedCaps;
         RGLTexture texture {};
-        CZOwnership textureOwnership { CZOwnership::Borrow };
+        CZOwn textureOwnership { CZOwn::Borrow };
 
         GLuint rbo { 0 };
-        CZOwnership rboOwnership { CZOwnership::Borrow };
+        CZOwn rboOwnership { CZOwn::Borrow };
 
         std::shared_ptr<REGLImage> eglImage;
         std::shared_ptr<RGBMBo> gbmBo;
@@ -108,7 +108,7 @@ private:
         sk_sp<SkImage> skImage;
         sk_sp<SkSurface> skSurface;
         std::optional<GLuint> glFb {};
-        CZOwnership fbOwnership { CZOwnership::Borrow };
+        CZOwn fbOwnership { CZOwn::Borrow };
         RGLDevice *device { nullptr };
     };
 
