@@ -165,6 +165,41 @@ namespace CZ
                 m_modifiers.emplace(mod);
         }
 
+        RDRMFormat(const RDRMFormat &other) noexcept
+            : m_format(other.m_format),
+            m_modifiers(other.m_modifiers)
+        {}
+
+        RDRMFormat& operator=(const RDRMFormat &other) noexcept
+        {
+            if (this != &other)
+            {
+                m_format = other.m_format;
+                m_modifiers = other.m_modifiers;
+            }
+            return *this;
+        }
+
+        RDRMFormat(RDRMFormat &&other) noexcept
+            : m_format(std::move(other.m_format)),
+            m_modifiers(std::move(other.m_modifiers))
+        {
+            other.m_format = DRM_FORMAT_INVALID;
+            other.m_modifiers = {};
+        }
+
+        RDRMFormat& operator=(RDRMFormat &&other) noexcept
+        {
+            if (this != &other)
+            {
+                m_format = std::move(other.m_format);
+                m_modifiers = std::move(other.m_modifiers);
+                other.m_format = DRM_FORMAT_INVALID;
+                other.m_modifiers = {};
+            }
+            return *this;
+        }
+
         /**
          * @brief Returns the DRM format.
          */
@@ -251,6 +286,34 @@ namespace CZ
     class RDRMFormatSet
     {
     public:
+        RDRMFormatSet() noexcept {}
+
+        RDRMFormatSet(const RDRMFormatSet &other) noexcept
+            : m_formats(other.m_formats)
+        {}
+
+        RDRMFormatSet& operator=(const RDRMFormatSet &other) noexcept
+        {
+            if (this != &other)
+                m_formats = other.m_formats;
+            return *this;
+        }
+
+        RDRMFormatSet(RDRMFormatSet &&other) noexcept
+            : m_formats(std::move(other.m_formats))
+        {
+            other.m_formats = {};
+        }
+
+        RDRMFormatSet& operator=(RDRMFormatSet &&other) noexcept
+        {
+            if (this != &other)
+            {
+                m_formats = std::move(other.m_formats);
+                other.m_formats = {};
+            }
+            return *this;
+        }
 
         /**
          * @brief Returns the internal set of formats with their modifiers.
