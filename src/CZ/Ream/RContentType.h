@@ -2,7 +2,6 @@
 #define RCONTENTTYPE_H
 
 #include <CZ/Cuarzo.h>
-#include <algorithm>
 #include <string_view>
 #include <array>
 
@@ -10,7 +9,8 @@ namespace CZ
 {
     enum class RContentType
     {
-        Graphics = 1,
+        None,
+        Graphics,
         Photo,
         Video,
         Game
@@ -18,8 +18,8 @@ namespace CZ
 
     inline const std::string_view &RContentTypeString(RContentType type) noexcept
     {
-        static constexpr const std::array<std::string_view, 5> strings { "Graphics", "Photo", "Video", "Game", "Unknown" };
-        return strings[std::clamp(static_cast<UInt32>(type) - 1U, 0U, 4U)];
+        static constexpr const std::array<std::string_view, 5> strings { "None", "Graphics", "Photo", "Video", "Game" };
+        return strings[static_cast<int>(type)];
     }
 };
 

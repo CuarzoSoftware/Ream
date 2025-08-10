@@ -537,10 +537,16 @@ bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
         return false;
 
     if (writePixelsGBMMapWrite(region))
+    {
+        m_writeSerial++;
         return true;
+    }
 
     if (writePixelsNative(region))
+    {
+        m_writeSerial++;
         return true;
+    }
 
     return false;
 }

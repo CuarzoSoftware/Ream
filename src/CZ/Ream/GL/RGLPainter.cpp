@@ -472,6 +472,7 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
     glViewport(0, 0, surface->image()->size().width(), surface->image()->size().height());
     setScissors(surface.get(), fb == 0, region);
 
+
     glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
     glDisableVertexAttribArray(prog->loc().pos);
     glUseProgram(0);
@@ -579,7 +580,10 @@ CZBitset<RGLShader::Features> RGLPainter::calcDrawColorFeatures(SkScalar finalAl
     switch (blendMode())
     {
     case RBlendMode::Src: // glBlend disabled
-        features.set(RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB);
+        if (finalAlpha == 1.f)
+            features.set(RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB);
+        else
+            features.set(RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB | RGLShader::HasFactorA);
         break;
     case RBlendMode::SrcOver:
         if (finalAlpha == 1.f) // glBlend disabled

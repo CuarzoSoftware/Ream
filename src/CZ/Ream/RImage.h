@@ -179,11 +179,15 @@ public:
     std::shared_ptr<RSync> writeSync() noexcept { return m_writeSync; }
     void setWriteSync(std::shared_ptr<RSync> sync) noexcept { m_writeSync = sync; }
 
+    // Increased by successful writePixels calls, initially 0
+    UInt32 writeSerial() const noexcept { return m_writeSerial; }
+
     std::shared_ptr<RGLImage> asGL() const noexcept;
     ~RImage() noexcept;
 protected:
     RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifiers) noexcept;
     SkISize m_size;
+    UInt32 m_writeSerial {};
     const RFormatInfo *m_formatInfo;
     SkAlphaType m_alphaType;
     RModifier m_modifier;

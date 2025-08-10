@@ -56,6 +56,7 @@ namespace CZ
     class RSurface;
     class RPass;
     class RMatrixUtils;
+    class RGammaLUT;
     struct RPresentationTime;
     struct RDMABufferInfo;
 
