@@ -6,6 +6,7 @@
 #include <CZ/Ream/EGL/REGLImage.h>
 #include <CZ/Ream/GBM/RGBMBo.h>
 #include <CZ/Ream/DRM/RDRMFramebuffer.h>
+#include <CZ/Ream/RLockGuard.h>
 #include <CZ/Ream/RSync.h>
 #include <CZ/Ream/RLog.h>
 
@@ -22,7 +23,6 @@
 #include <drm_fourcc.h>
 
 static auto skSRGB { SkColorSpace::MakeSRGB() };
-static std::recursive_mutex mutex;
 
 using namespace CZ;
 
@@ -130,7 +130,8 @@ static bool ValidateConstraints(std::shared_ptr<RGLImage> image, const RImageCon
 
 RGLTexture RGLImage::texture(RGLDevice *device) const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
+
     if (!device)
         device = core()->asGL()->mainDevice();
 
@@ -155,7 +156,8 @@ RGLTexture RGLImage::texture(RGLDevice *device) const noexcept
 
 std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
+
     if (!device)
         device = core()->asGL()->mainDevice();
 
@@ -175,30 +177,62 @@ std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
 
     /* Attempt to create one */
 
-    auto image { eglImage(device) };
-
-    if (!image)
+    if (m_pf.has(PFStorageNative))
     {
-        deviceData.unsupportedCaps.add(NoGLFramebufer);
-        return {};
+        auto tex { texture(device) };
+
+        if (tex.id == 0)
+        {
+            deviceData.unsupportedCaps.add(NoGLFramebufer);
+            return {};
+        }
+
+        auto current { RGLMakeCurrent::FromDevice(device, false) };
+        GLuint fb;
+        glGenFramebuffers(1, &fb);
+        glBindFramebuffer(GL_FRAMEBUFFER, fb);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex.id, 0);
+
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &fb);
+            deviceData.unsupportedCaps.add(NoGLFramebufer);
+            return {};
+        }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        contextData->glFb = fb;
+        contextData->fbOwnership = CZOwn::Own;
+        return fb;
     }
-
-    contextData->glFb = image->fb();
-
-    if (contextData->glFb.value() == 0)
+    else
     {
-        deviceData.unsupportedCaps.add(NoGLFramebufer);
-        contextData->glFb.reset();
+        auto image { eglImage(device) };
+
+        if (!image)
+        {
+            deviceData.unsupportedCaps.add(NoGLFramebufer);
+            return {};
+        }
+
+        contextData->glFb = image->fb();
+
+        if (contextData->glFb.value() == 0)
+        {
+            deviceData.unsupportedCaps.add(NoGLFramebufer);
+            contextData->glFb.reset();
+            return contextData->glFb;
+        }
+
+        contextData->fbOwnership = CZOwn::Borrow;
         return contextData->glFb;
     }
-
-    contextData->fbOwnership = CZOwn::Borrow;
-    return contextData->glFb;
 }
 
 std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (!device)
         device = core()->asGL()->mainDevice();
@@ -228,7 +262,8 @@ std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
 
 std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
+
     std::shared_ptr<RGLImage> image { MakeWithGBMStorage(size, format, constraints) };
 
     if (!image)
@@ -239,7 +274,7 @@ std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format,
 
 std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     const RFormatInfo *formatInfo;
     SkAlphaType alphaType;
@@ -260,23 +295,26 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
 std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     std::optional<RDMABufferInfo> infoCopy;
 
     if (ownership == CZOwn::Borrow)
     {
-        if (!info.isValid())
-            return {};
-
-        infoCopy = info;
-    }
-    else
-    {
         infoCopy = info.dup();
 
         if (!infoCopy.has_value())
             return {};
+    }
+    else
+    {
+        infoCopy = info;
+
+        if (!infoCopy->isValid())
+        {
+            infoCopy->closeFds();
+            return {};
+        }
     }
 
     const RFormatInfo *formatInfo;
@@ -304,7 +342,7 @@ std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwn ow
 
 std::shared_ptr<RGBMBo> RGLImage::gbmBo(RDevice *device) const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (!device)
         device = core()->mainDevice();
@@ -316,7 +354,7 @@ std::shared_ptr<RGBMBo> RGLImage::gbmBo(RDevice *device) const noexcept
 
 std::shared_ptr<RDRMFramebuffer> RGLImage::drmFb(RDevice *device) const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (!device)
         device = core()->mainDevice();
@@ -348,7 +386,7 @@ std::shared_ptr<RDRMFramebuffer> RGLImage::drmFb(RDevice *device) const noexcept
 
 sk_sp<SkImage> RGLImage::skImage(RDevice *device) const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (!device)
         device = core()->mainDevice();
@@ -420,7 +458,7 @@ sk_sp<SkImage> RGLImage::skImage(RDevice *device) const noexcept
 
 sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (!device)
         device = core()->mainDevice();
@@ -493,7 +531,7 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
 
 CZBitset<RImageCap> RGLImage::checkDeviceCaps(CZBitset<RImageCap> caps, RDevice *device) const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (!device)
         device = m_core->mainDevice();
@@ -523,7 +561,7 @@ CZBitset<RImageCap> RGLImage::checkDeviceCaps(CZBitset<RImageCap> caps, RDevice 
 
 bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     // TODO: Implement blitting as fallback
 
@@ -553,6 +591,8 @@ bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
 
 bool RGLImage::readPixels(const RPixelBufferRegion &region) noexcept
 {
+    RLockGuard lock {};
+
     if (region.region.isEmpty()) return true;
 
     if (!readFormats().contains(region.format))
@@ -581,7 +621,6 @@ bool RGLImage::readPixels(const RPixelBufferRegion &region) noexcept
 
 std::shared_ptr<RGLImage> RGLImage::MakeWithGBMStorage(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
     const RFormatInfo *formatInfo;
     SkAlphaType alphaType;
     RGLDevice *allocator { nullptr };
@@ -611,6 +650,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithGBMStorage(SkISize size, const RDRMF
 
     auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, data.gbmBo->modifier())) };
     image->m_dmaInfo = data.gbmBo->dmaInfo();
+    image->m_dmaInfoOwn = CZOwn::Borrow;
     image->m_pf.add(PFStorageGBM);
     image->m_self = image;
     image->m_devicesMap.emplace(allocator, data);
@@ -624,8 +664,6 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithGBMStorage(SkISize size, const RDRMF
 
 std::shared_ptr<RGLImage> RGLImage::MakeWithNativeStorage(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
-
     if (!format.modifiers().contains(DRM_FORMAT_MOD_INVALID))
         return {};
 
@@ -692,7 +730,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithNativeStorage(SkISize size, const RD
 
 bool RGLImage::writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (region.format != formatInfo().format)
         return false;
@@ -771,7 +809,7 @@ bool RGLImage::writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept
 
 bool RGLImage::writePixelsNative(const RPixelBufferRegion &region) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (!m_pf.has(PFStorageNative))
         return false;
@@ -841,6 +879,8 @@ bool RGLImage::writePixelsNative(const RPixelBufferRegion &region) noexcept
 
 bool RGLImage::readPixelsGBMmapRead(const RPixelBufferRegion &region) noexcept
 {
+    RLockGuard lock {};
+
     if (region.format != formatInfo().format)
         return false;
 
@@ -863,10 +903,21 @@ bool RGLImage::readPixelsGBMmapRead(const RPixelBufferRegion &region) noexcept
     if (!bo || !bo->supportsMapRead())
         return false;
 
+    bool deviceWait { true };
+
+    if (writeSync())
+        deviceWait = !writeSync()->cpuWait();
+
+    if (deviceWait)
+        allocator()->wait();
+
     const auto bpb { formatInfo().bytesPerBlock };
     UInt32 srcStride;
     void *mapData {};
     UInt8 *src = (UInt8*)gbm_bo_map(bo->bo(), 0, 0, size().width(), size().height(), GBM_BO_TRANSFER_READ, &srcStride, &mapData);
+
+    if (!src)
+        return false;
 
     SkRegion::Iterator iter (region.region);
     while (!iter.done())
@@ -895,12 +946,13 @@ bool RGLImage::readPixelsGBMmapRead(const RPixelBufferRegion &region) noexcept
     }
 
     gbm_bo_unmap(bo->bo(), mapData);
-
     return true;
 }
 
 bool RGLImage::readPixelsNative(const RPixelBufferRegion &region) noexcept
 {
+    RLockGuard lock {};
+
     RGLDevice *device { nullptr };
     std::optional<GLuint> fb;
     GLenum glFormat { GL_RGBA };
@@ -925,8 +977,13 @@ bool RGLImage::readPixelsNative(const RPixelBufferRegion &region) noexcept
     if (!device)
         return false;
 
+    bool deviceWait { true };
+
     if (writeSync())
-        writeSync()->cpuWait();
+        deviceWait = !writeSync()->cpuWait();
+
+    if (deviceWait)
+        device->wait();
 
     const auto current { RGLMakeCurrent::FromDevice(device, true) };
     glBindFramebuffer(GL_FRAMEBUFFER, fb.value());
@@ -980,14 +1037,22 @@ bool RGLImage::readPixelsNative(const RPixelBufferRegion &region) noexcept
 
 void RGLImage::assignReadWriteFormats() noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (m_pf.has(PFStorageNative))
     {
         m_writeFormats.emplace(DRM_FORMAT_ABGR8888);
         m_writeFormats.emplace(DRM_FORMAT_XBGR8888);
+        m_readFormats.emplace(DRM_FORMAT_ABGR8888);
+        m_readFormats.emplace(DRM_FORMAT_XBGR8888);
 
         if (allocator()->glExtensions().EXT_texture_format_BGRA8888)
+        {
+            m_writeFormats.emplace(DRM_FORMAT_ARGB8888);
+            m_writeFormats.emplace(DRM_FORMAT_XRGB8888);
+        }
+
+        if (allocator()->glExtensions().EXT_read_format_bgra)
         {
             m_readFormats.emplace(DRM_FORMAT_ARGB8888);
             m_readFormats.emplace(DRM_FORMAT_XRGB8888);
@@ -1000,8 +1065,16 @@ void RGLImage::assignReadWriteFormats() noexcept
 
         if (glFb(glDev).has_value())
         {
+            m_writeFormats.emplace(DRM_FORMAT_ABGR8888);
+            m_writeFormats.emplace(DRM_FORMAT_XBGR8888);
             m_readFormats.emplace(DRM_FORMAT_ABGR8888);
             m_readFormats.emplace(DRM_FORMAT_XBGR8888);
+
+            if (glDev->glExtensions().EXT_texture_format_BGRA8888)
+            {
+                m_writeFormats.emplace(DRM_FORMAT_ARGB8888);
+                m_writeFormats.emplace(DRM_FORMAT_XRGB8888);
+            }
 
             if (glDev->glExtensions().EXT_read_format_bgra)
             {
@@ -1026,7 +1099,7 @@ void RGLImage::assignReadWriteFormats() noexcept
 RGLImage::RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept
     : RImage(core, (RDevice*)device, size, formatInfo, alphaType, modifier)
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     m_contextDataManager = RGLContextDataManager::Make([](RGLDevice *device) -> RGLContextData* {
         return new ContextData(device);
@@ -1035,8 +1108,6 @@ RGLImage::RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, c
 
 RGLImage::GlobalDeviceDataMap::~GlobalDeviceDataMap() noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
-
     while (!empty())
     {
         const auto &it { begin() };
@@ -1054,8 +1125,6 @@ RGLImage::GlobalDeviceDataMap::~GlobalDeviceDataMap() noexcept
 
 RGLImage::ContextData::~ContextData() noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
-
     if (fbOwnership == CZOwn::Own && glFb.has_value())
         glDeleteFramebuffers(1, &glFb.value());
 }

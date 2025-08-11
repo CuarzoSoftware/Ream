@@ -241,6 +241,10 @@ std::shared_ptr<RGLImage> RImage::asGL() const noexcept
 
 RImage::~RImage() noexcept
 {
+    if (m_dmaInfo.has_value() && m_dmaInfoOwn == CZOwn::Own)
+        for (auto i = 0; i < m_dmaInfo->planeCount; i++)
+            close(m_dmaInfo->fd[i]);
+
     RResourceTrackerSub(RResourceType::RImageRes);
 }
 

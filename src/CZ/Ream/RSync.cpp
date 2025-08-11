@@ -51,7 +51,10 @@ RSync::RSync(std::shared_ptr<RCore> core, RDevice *device, int fd, bool isExtern
 RSync::~RSync() noexcept
 {
     if (m_fd >= 0)
+    {
+        device()->log(CZTrace, "Closed RSync fd {}", m_fd);
         close(m_fd);
+    }
 }
 
 int RSync::fd() const noexcept
@@ -59,5 +62,9 @@ int RSync::fd() const noexcept
     if (m_fd < 0)
         return -1;
 
-    return fcntl(m_fd, F_DUPFD_CLOEXEC, 0);
+    const int fd { fcntl(m_fd, F_DUPFD_CLOEXEC, 0) };
+
+    if (fd < 0)
+        RLog(CZError, CZLN, "Failed to dup sync fence");
+    return fd;
 }

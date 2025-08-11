@@ -36,7 +36,6 @@ public:
     [[nodiscard]] static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RGLImage> FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints = nullptr) noexcept;
 
-
     std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept override;
     std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept override;
     sk_sp<SkImage> skImage(RDevice *device = nullptr) const noexcept override;
@@ -89,13 +88,15 @@ private:
         RGLTexture texture {};
         CZOwn textureOwnership { CZOwn::Borrow };
 
-        GLuint rbo { 0 };
-        CZOwn rboOwnership { CZOwn::Borrow };
-
         std::shared_ptr<REGLImage> eglImage;
         std::shared_ptr<RGBMBo> gbmBo;
         std::shared_ptr<RDRMFramebuffer> drmFb;
         RGLDevice *device { nullptr };
+    };
+
+    struct GlobalDeviceDataMap : public std::unordered_map<RGLDevice*, GlobalDeviceData>
+    {
+        ~GlobalDeviceDataMap() noexcept;
     };
 
     /* Device data for a specific GL context */
@@ -110,11 +111,6 @@ private:
         std::optional<GLuint> glFb {};
         CZOwn fbOwnership { CZOwn::Borrow };
         RGLDevice *device { nullptr };
-    };
-
-    struct GlobalDeviceDataMap : public std::unordered_map<RGLDevice*, GlobalDeviceData>
-    {
-        ~GlobalDeviceDataMap() noexcept;
     };
 
     RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept;

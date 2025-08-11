@@ -423,7 +423,6 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
     {
         if (exts.KHR_fence_sync)
         {
-            m_caps.SyncCPU = true;
             procs.eglCreateSyncKHR = (PFNEGLCREATESYNCKHRPROC)eglGetProcAddress("eglCreateSyncKHR");
             procs.eglDestroySyncKHR = (PFNEGLDESTROYSYNCKHRPROC)eglGetProcAddress("eglDestroySyncKHR");
             procs.eglClientWaitSyncKHR = (PFNEGLCLIENTWAITSYNCKHRPROC)eglGetProcAddress("eglClientWaitSyncKHR");
@@ -432,13 +431,11 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
 
         if (exts.ANDROID_native_fence_sync)
         {
-            m_caps.SyncImport = m_caps.SyncExport = true;
             procs.eglDupNativeFenceFDANDROID = (PFNEGLDUPNATIVEFENCEFDANDROIDPROC)eglGetProcAddress("eglDupNativeFenceFDANDROID");
         }
 
         if (exts.KHR_wait_sync)
         {
-            m_caps.SyncGPU = true;
             procs.eglWaitSyncKHR = (PFNEGLWAITSYNCKHRPROC)eglGetProcAddress("eglWaitSyncKHR");
         }
     }

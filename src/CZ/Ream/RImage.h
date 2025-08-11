@@ -198,6 +198,7 @@ protected:
     std::weak_ptr<RImage> m_self;
     std::shared_ptr<RSync> m_readSync;
     std::shared_ptr<RSync> m_writeSync;
+
     std::optional<RDMABufferInfo> m_dmaInfo;
     CZOwn m_dmaInfoOwn;
 };

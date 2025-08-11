@@ -1,4 +1,5 @@
 #include <CZ/Ream/RLog.h>
+#include <CZ/Ream/RLockGuard.h>
 #include <CZ/Ream/GL/RGLContext.h>
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLDevice.h>
@@ -16,7 +17,6 @@ using namespace CZ;
 
 static pthread_t mainThreadId { 0 };
 static RPlatform platformType;
-static std::recursive_mutex mutex;
 
 static auto skInterface = GrGLMakeAssembledInterface(nullptr, (GrGLGetProc)*[](void *, const char *p) -> void * {
     return (void *)eglGetProcAddress(p);
@@ -69,7 +69,7 @@ struct DeadThreadCleaner
 
 static std::shared_ptr<RGLThreadDataManager> GetData() noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
     thread_local DeadThreadCleaner tc {};
 
     auto it { threads.threads.find(pthread_self()) };
@@ -124,7 +124,7 @@ struct CZ::RGLThreadDataManager
     // Free all data
     void releaseData() noexcept
     {
-        std::lock_guard<std::recursive_mutex> lock(mutex);
+        RLockGuard lock {};
 
         for (auto *contextDataManager : threads.contextDataManagers)
             contextDataManager->freeCurrentThreadData();
@@ -222,12 +222,9 @@ struct CZ::RGLThreadDataManager
     }
 };
 
-
-
-
 bool RGLCore::init() noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
     threads.internal = 0;
     mainThreadId = pthread_self();
     platformType = platform();
@@ -242,21 +239,21 @@ bool RGLCore::init() noexcept
 
 void RGLCore::clearGarbage() noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
     if (auto t { GetData() })
         t->clearGarbage();
 }
 
 void RGLCore::freeThread() noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
     if (auto t { GetData() })
         t->releaseData();
 }
 
 EGLContext RGLDevice::eglContext() const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (pthread_self() == mainThreadId)
         return m_eglContext;
@@ -269,7 +266,7 @@ EGLContext RGLDevice::eglContext() const noexcept
 
 sk_sp<GrDirectContext> RGLDevice::skContext() const noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (pthread_self() == mainThreadId)
         return m_skContext;
@@ -288,7 +285,7 @@ void RGLDevice::wait() noexcept
 
 std::shared_ptr<RGLContextDataManager> RGLContextDataManager::Make(AllocFunc func) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     auto core { RCore::Get() };
 
@@ -319,7 +316,7 @@ std::shared_ptr<RGLContextDataManager> RGLContextDataManager::Make(AllocFunc fun
 
 std::shared_ptr<RGLContextDataManager> RGLContextDataManager::MakeInternal(AllocFunc func) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
     std::shared_ptr<RGLContextDataManager> manager { new RGLContextDataManager(func) };
     threads.addContextDataManager(nullptr, manager.get());
     return manager;
@@ -327,7 +324,7 @@ std::shared_ptr<RGLContextDataManager> RGLContextDataManager::MakeInternal(Alloc
 
 RGLContextData *RGLContextDataManager::getData(RGLDevice *device) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (!device)
     {
@@ -352,7 +349,7 @@ RGLContextData *RGLContextDataManager::getData(RGLDevice *device) noexcept
 
 void RGLContextDataManager::freeData(RGLDevice *device) noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     if (!device)
     {
@@ -403,7 +400,7 @@ RGLContextDataManager::RGLContextDataManager(const AllocFunc &func) noexcept :
 
 RGLContextDataManager::~RGLContextDataManager() noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     auto core { RCore::Get() };
 
@@ -448,7 +445,7 @@ RGLContextDataManager::~RGLContextDataManager() noexcept
 
 void RGLContextDataManager::freeCurrentThreadData() noexcept
 {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
+    RLockGuard lock {};
 
     auto it { m_data.find(pthread_self()) };
 

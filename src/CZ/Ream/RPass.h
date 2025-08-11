@@ -2,6 +2,7 @@
 #define CZ_RPASS_H
 
 #include <CZ/Ream/RPainter.h>
+#include <CZ/Ream/RLockGuard.h>
 
 /**
  * @brief A Ream render pass.
@@ -63,6 +64,7 @@ private:
     RPass(std::shared_ptr<RSurface> surface = nullptr, RPainter *painter = nullptr) noexcept;
     RPainter *m_painter {};
     std::shared_ptr<RSurface> m_surface;
+    RLockGuard m_lock;
 };
 
 #endif // CZ_RPASS_H

@@ -16,7 +16,7 @@ bool RPass::end() noexcept
 }
 
 RPass::RPass(std::shared_ptr<RSurface> surface, RPainter *painter) noexcept :
-    m_painter(painter), m_surface(surface)
+    m_painter(painter), m_surface(surface), m_lock()
 {
     if (!m_painter || !m_surface)
     {

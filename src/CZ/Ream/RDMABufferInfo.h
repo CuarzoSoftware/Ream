@@ -82,6 +82,12 @@ struct CZ::RDMABufferInfo
 
         return dmaCopy;
     }
+
+    void closeFds() noexcept
+    {
+        for (auto i = 0; i < planeCount; i++)
+            close(fd[i]);
+    }
 };
 
 #endif // CZ_RDMABUFFERINFO_H

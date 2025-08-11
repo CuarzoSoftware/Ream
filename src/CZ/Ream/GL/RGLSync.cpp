@@ -3,12 +3,15 @@
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
 #include <CZ/Ream/RLog.h>
+#include <CZ/Ream/RLockGuard.h>
 #include <fcntl.h>
 
 using namespace CZ;
 
 std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
 {
+    RLockGuard lock {};
+
     auto core { RCore::Get() };
 
     if (!core)
@@ -19,7 +22,7 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
 
     auto glCore { core->asGL() };
 
-    if (!core)
+    if (!glCore)
     {
         RLog(CZError, CZLN, "Not an RGLCore");
         return {};
@@ -28,23 +31,16 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
     if (!device)
         device = glCore->mainDevice();
 
-    auto curr { RGLMakeCurrent::FromDevice(device, true) };
-
     if (!device->caps().SyncCPU)
         return {};
 
-    static const EGLint attribs[3]
-    {
-        EGL_SYNC_NATIVE_FENCE_FD_ANDROID,
-        EGL_NO_NATIVE_FENCE_FD_ANDROID,
-        EGL_NONE
-    };
+    auto curr { RGLMakeCurrent::FromDevice(device, true) };
 
     int dupFd { -1 };
     EGLSyncKHR sync { EGL_NO_SYNC_KHR };
 
     if (device->caps().SyncExport)
-        sync = device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_NATIVE_FENCE_ANDROID, attribs);
+        sync = device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
 
     if (sync != EGL_NO_SYNC_KHR)
     {
@@ -55,7 +51,7 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
     }
     else
     {
-        sync = device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_FENCE_KHR, &attribs[2]);
+        sync = device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_FENCE_KHR, nullptr);
 
         if (sync == EGL_NO_SYNC_KHR)
         {
@@ -69,6 +65,8 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
 
 std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexcept
 {
+    RLockGuard lock {};
+
     auto core { RCore::Get() };
 
     if (!core)
@@ -79,7 +77,7 @@ std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexce
 
     auto glCore { core->asGL() };
 
-    if (!core)
+    if (!glCore)
     {
         RLog(CZError, CZLN, "Not an RGLCore");
         return {};
@@ -132,6 +130,8 @@ RGLSync::~RGLSync() noexcept
 
 bool RGLSync::gpuWait(RDevice *waiter) const noexcept
 {
+    RLockGuard lock {};
+
     if (!waiter)
         waiter = m_core->mainDevice();
 
@@ -170,6 +170,8 @@ bool RGLSync::gpuWait(RDevice *waiter) const noexcept
 
 bool RGLSync::cpuWait(int timeoutMs) const noexcept
 {
+    RLockGuard lock {};
+
     auto curr { RGLMakeCurrent::FromDevice(device(), true) };
 
     if (device()->eglDisplayProcs().eglClientWaitSyncKHR)
