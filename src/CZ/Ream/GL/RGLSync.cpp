@@ -66,6 +66,21 @@ std::shared_ptr<RGLSync> RGLSync::Make(RGLDevice *device) noexcept
 std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexcept
 {
     RLockGuard lock {};
+    CZSpFd fence { fd };
+
+    if (fd < 0)
+    {
+        RLog(CZError, CZLN, "Failed to create RGLSync from external fence (invalid fd {}", fd);
+        return {};
+    }
+
+    CZSpFd dup { fence.dup() };
+
+    if (dup.get() < 0)
+    {
+        RLog(CZError, CZLN, "Failed to create RGLSync from external fence (dup failed)");
+        return {};
+    }
 
     auto core { RCore::Get() };
 
@@ -86,33 +101,31 @@ std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexce
     if (!device)
         device = glCore->mainDevice();
 
-    if (fd < 0)
-        return {};
-
     if (!device->caps().SyncImport)
     {
-        close(fd);
+        device->log(CZDebug, "Failed to create RGLSync from external fence (missing SyncImport cap)");
         return {};
     }
 
     const EGLint attribs[3]
     {
         EGL_SYNC_NATIVE_FENCE_FD_ANDROID,
-        fd,
+        dup.release(),
         EGL_NONE
     };
 
     auto curr { RGLMakeCurrent::FromDevice(device, true) };
+
+    // eglCreateSyncKHR takes ownership even on failure
     EGLSyncKHR sync { device->eglDisplayProcs().eglCreateSyncKHR(device->eglDisplay(), EGL_SYNC_NATIVE_FENCE_ANDROID, attribs) };
 
     if (sync == EGL_NO_SYNC_KHR)
     {
-        close(fd);
-        device->log(CZError, CZLN, "Failed to create EGLSync");
+        device->log(CZError, CZLN, "Failed to create RGLSync from external fence (eglCreateSyncKHR failed)");
         return {};
     }
 
-    return std::shared_ptr<RGLSync>(new RGLSync(core, device, sync, -1, true));
+    return std::shared_ptr<RGLSync>(new RGLSync(core, device, sync, fence.release(), true));
 }
 
 RGLSync::RGLSync(std::shared_ptr<RCore> core, RGLDevice *device, EGLSyncKHR sync, int fd, bool isExternal) noexcept :
@@ -153,15 +166,15 @@ bool RGLSync::gpuWait(RDevice *waiter) const noexcept
     if (!device()->caps().SyncExport || !waiter->caps().SyncImport)
         return false;
 
-    const int fence { fd() };
+    auto fence { fd() };
 
-    if (fence < 0) return false;
+    if (fence.get() < 0) return false;
 
-    auto sync { RGLSync::FromExternal(fence, (RGLDevice*)waiter) };
+    auto sync { RGLSync::FromExternal(fence.release(), (RGLDevice*)waiter) };
 
     if (!sync)
     {
-        waiter->log(CZError, CZLN, "Failed to create RGLSync from external fence (fd: {})", fence);
+        waiter->log(CZError, CZLN, "Failed to create RGLSync from external fence");
         return false;
     }
 

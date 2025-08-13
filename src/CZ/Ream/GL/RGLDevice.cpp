@@ -330,15 +330,12 @@ bool RGLDevice::initEGLDisplayExtensions() noexcept
     exts.KHR_gl_texture_2D_image = CZStringUtils::CheckExtension(extensions, "EGL_KHR_gl_texture_2D_image");
     exts.KHR_gl_renderbuffer_image = CZStringUtils::CheckExtension(extensions, "EGL_KHR_gl_renderbuffer_image");
 
-    if (drmDriver() != RDriver::nvidia)
-    {
-        m_caps.SyncCPU = exts.KHR_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_fence_sync");
+    m_caps.SyncCPU = exts.KHR_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_fence_sync");
 
-        if (exts.KHR_fence_sync)
-        {
-            m_caps.SyncGPU = exts.KHR_wait_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_wait_sync");
-            m_caps.SyncImport = m_caps.SyncExport = exts.ANDROID_native_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_ANDROID_native_fence_sync");
-        }
+    if (exts.KHR_fence_sync)
+    {
+        m_caps.SyncGPU = exts.KHR_wait_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_wait_sync");
+        m_caps.SyncImport = m_caps.SyncExport = exts.ANDROID_native_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_ANDROID_native_fence_sync");
     }
 
     exts.IMG_context_priority = CZStringUtils::CheckExtension(extensions, "EGL_IMG_context_priority");
