@@ -109,6 +109,71 @@ std::shared_ptr<RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format, RDe
     return std::shared_ptr<RGBMBo>(new RGBMBo(core, allocator, bo, CZOwn::Own, hasModifier, dmaInfo));
 }
 
+std::shared_ptr<RGBMBo> RGBMBo::MakeCursor(SkISize size, RFormat format, RDevice *allocator) noexcept
+{
+    auto core { RCore::Get() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    if (!allocator)
+        allocator = core->mainDevice();
+
+    if (!allocator->gbmDevice())
+    {
+        allocator->log(CZError, CZLN, "Missing gbm_device");
+        return {};
+    }
+
+    if (size.isEmpty())
+    {
+        allocator->log(CZError, CZLN, "Invalid size ({}x{})", size.width(), size.height());
+        return {};
+    }
+
+    auto *formatInfo { RDRMFormat::GetInfo(format) };
+
+    if (!formatInfo)
+    {
+        allocator->log(CZError, CZLN, "Unsupported format: {}", RDRMFormat::FormatName(format));
+        return {};
+    }
+
+    const bool hasModifier { false };
+    RDMABufferInfo dmaInfo {};
+    dmaInfo.format = format;
+    dmaInfo.width = size.width();
+    dmaInfo.height = size.height();
+    dmaInfo.modifier = DRM_FORMAT_MOD_LINEAR;
+    gbm_bo *bo = gbm_bo_create(allocator->gbmDevice(), size.width(), size.height(), format, GBM_BO_USE_CURSOR | GBM_BO_USE_WRITE | GBM_BO_USE_LINEAR);
+
+    if (!bo)
+    {
+        allocator->log(CZError, CZLN, "Failed to create gbm_bo");
+        return {};
+    }
+
+    dmaInfo.planeCount = gbm_bo_get_plane_count(bo);
+
+    for (int i = 0; i < dmaInfo.planeCount; i++)
+    {
+        dmaInfo.stride[i] = gbm_bo_get_stride_for_plane(bo, i);
+
+        if (dmaInfo.stride[i] != size.width() * formatInfo->bytesPerBlock)
+        {
+            allocator->log(CZError, CZLN, "Invalid bo stride");
+            return {};
+        }
+
+        dmaInfo.offset[i] = gbm_bo_get_offset(bo, i);
+    }
+
+    return std::shared_ptr<RGBMBo>(new RGBMBo(core, allocator, bo, CZOwn::Own, hasModifier, dmaInfo));
+}
+
 std::shared_ptr<RGBMBo> RGBMBo::MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevice *importer) noexcept
 {
     if (!dmaInfo.isValid())
@@ -250,9 +315,6 @@ RGBMBo::RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOw
     assert(allocator);
     assert(dmaInfo.planeCount > 0 && dmaInfo.planeCount < 4);
     assert(dmaInfo.width > 0 && dmaInfo.height > 0);
-
-    for (int i = 0; i < dmaInfo.planeCount; i++)
-        assert(dmaInfo.fd[i] >= 0);
 
     if (hasModifier)
         assert(dmaInfo.modifier != DRM_FORMAT_MOD_INVALID);

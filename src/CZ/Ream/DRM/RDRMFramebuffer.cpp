@@ -234,7 +234,13 @@ RDRMFramebuffer::RDRMFramebuffer(std::shared_ptr<RCore> core,
 
 RDRMFramebuffer::~RDRMFramebuffer() noexcept
 {
-    drmModeRmFB(m_device->drmFd(), m_id);
+    int ret { drmModeCloseFB(m_device->drmFd(), m_id) };
+
+    if (ret == -EINVAL)
+        ret = drmModeRmFB(m_device->drmFd(), m_id);
+
+    if (ret != 0)
+        m_device->log(CZError, "Failed to close FB: {}", strerror(-ret));
 
     if (m_handlesOwn == CZOwn::Own)
         CloseHandles(m_device->drmFd(), m_handles.data(), m_handles.size());

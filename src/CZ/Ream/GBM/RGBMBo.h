@@ -39,7 +39,10 @@ public:
      */
     static std::shared_ptr<RGBMBo> Make(SkISize size, const RDRMFormat &format, RDevice *allocator = nullptr) noexcept;
 
-    // Does not take ownership of the fds
+    // For hw cursors, gbm_bo_write is garanteed to work
+    static std::shared_ptr<RGBMBo> MakeCursor(SkISize size, RFormat format, RDevice *allocator = nullptr) noexcept;
+
+    // Does not take ownership of the fds (dups them internally)
     static std::shared_ptr<RGBMBo> MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevice *importer = nullptr) noexcept;
 
     /**
@@ -48,7 +51,7 @@ public:
      * @note File descriptors in the returned structure are owned by this object and must not be closed.
      *       If another entity takes ownership of the fds you must duplicate them first.
      *
-     * @return A reference to the DMA buffer info. Always valid.
+     * @return A reference to the DMA buffer info. The fds are always valid except for bos created with MakeCursor.
      */
     const RDMABufferInfo &dmaInfo() const noexcept { return m_dmaInfo; }
 

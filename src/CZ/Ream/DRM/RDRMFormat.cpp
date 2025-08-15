@@ -1,4 +1,5 @@
 #include <CZ/Ream/DRM/RDRMFormat.h>
+#include <CZ/Ream/RLockGuard.h>
 #include <cstdio>
 #include <drm_fourcc.h>
 #include <unordered_map>
@@ -77,6 +78,7 @@ static std::unordered_map<RModifier, std::string_view> ModifierNames;
 
 std::string_view RDRMFormat::FormatName(RFormat format) noexcept
 {
+    RLockGuard lock {};
     auto &name { FormatNames[format] };
 
     if (name.empty())
@@ -90,6 +92,7 @@ std::string_view RDRMFormat::FormatName(RFormat format) noexcept
 
 std::string_view RDRMFormat::ModifierName(RModifier modifier) noexcept
 {
+    RLockGuard lock {};
     auto &name { ModifierNames[modifier] };
 
     if (name.empty())
