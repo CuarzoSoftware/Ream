@@ -172,7 +172,12 @@ skipMask:
         return false;
     }
 
-    const auto current { RGLMakeCurrent::FromDevice(device(), true) };
+    const EGLSurface eglSurface { surface->image()->asGL()->eglSurface(device()) };
+    const auto current {
+        eglSurface == EGL_NO_SURFACE ?
+        RGLMakeCurrent::FromDevice(device(), true) :
+        RGLMakeCurrent(device()->eglDisplay(), eglSurface, eglSurface, device()->eglContext())
+    };
     const auto features { calcDrawImageFeatures(image, &tex, mask ? &maskTex : nullptr) };
     const auto prog { RGLProgram::GetOrMake(this, features) };
 
@@ -433,7 +438,12 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
         return false;
     }
 
-    const auto current { RGLMakeCurrent::FromDevice(device(), true) };
+    const EGLSurface eglSurface { surface->image()->asGL()->eglSurface(device()) };
+    const auto current {
+        eglSurface == EGL_NO_SURFACE ?
+            RGLMakeCurrent::FromDevice(device(), true) :
+            RGLMakeCurrent(device()->eglDisplay(), eglSurface, eglSurface, device()->eglContext())
+    };
 
     // Always converted to premultiplied alpha
     const SkColor4f colorF { calcDrawColorColor() };

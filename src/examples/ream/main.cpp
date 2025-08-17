@@ -160,12 +160,12 @@ void Window::update() noexcept
     {
         needsNewSurface = false;
         wl_egl_window_resize(wlEGLWindow, bufferSize.width(), bufferSize.height(), 0, 0);
-        RGLFramebufferInfo info {};
+        REGLSurfaceInfo info {};
         info.size = bufferSize;
         info.format = DRM_FORMAT_ARGB8888;
-        info.id = 0;
+        info.surface = eglSurface;
 
-        surf = RSurface::WrapImage(RGLImage::BorrowFramebuffer(info, dev));
+        surf = RSurface::WrapImage(RGLImage::FromEGLSurface(info, CZOwn::Borrow, dev));
 
         /*
         const GrGLFramebufferInfo fbInfo

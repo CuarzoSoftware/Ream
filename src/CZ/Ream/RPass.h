@@ -16,7 +16,6 @@
  * end() to finalize the pass.
  *
  * @warning If the pass is in an invalid state (see isValid()), it MUST NOT be used.
- *          Issuing rendering commands on an invalid pass may lead to undefined behavior or a segmentation fault.
  *
  * The pass is automatically ended on destruction if it hasn't been explicitly ended.
  */
@@ -40,7 +39,10 @@ public:
     /**
      * @brief Provides access to the underlying RPainter.
      */
-    RPainter* operator()() const noexcept { return m_painter; }
+    RPainter* operator()() const noexcept {
+        assert(isValid() && "Attempt to use an invalid RPass");
+        return m_painter;
+    }
 
     /**
      * @brief Ends the render pass.

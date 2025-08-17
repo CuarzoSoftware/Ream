@@ -40,7 +40,10 @@ public:
     /**
      * @brief Provides access to the underlying SkCanvas.
      */
-    SkCanvas *operator()() const noexcept { return m_canvas; }
+    SkCanvas *operator()() const noexcept {
+        assert(isValid() && "Attempt to use an invalid RSKPass");
+        return m_canvas;
+    }
 
     /**
      * @brief Ends the render pass.

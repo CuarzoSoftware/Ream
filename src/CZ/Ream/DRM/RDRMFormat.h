@@ -10,6 +10,7 @@
 
 #define REAM_FLAT_SET boost::container::flat_set
 
+// Little hack to support GL_ALPHA
 #ifndef DRM_FORMAT_A8
 #define DRM_FORMAT_A8 fourcc_code('A', '8', ' ', ' ')
 #endif

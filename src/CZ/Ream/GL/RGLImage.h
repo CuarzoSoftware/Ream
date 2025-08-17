@@ -18,6 +18,14 @@ namespace CZ
         RFormat format;
         SkAlphaType alphaType { kUnknown_SkAlphaType };
     };
+
+    struct REGLSurfaceInfo
+    {
+        EGLSurface surface { EGL_NO_SURFACE };
+        SkISize size {};
+        RFormat format;
+        SkAlphaType alphaType { kUnknown_SkAlphaType };
+    };
 }
 
 class CZ::RGLImage : public RImage
@@ -31,10 +39,12 @@ public:
     RGLTexture texture(RGLDevice *device = nullptr) const noexcept;
     std::optional<GLuint> glFb(RGLDevice *device = nullptr) const noexcept;
     std::shared_ptr<REGLImage> eglImage(RGLDevice *device = nullptr) const noexcept;
+    EGLSurface eglSurface(RGLDevice *device = nullptr) const noexcept;
 
     [[nodiscard]] static std::shared_ptr<RGLImage> Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
-    [[nodiscard]] static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
     [[nodiscard]] static std::shared_ptr<RGLImage> FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator = nullptr) noexcept;
+    [[nodiscard]] static std::shared_ptr<RGLImage> FromEGLSurface(const REGLSurfaceInfo &info, CZOwn ownership, RGLDevice *allocator = nullptr) noexcept;
 
     std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept override;
     std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept override;
@@ -85,12 +95,16 @@ private:
     struct GlobalDeviceData
     {
         CZBitset<UnsupportedDeviceCap> unsupportedCaps;
+
         RGLTexture texture {};
         CZOwn textureOwnership { CZOwn::Borrow };
 
+        EGLSurface eglSurface { EGL_NO_SURFACE };
+        CZOwn eglSurfaceOwn { CZOwn::Borrow };
+
         std::shared_ptr<REGLImage> eglImage;
         std::shared_ptr<RGBMBo> gbmBo;
-        std::shared_ptr<RDRMFramebuffer> drmFb;
+        std::shared_ptr<RDRMFramebuffer> drmFb;        
         RGLDevice *device { nullptr };
     };
 

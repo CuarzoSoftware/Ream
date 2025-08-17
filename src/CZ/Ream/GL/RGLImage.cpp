@@ -176,6 +176,13 @@ std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
 
     /* Attempt to create one */
 
+    if (deviceData.eglSurface != EGL_NO_SURFACE)
+    {
+        contextData->glFb = 0;
+        contextData->fbOwnership = CZOwn::Borrow;
+        return contextData->glFb;
+    }
+
     if (m_pf.has(PFStorageNative))
     {
         auto tex { texture(device) };
@@ -259,6 +266,15 @@ std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
     return deviceData.eglImage;
 }
 
+EGLSurface RGLImage::eglSurface(RGLDevice *device) const noexcept
+{
+    if (!device)
+        device = core()->asGL()->mainDevice();
+
+    auto &deviceData { m_devicesMap[device] };
+    return deviceData.eglSurface;
+}
+
 std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
     RLockGuard lock {};
@@ -273,8 +289,34 @@ std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format,
 
 std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &info, RGLDevice *allocator) noexcept
 {
-    RLockGuard lock {};
+    if (info.id == 0)
+        RLog(CZWarning, CZLN, "The GL framebuffer ID is 0, consider using RGLImage::FromEGLSurface instead");
 
+    RLockGuard lock {};
+    const RFormatInfo *formatInfo;
+    SkAlphaType alphaType;
+    auto core { ValidateMake(info.size, info.format, kUnknown_SkAlphaType, &allocator, &formatInfo, &alphaType) };
+
+    if (!core) return {};
+
+    auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, formatInfo, alphaType, DRM_FORMAT_MOD_INVALID)) };
+    image->m_self = image;
+    auto *contextData { static_cast<ContextData*>(image->m_contextDataManager->getData(allocator)) };
+    contextData->glFb = info.id;
+    contextData->fbOwnership = CZOwn::Borrow;
+    image->assignReadWriteFormats();
+    return image;
+}
+
+std::shared_ptr<RGLImage> RGLImage::FromEGLSurface(const REGLSurfaceInfo &info, CZOwn ownership, RGLDevice *allocator) noexcept
+{
+    if (info.surface == EGL_NO_SURFACE)
+    {
+        RLog(CZError, CZLN, "Invalid EGLSurface (EGL_NO_SURFACE)");
+        return {};
+    }
+
+    RLockGuard lock {};
     const RFormatInfo *formatInfo;
     SkAlphaType alphaType;
 
@@ -282,13 +324,17 @@ std::shared_ptr<RGLImage> RGLImage::BorrowFramebuffer(const RGLFramebufferInfo &
 
     if (!core) return {};
 
-    // TODO: Validate
-
     auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, info.size, formatInfo, alphaType, DRM_FORMAT_MOD_INVALID)) };
     image->m_self = image;
+
+    auto &deviceData { image->m_devicesMap[allocator] };
+    deviceData.eglSurface = info.surface;
+    deviceData.eglSurfaceOwn = ownership;
+
     auto *contextData { static_cast<ContextData*>(image->m_contextDataManager->getData(allocator)) };
-    contextData->glFb = info.id;
+    contextData->glFb = 0;
     contextData->fbOwnership = CZOwn::Borrow;
+    image->assignReadWriteFormats();
     return image;
 }
 
@@ -464,23 +510,28 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
 
     /* Already has one */
 
-    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device->asGL())) };
+    auto *glDevice { device->asGL() };
+    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(glDevice)) };
 
     if (contextData->skSurface)
         return contextData->skSurface;
 
-    auto &deviceData { m_devicesMap[device->asGL()] };
+    auto &deviceData { m_devicesMap[glDevice] };
 
     /* Already failed before */
 
     if (deviceData.unsupportedCaps.has(NoSkSurface))
         return {};
 
-    auto current { RGLMakeCurrent::FromDevice(device->asGL(), true) };
+    auto current {
+        deviceData.eglSurface == EGL_NO_SURFACE ?
+        RGLMakeCurrent::FromDevice(glDevice, true) :
+        RGLMakeCurrent(glDevice->eglDisplay(), deviceData.eglSurface, deviceData.eglSurface, glDevice->eglContext())
+    };
 
     /* Attempt to create one */
 
-    auto skContext { device->asGL()->skContext() };
+    auto skContext { glDevice->skContext() };
 
     if (!skContext)
     {
@@ -488,7 +539,7 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
         return {};
     }
 
-    auto fb { glFb((RGLDevice*)device) };
+    auto fb { glFb(glDevice) };
 
     if (!fb.has_value())
     {
@@ -496,8 +547,8 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
         return {};
     }
 
-    auto skFormat { formatInfo().alpha ? kRGBA_8888_SkColorType : kRGB_888x_SkColorType };
-    auto glFormat { formatInfo().alpha ? GL_RGBA8_OES : GL_RGB8_OES };
+    auto skFormat { formatInfo().format == DRM_FORMAT_A8 ? kAlpha_8_SkColorType : (formatInfo().alpha ? kRGBA_8888_SkColorType : kRGB_888x_SkColorType) };
+    auto glFormat { formatInfo().format == DRM_FORMAT_A8 ? GL_ALPHA8_OES : (formatInfo().alpha ? GL_RGBA8_OES : GL_RGB8_OES) };
 
     const GrGLFramebufferInfo fbInfo
     {
@@ -700,7 +751,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithNativeStorage(SkISize size, const RD
         return {};
     }
 
-    if (glFormat->format != GL_RGBA && glFormat->format != GL_RGB)
+    if (glFormat->format != GL_ALPHA && glFormat->format != GL_RGBA && glFormat->format != GL_RGB)
     {
         if (glFormat->format != GL_BGRA_EXT || !allocator->glExtensions().EXT_texture_format_BGRA8888)
             return {};
@@ -984,7 +1035,14 @@ bool RGLImage::readPixelsNative(const RPixelBufferRegion &region) noexcept
     if (deviceWait)
         device->wait();
 
-    const auto current { RGLMakeCurrent::FromDevice(device, true) };
+    const auto &deviceData { m_devicesMap[device] };
+
+    auto current {
+        deviceData.eglSurface == EGL_NO_SURFACE ?
+            RGLMakeCurrent::FromDevice(device, true) :
+            RGLMakeCurrent(device->eglDisplay(), deviceData.eglSurface, deviceData.eglSurface, device->eglContext())
+    };
+
     glBindFramebuffer(GL_FRAMEBUFFER, fb.value());
 
     // Loop through each rect in the region
@@ -1040,6 +1098,7 @@ void RGLImage::assignReadWriteFormats() noexcept
 
     if (m_pf.has(PFStorageNative))
     {
+        m_writeFormats.emplace(DRM_FORMAT_A8);
         m_writeFormats.emplace(DRM_FORMAT_ABGR8888);
         m_writeFormats.emplace(DRM_FORMAT_XBGR8888);
         m_readFormats.emplace(DRM_FORMAT_ABGR8888);
@@ -1064,6 +1123,7 @@ void RGLImage::assignReadWriteFormats() noexcept
 
         if (glFb(glDev).has_value())
         {
+            m_writeFormats.emplace(DRM_FORMAT_A8);
             m_writeFormats.emplace(DRM_FORMAT_ABGR8888);
             m_writeFormats.emplace(DRM_FORMAT_XBGR8888);
             m_readFormats.emplace(DRM_FORMAT_ABGR8888);
@@ -1098,8 +1158,6 @@ void RGLImage::assignReadWriteFormats() noexcept
 RGLImage::RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept
     : RImage(core, (RDevice*)device, size, formatInfo, alphaType, modifier)
 {
-    RLockGuard lock {};
-
     m_contextDataManager = RGLContextDataManager::Make([](RGLDevice *device) -> RGLContextData* {
         return new ContextData(device);
     });
@@ -1118,12 +1176,15 @@ RGLImage::GlobalDeviceDataMap::~GlobalDeviceDataMap() noexcept
             glDeleteTextures(1, &data.texture.id);
         }
 
+        if (data.eglSurfaceOwn == CZOwn::Own && data.eglSurface != EGL_NO_SURFACE)
+            eglDestroySurface(it->first->eglDisplay(), data.eglSurface);
+
         erase(it);
     }
 }
 
 RGLImage::ContextData::~ContextData() noexcept
 {
-    if (fbOwnership == CZOwn::Own && glFb.has_value())
+    if (fbOwnership == CZOwn::Own && glFb.has_value() && glFb.value() != 0)
         glDeleteFramebuffers(1, &glFb.value());
 }
