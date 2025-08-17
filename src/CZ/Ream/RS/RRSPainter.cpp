@@ -157,7 +157,7 @@ bool RRSPainter::drawColor(const SkRegion &region) noexcept
     if (!surface || !surface->image())
         return false;
 
-    SkRegion clip { surface->dst().roundOut() };
+    SkRegion clip { surface->viewport().roundOut() };
     clip.op(region, SkRegion::kIntersect_Op);
     if (clip.isEmpty())
         return true;
@@ -213,7 +213,7 @@ RRSPainter::ValRes RRSPainter::validateDrawImage(const RDrawImageInfo &image, co
         return ValRes::Error;
     }
 
-    SkRegion clip { surface->dst().roundOut() };
+    SkRegion clip { surface->viewport().roundOut() };
 
     if (region)
         clip.op(*region, SkRegion::kIntersect_Op);
