@@ -94,7 +94,8 @@ protected:
     friend class SRMCore;
     friend class RSurface;
     virtual RPainter *painter() const noexcept = 0;
-    RDevice(RCore &core) noexcept;;
+    RDevice(RCore &core) noexcept;
+    void setDRMDriverName(int fd) noexcept;
     RCore &m_core;
     int m_drmFd { -1 };
     int m_drmFdReadOnly { -1 };

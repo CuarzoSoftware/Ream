@@ -24,7 +24,8 @@ namespace CZ
     {
         Auto,
         GL,
-        VK
+        VK,
+        RS
     };
 
     std::string_view RGraphicsAPIString(RGraphicsAPI api) noexcept;
@@ -85,6 +86,12 @@ namespace CZ
     class RVKImage;
     class RVKPainter;
     class RVKSync;
+
+    // Raster
+    class RRSCore;
+    class RRSDevice;
+    class RRSImage;
+    class RRSPainter;
 }
 
 #endif

@@ -41,6 +41,7 @@ public:
      *         or `nullptr` otherwise.
      */
     std::shared_ptr<RGLCore> asGL() noexcept;
+    std::shared_ptr<RRSCore> asRS() noexcept;
 
     ~RCore() noexcept;
 

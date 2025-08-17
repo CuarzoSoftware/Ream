@@ -6,6 +6,7 @@
 
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/VK/RVKCore.h>
+#include <CZ/Ream/RS/RRSCore.h>
 
 #include <cstring>
 
@@ -72,7 +73,24 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
                 gAPI = RGraphicsAPI::GL;
             else if (strcmp(gAPIEnv, "VK") == 0)
                 gAPI = RGraphicsAPI::VK;
+            else if (strcmp(gAPIEnv, "RS") == 0)
+                gAPI = RGraphicsAPI::RS;
         }
+    }
+
+    if (gAPI == RGraphicsAPI::RS)
+    {
+        auto core { std::shared_ptr<RCore>(new RRSCore(options)) };
+        s_core = core;
+
+        if (core->init())
+        {
+            core->logInfo();
+            return core;
+        }
+
+        if (gAPI != RGraphicsAPI::Auto)
+            goto fail;
     }
 
     if (gAPI == RGraphicsAPI::VK || gAPI == RGraphicsAPI::Auto)
@@ -110,6 +128,13 @@ std::shared_ptr<RGLCore> RCore::asGL() noexcept
 {
     if (graphicsAPI() == RGraphicsAPI::GL)
         return std::static_pointer_cast<RGLCore>(s_core.lock());
+    return {};
+}
+
+std::shared_ptr<RRSCore> RCore::asRS() noexcept
+{
+    if (graphicsAPI() == RGraphicsAPI::RS)
+        return std::static_pointer_cast<RRSCore>(s_core.lock());
     return {};
 }
 

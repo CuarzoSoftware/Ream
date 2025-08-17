@@ -1,16 +1,12 @@
 #include <CZ/Ream/GL/RGLStrings.h>
 #include <CZ/Ream/GL/RGLCore.h>
 #include <CZ/Ream/GL/RGLDevice.h>
-
 #include <CZ/Ream/WL/RWLPlatformHandle.h>
 #include <CZ/Ream/DRM/RDRMPlatformHandle.h>
-
 #include <CZ/Ream/RLog.h>
-
 #include <CZ/Utils/CZStringUtils.h>
-
-#include <drm/drm_fourcc.h>
-
+#include <CZ/Utils/CZVectorUtils.h>
+#include <drm_fourcc.h>
 #include <EGL/egl.h>
 #include <fcntl.h>
 #include <gbm.h>
@@ -160,11 +156,7 @@ bool RGLCore::initDevices() noexcept
 
 void RGLCore::unitDevices() noexcept
 {
-    while (!m_devices.empty())
-    {
-        delete devices().back();
-        m_devices.pop_back();
-    }
+    CZVectorUtils::DeleteAndPopBackAll(m_devices);
 }
 
 RGLCore::RGLCore(const Options &options) noexcept : RCore(options)

@@ -16,8 +16,14 @@ public:
     RSKPass beginSKPass(RDevice *device = nullptr) const noexcept;
 
     std::shared_ptr<RImage> image() const noexcept { return m_image; }
+
+    // Transform applied to the surface
     CZTransform transform() const noexcept { return m_transform; }
+
+    // Portion of the world being captured (virtual coords)
     SkRect viewport() const noexcept { return m_viewport; }
+
+    // Destination within the surface the viewport is rendered into (pixel coords)
     SkRect dst() const noexcept { return m_dst; }
 
     bool setGeometry(SkRect viewport, SkRect dst, CZTransform transform) noexcept;

@@ -25,6 +25,12 @@ void RPainter::restore() noexcept
     }
 }
 
+void RPainter::clearHistory() noexcept
+{
+    m_history.clear();
+    reset();
+}
+
 void RPainter::reset() noexcept
 {
     m_state = {};

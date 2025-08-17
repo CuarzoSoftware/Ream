@@ -27,7 +27,7 @@ private:
     friend struct RGLThreadDataManager;
     static RGLDevice *Make(RGLCore &core, int drmFd, void *userData) noexcept;
     RGLDevice(RGLCore &core, int drmFd, void *userData) noexcept;
-    ~RGLDevice();
+    ~RGLDevice() noexcept;
     bool init() noexcept;
 
     bool initWL() noexcept;
@@ -43,8 +43,6 @@ private:
     bool initDMAFormats() noexcept;
     bool initFormats() noexcept;
     bool initPainter() noexcept;
-
-    void setDRMDriverName(int fd) noexcept;
 
     RPainter *painter() const noexcept override;
 

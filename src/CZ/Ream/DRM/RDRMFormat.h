@@ -6,6 +6,7 @@
 #include <boost/container/flat_set.hpp>
 #include <string_view>
 #include <drm_fourcc.h>
+#include <unordered_set>
 
 #define REAM_FLAT_SET boost::container::flat_set
 
@@ -132,6 +133,9 @@ namespace CZ
         /* Return the format name or "Unknown" if not found */
         static std::string_view FormatName(RFormat format) noexcept;
         static std::string_view ModifierName(RModifier modifier) noexcept;
+
+        // Ream supported formats
+        static const std::unordered_set<RFormat> &SupportedFormats() noexcept;
 
         /**
          * @brief Retrieves detailed information about a DRM format.

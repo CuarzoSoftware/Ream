@@ -84,12 +84,16 @@ void main()
 
         #ifdef REPLACE_IMAGE_COLOR
 
-            // factorRGB must be premult by factorA
+            // factorRGB must not be premult by factorA
 
             gl_FragColor = vec4(factorR, factorG, factorB, texture2D(image, imageCord).a);
 
             #ifdef HAS_MASK
                 gl_FragColor.a *= texture2D(mask, maskCord).a;
+            #endif
+
+            #ifdef HAS_A
+                gl_FragColor.a *= factorA;
             #endif
 
         #else // REPLACE COLOR DISABLED

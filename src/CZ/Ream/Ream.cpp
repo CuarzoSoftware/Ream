@@ -10,6 +10,8 @@ std::string_view CZ::RGraphicsAPIString(RGraphicsAPI api) noexcept
         return "Vulkan";
     case RGraphicsAPI::GL:
         return "OpenGL ES 2.0";
+    case RGraphicsAPI::RS:
+        return "Raster";
     default:
         return "Unknown";
     }

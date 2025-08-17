@@ -136,6 +136,8 @@ public:
      */
     void restore() noexcept;
 
+    void clearHistory() noexcept;
+
     /**
      * @brief Resets the current RPainter state to its default configuration.
      *

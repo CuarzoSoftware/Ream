@@ -189,9 +189,9 @@ skipMask:
     {
         const SkColor4f replaceColorF { SkColor4f::FromColor(color()) };        
         colorF.fA *= m_state.opacity;
-        colorF.fR *= replaceColorF.fR * colorF.fA;
-        colorF.fG *= replaceColorF.fG * colorF.fA;
-        colorF.fB *= replaceColorF.fB * colorF.fA;
+        colorF.fR *= replaceColorF.fR;
+        colorF.fG *= replaceColorF.fG;
+        colorF.fB *= replaceColorF.fB;
     }
     else
     {
@@ -510,6 +510,7 @@ void RGLPainter::beginPass() noexcept
     glFrontFace(GL_CCW);
     glBlendColor(0, 0, 0, 0);
     glBlendEquation(GL_FUNC_ADD);
+    clearHistory();
 }
 
 CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<RImage> image, RGLTexture *imageTex, RGLTexture *maskTex) const noexcept
@@ -527,6 +528,8 @@ CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<
         features.setFlag(RGLShader::MaskExternal, maskTex->target == GL_TEXTURE_EXTERNAL_OES);
     }
 
+    features.setFlag(RGLShader::HasFactorA, m_state.factor.fA * m_state.opacity != 1.f);
+
     switch (blendMode())
     {
     case RBlendMode::Src:
@@ -534,7 +537,7 @@ CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<
 
         if (m_state.options.has(ReplaceImageColor))
         {
-            // UNUSED: PremultSrc, HasFactorA
+            // UNUSED: PremultSrc
             features.add(RGLShader::ReplaceImageColor | RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB);
         }
         else
@@ -543,7 +546,6 @@ CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<
             features.setFlag(RGLShader::HasFactorR, m_state.factor.fR != 1.f);
             features.setFlag(RGLShader::HasFactorG, m_state.factor.fG != 1.f);
             features.setFlag(RGLShader::HasFactorB, m_state.factor.fB != 1.f);
-            features.setFlag(RGLShader::HasFactorA, m_state.factor.fA * m_state.opacity != 1.f);
         }
         break;
     case RBlendMode::SrcOver:
@@ -551,7 +553,7 @@ CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<
 
         if (m_state.options.has(ReplaceImageColor))
         {
-            // UNUSED: PremultSrc, HasFactorA
+            // UNUSED: PremultSrc
             features.add(RGLShader::ReplaceImageColor | RGLShader::HasFactorR | RGLShader::HasFactorG | RGLShader::HasFactorB);
         }
         else
@@ -560,13 +562,11 @@ CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<
             features.setFlag(RGLShader::HasFactorR, m_state.factor.fR != 1.f);
             features.setFlag(RGLShader::HasFactorG, m_state.factor.fG != 1.f);
             features.setFlag(RGLShader::HasFactorB, m_state.factor.fB != 1.f);
-            features.setFlag(RGLShader::HasFactorA, m_state.factor.fA * m_state.opacity != 1.f);
         }
         break;
     case RBlendMode::DstIn:
         // UNUSED: PremultSrc, ReplaceImageColor, HasFactor{R,G,B}
         features.add(RGLShader::BlendDstIn);
-        features.setFlag(RGLShader::HasFactorA, m_state.factor.fA * m_state.opacity != 1.f);
         break;
     }
 
@@ -676,6 +676,7 @@ std::shared_ptr<RGLPainter> RGLPainter::Make(RGLDevice *device) noexcept
 bool RGLPainter::init() noexcept
 {
     return true;
+    // TODO
     auto current { RGLMakeCurrent::FromDevice(device(), false) };
     auto testA { RGLProgram::GetOrMake(this, RGLShader::HasImage) };
     auto testB { RGLProgram::GetOrMake(this, 0) };

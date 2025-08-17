@@ -5,6 +5,8 @@
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
 
+#include <CZ/Ream/RS/RRSImage.h>
+
 #include <CZ/skia/core/SkPixelRef.h>
 #include <CZ/skia/core/SkCanvas.h>
 #include <CZ/skia/core/SkStream.h>
@@ -29,6 +31,8 @@ std::shared_ptr<RImage> RImage::Make(SkISize size, const RDRMFormat &format, con
 
     if (core->graphicsAPI() == RGraphicsAPI::GL)
         return RGLImage::Make(size, format, constraints);
+    else if (core->graphicsAPI() == RGraphicsAPI::RS)
+        return RRSImage::Make(size, format, constraints);
 
     return {};
 }
@@ -57,11 +61,11 @@ static std::shared_ptr<RImage> LoadImage(SkColorType skFormat, const std::filesy
     SkBitmap bitmap;
     SkSize finalSize = SkSize::Make(SkIntToScalar(size.width()), SkIntToScalar(size.height()));
     bool haveFinalSize = (size.width() > 0 && size.height() > 0);
-
     sk_sp<SkData> data = SkData::MakeFromFileName(path.c_str());
+
     if (!data)
     {
-        RLog(CZError, CZLN, "Failed to open image file: {}", path.c_str());
+        RLog(CZDebug, CZLN, "Failed to open image file: {}", path.c_str());
         return {};
     }
 
@@ -69,7 +73,7 @@ static std::shared_ptr<RImage> LoadImage(SkColorType skFormat, const std::filesy
 
     if (!codec)
     {
-        RLog(CZError, CZLN, "Failed to create codec for image file: {}", path.c_str());
+        RLog(CZDebug, CZLN, "Failed to create codec for image file: {}", path.c_str());
         return {};
     }
 
@@ -80,14 +84,14 @@ static std::shared_ptr<RImage> LoadImage(SkColorType skFormat, const std::filesy
 
     if (finalSize.fWidth <= 0 || finalSize.fHeight <= 0)
     {
-        RLog(CZError, CZLN, "The image has invalid dimensions: {}", path.c_str());
+        RLog(CZDebug, CZLN, "The image has invalid dimensions: {}", path.c_str());
         return {};
     }
 
     SkISize finalPixelSize = SkISize::Make(
         SkScalarCeilToInt(finalSize.fWidth),
         SkScalarCeilToInt(finalSize.fHeight)
-        );
+    );
 
     // Decode into a temporary SkImage first (preserves original orientation/color),
     // then draw it into the target bitmap with scaling/conversion.
@@ -95,7 +99,7 @@ static std::shared_ptr<RImage> LoadImage(SkColorType skFormat, const std::filesy
 
     if (!srcImage)
     {
-        RLog(CZError, CZLN, "Failed to decode image file: {}", path.c_str());
+        RLog(CZDebug, CZLN, "Failed to decode image file: {}", path.c_str());
         return {};
     }
 
@@ -106,7 +110,7 @@ static std::shared_ptr<RImage> LoadImage(SkColorType skFormat, const std::filesy
         );
 
     if (!bitmap.tryAllocPixels(info)) {
-        RLog(CZError, CZLN, "Failed to allocate SkBitmap pixels for raster image");
+        RLog(CZDebug, CZLN, "Failed to allocate SkBitmap pixels for raster image");
         return {};
     }
 
@@ -120,10 +124,9 @@ static std::shared_ptr<RImage> LoadImage(SkColorType skFormat, const std::filesy
     paint.setAntiAlias(true);
     canvas.drawImageRect(srcImage, srcRect, dstRect, SkSamplingOptions(), &paint, SkCanvas::kFast_SrcRectConstraint);
 
-
     // At this point bitmap has the rendered image (SVG or raster), in desired format/size.
     if (!bitmap.pixelRef() || !bitmap.readyToDraw()) {
-        RLog(CZError, CZLN, "Bitmap not ready after image processing: {}", path.c_str());
+        RLog(CZDebug, CZLN, "Bitmap not ready after image processing: {}", path.c_str());
         return {};
     }
 
@@ -141,11 +144,17 @@ static std::shared_ptr<RImage> LoadSVG(SkColorType skFormat, const std::filesyst
 {
     auto stream { SkMemoryStream::MakeFromFile(path.c_str()) };
 
+    if (!stream)
+    {
+        RLog(CZDebug, CZLN, "Failed to create SkMemoryStream from file: {}", path.c_str());
+        return {};
+    }
+
     auto dom { SkSVGDOM::MakeFromStream(*stream) };
 
     if (!dom)
     {
-        RLog(CZError, CZLN, "Failed to create SkSVGDOM from file: {}", path.c_str());
+        RLog(CZDebug, CZLN, "Failed to create SkSVGDOM from file: {}", path.c_str());
         return {};
     }
 
@@ -157,22 +166,22 @@ static std::shared_ptr<RImage> LoadSVG(SkColorType skFormat, const std::filesyst
 
     if (finalSize.fWidth <= 0 || finalSize.fHeight <= 0)
     {
-        RLog(CZError, CZLN, "The image has invalid dimensions: {}", path.c_str());
+        RLog(CZDebug, CZLN, "The image has invalid dimensions: {}", path.c_str());
         return {};
     }
 
     SkImageInfo info
-        {
-            SkImageInfo::Make(
-                finalSize.toCeil(),
-                skFormat,
-                kPremul_SkAlphaType)
-        };
+    {
+        SkImageInfo::Make(
+            finalSize.toCeil(),
+            skFormat,
+            kPremul_SkAlphaType)
+    };
 
     SkBitmap bitmap;
     if (!bitmap.tryAllocPixels(info))
     {
-        RLog(CZError, CZLN, "Failed to allocate SkBitmap pixels");
+        RLog(CZDebug, CZLN, "Failed to allocate SkBitmap pixels");
         return {};
     }
 
@@ -215,6 +224,10 @@ std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, cons
     std::shared_ptr<RImage> image { LoadImage(skFormat, path, format, size, constraints) };
     if (image) return image;
     image = LoadSVG(skFormat, path, format, size, constraints);
+
+    if (!image)
+        RLog(CZError, CZLN, "Failed to load image: {}", path.c_str());
+
     return image;
 }
 
@@ -237,6 +250,11 @@ std::shared_ptr<RImage> RImage::FromDMA(const RDMABufferInfo &info, CZOwn owners
 std::shared_ptr<RGLImage> RImage::asGL() const noexcept
 {
     return std::dynamic_pointer_cast<RGLImage>(m_self.lock());
+}
+
+std::shared_ptr<RRSImage> RImage::asRS() const noexcept
+{
+    return std::dynamic_pointer_cast<RRSImage>(m_self.lock());
 }
 
 RImage::~RImage() noexcept

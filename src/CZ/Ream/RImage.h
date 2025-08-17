@@ -130,13 +130,13 @@ namespace CZ
 
     struct RImageConstraints
     {
-        /* Required caps for each device */
+        /* Required caps for each device. Leave empty to disable constraints. */
         std::unordered_map<RDevice*, CZBitset<RImageCap>> caps;
 
-        /* Required read formats (must support at least one) */
+        /* Required read formats (the image must support at least one). Leave empty to disable constraints. */
         std::unordered_set<RFormat> readFormats;
 
-        /* Required write formats (must support at least one) */
+        /* Required write formats (the image must support at least one). Leave empty to disable constraints. */
         std::unordered_set<RFormat> writeFormats;
 
         /* The allocator device, if nullptr, RCore::mainDevice() is used */
@@ -183,6 +183,8 @@ public:
     UInt32 writeSerial() const noexcept { return m_writeSerial; }
 
     std::shared_ptr<RGLImage> asGL() const noexcept;
+    std::shared_ptr<RRSImage> asRS() const noexcept;
+
     ~RImage() noexcept;
 protected:
     RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifiers) noexcept;

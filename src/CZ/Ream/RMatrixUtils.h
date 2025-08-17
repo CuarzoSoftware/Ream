@@ -1,6 +1,7 @@
 #ifndef CZ_RMATRIXUTILS_H
 #define CZ_RMATRIXUTILS_H
 
+#include <CZ/Ream/RPainter.h>
 #include <CZ/Ream/Ream.h>
 #include <CZ/CZTransform.h>
 #include <CZ/skia/core/SkMatrix.h>
@@ -19,6 +20,12 @@ public:
 
     /// Virtual -> RImage -> UV coords
     static SkMatrix VirtualToUV(SkRect dst, CZTransform srcTransform, SkScalar srcScale, SkRect srcRect, SkISize texSize) noexcept;
+
+    /// RDrawImageInfo src rect -> SkCanvas->drawImageRect src rect
+    static SkRect SkImageSrcRect(const RDrawImageInfo &image) noexcept;
+
+    /// Flips/rotates SkImage dst, the inverse should be applied to SkCanvas->drawImageRect dstRect
+    static SkMatrix SkImageDstTransform(const RDrawImageInfo &image) noexcept;
 };
 
 #endif // CZ_RMATRIXUTILS_H

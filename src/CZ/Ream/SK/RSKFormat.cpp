@@ -78,3 +78,36 @@ RFormat RSKFormat::ToDRM(SkColorType format) noexcept
     return it == map.end() ? DRM_FORMAT_INVALID : it->second;
 }
 
+
+const std::unordered_set<RFormat> &RSKFormat::SupportedFormats() noexcept
+{
+    static const std::unordered_set<RFormat> formats
+    {
+        DRM_FORMAT_ARGB8888,
+        DRM_FORMAT_XRGB8888,
+        DRM_FORMAT_ABGR8888,
+        DRM_FORMAT_XBGR8888,
+        DRM_FORMAT_BGRA8888,
+        DRM_FORMAT_RGB888,
+        DRM_FORMAT_BGR888,
+
+        DRM_FORMAT_RGB565,
+        DRM_FORMAT_ARGB4444,
+        DRM_FORMAT_RGBA4444,
+
+        DRM_FORMAT_ABGR2101010,
+        DRM_FORMAT_XBGR2101010,
+        DRM_FORMAT_ARGB2101010,
+        DRM_FORMAT_XRGB2101010,
+
+        DRM_FORMAT_ABGR16161616F,
+        DRM_FORMAT_XBGR16161616F,
+        DRM_FORMAT_ABGR16161616,
+        DRM_FORMAT_GR88,
+        DRM_FORMAT_R8,
+        DRM_FORMAT_R16,
+        DRM_FORMAT_GR1616
+    };
+
+    return formats;
+}

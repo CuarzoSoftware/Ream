@@ -1,4 +1,5 @@
 #include <CZ/Ream/RMatrixUtils.h>
+#include <CZ/Ream/RImage.h>
 
 using namespace CZ;
 
@@ -48,6 +49,21 @@ SkMatrix RMatrixUtils::DstTransform(CZTransform transform, SkSize dstSize) noexc
     return SkMatrix();
 }
 
+SkMatrix RMatrixUtils::VirtualToImage(CZTransform transform, SkRect viewport, SkRect dst) noexcept
+{
+    const auto sX { dst.width() / viewport.width() };
+    const auto sY { dst.height() / viewport.height() };
+    const auto tX { dst.left() - viewport.left() * sX };
+    const auto tY { dst.top() - viewport.top() * sY };
+
+    return
+        SkMatrix::MakeAll(
+            sX,  0.f, tX,
+            0.f, sY,  tY,
+            0.f, 0.f, 1.f).
+        postConcat(DstTransform(transform, SkSize::Make(dst.width(), dst.height())));
+}
+
 SkMatrix RMatrixUtils::VirtualToNDC(CZTransform transform, SkRect viewport, SkRect dst, SkISize imageSize, bool flipY) noexcept
 {
     SkMatrix mat { VirtualToImage(transform, viewport, dst) };
@@ -62,21 +78,6 @@ SkMatrix RMatrixUtils::VirtualToNDC(CZTransform transform, SkRect viewport, SkRe
         2.0f / imageSize.width(), 0,                         -1,
         0,                        2.0f / imageSize.height(), -1,
         0,                        0,                          1));
-}
-
-SkMatrix RMatrixUtils::VirtualToImage(CZTransform transform, SkRect viewport, SkRect dst) noexcept
-{
-    const auto sX { dst.width() / viewport.width() };
-    const auto sY { dst.height() / viewport.height() };
-    const auto tX { dst.left() - viewport.left() * sX };
-    const auto tY { dst.top() - viewport.top() * sY };
-
-    return
-        SkMatrix::MakeAll(
-            sX,  0.f, tX,
-            0.f, sY,  tY,
-            0.f, 0.f, 1.f).
-        postConcat(DstTransform(transform, SkSize::Make(dst.width(), dst.height())));
 }
 
 SkMatrix RMatrixUtils::VirtualToUV(SkRect dst, CZTransform srcTransform, SkScalar srcScale, SkRect srcRect, SkISize texSize) noexcept
@@ -118,3 +119,157 @@ SkMatrix RMatrixUtils::VirtualToUV(SkRect dst, CZTransform srcTransform, SkScala
 
     return M;
 }
+
+SkRect RMatrixUtils::SkImageSrcRect(const RDrawImageInfo &image) noexcept
+{
+    if (!image.image)
+        return SkRect::MakeEmpty();
+
+    const auto imgSize = SkSize::Make(image.image->size().width(), image.image->size().height());
+
+    SkRect srcRect = image.src;
+    srcRect.fLeft   *= image.srcScale;
+    srcRect.fTop    *= image.srcScale;
+    srcRect.fRight  *= image.srcScale;
+    srcRect.fBottom *= image.srcScale;
+
+    switch (image.srcTransform)
+    {
+    case CZTransform::Normal:
+        break;
+
+    case CZTransform::Rotated90:
+        srcRect = SkRect::MakeLTRB(
+            srcRect.top(),
+            imgSize.height() - srcRect.right(),
+            srcRect.bottom(),
+            imgSize.height() - srcRect.left());
+        break;
+
+    case CZTransform::Rotated180:
+        srcRect = SkRect::MakeLTRB(
+            imgSize.width() - srcRect.right(),
+            imgSize.height() - srcRect.bottom(),
+            imgSize.width() - srcRect.left(),
+            imgSize.height() - srcRect.top());
+        break;
+
+    case CZTransform::Rotated270:
+        srcRect = SkRect::MakeLTRB(
+            imgSize.width() - srcRect.bottom(),
+            srcRect.left(),
+            imgSize.width() - srcRect.top(),
+            srcRect.right());
+        break;
+
+    case CZTransform::Flipped:
+        srcRect = SkRect::MakeLTRB(
+            imgSize.width() - srcRect.right(),
+            srcRect.top(),
+            imgSize.width() - srcRect.left(),
+            srcRect.bottom());
+        break;
+
+    case CZTransform::Flipped90:
+        srcRect = SkRect::MakeLTRB(
+            srcRect.top(),
+            srcRect.left(),
+            srcRect.bottom(),
+            srcRect.right());
+        break;
+
+    case CZTransform::Flipped180:
+        srcRect = SkRect::MakeLTRB(
+            srcRect.left(),
+            imgSize.height() - srcRect.bottom(),
+            srcRect.right(),
+            imgSize.height() - srcRect.top());
+        break;
+
+    case CZTransform::Flipped270:
+        srcRect = SkRect::MakeLTRB(
+            imgSize.height() - srcRect.bottom(),
+            imgSize.height() - srcRect.right(),
+            imgSize.height() - srcRect.top(),
+            imgSize.height() - srcRect.left());
+        break;
+    }
+
+    return srcRect;
+}
+
+SkMatrix RMatrixUtils::SkImageDstTransform(const RDrawImageInfo &image) noexcept
+{
+    SkMatrix matrix;
+    matrix.setIdentity();
+
+    if (image.dst.isEmpty())
+    {
+        matrix.setScale(0.f, 0.f);
+        return matrix;
+    }
+
+    SkRect rect { SkRect::Make(image.dst) };
+    const float width = rect.width();
+    const float height = rect.height();
+    const float centerX = rect.centerX();
+    const float centerY = rect.centerY();
+    const float aspectRatio = height / width;
+
+    switch (image.srcTransform) {
+    case CZTransform::Normal:
+        // No transformation needed
+        break;
+
+    case CZTransform::Rotated90:
+        matrix.preTranslate(centerX, centerY);
+        matrix.preRotate(90);
+        matrix.preScale(aspectRatio, 1.0f / aspectRatio);
+        matrix.preTranslate(-centerY, -centerX);
+        break;
+
+    case CZTransform::Rotated180:
+        matrix.preTranslate(centerX, centerY);
+        matrix.preRotate(180);
+        matrix.preTranslate(-centerX, -centerY);
+        break;
+
+    case CZTransform::Rotated270:
+        matrix.preTranslate(centerX, centerY);
+        matrix.preRotate(270);
+        matrix.preScale(aspectRatio, 1.0f / aspectRatio);
+        matrix.preTranslate(-centerY, -centerX);
+        break;
+
+    case CZTransform::Flipped:
+        matrix.preTranslate(centerX, centerY);
+        matrix.preScale(-1, 1);
+        matrix.preTranslate(-centerX, -centerY);
+        break;
+
+    case CZTransform::Flipped90:
+        matrix.preTranslate(centerX, centerY);
+        matrix.preScale(-1, 1);
+        matrix.preRotate(90);
+        matrix.preScale(aspectRatio, 1.0f / aspectRatio);
+        matrix.preTranslate(-centerY, -centerX);
+        break;
+
+    case CZTransform::Flipped180:
+        matrix.preTranslate(centerX, centerY);
+        matrix.preScale(1, -1);
+        matrix.preTranslate(-centerX, -centerY);
+        break;
+
+    case CZTransform::Flipped270:
+        matrix.preTranslate(centerX, centerY);
+        matrix.preScale(-1, 1);
+        matrix.preRotate(270);
+        matrix.preScale(aspectRatio, 1.0f / aspectRatio);
+        matrix.preTranslate(-centerY, -centerX);
+        break;
+    }
+
+    return matrix;
+}
+

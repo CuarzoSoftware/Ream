@@ -104,6 +104,71 @@ std::string_view RDRMFormat::ModifierName(RModifier modifier) noexcept
     return name;
 }
 
+const std::unordered_set<RFormat> &RDRMFormat::SupportedFormats() noexcept
+{
+    static const std::unordered_set<RFormat> formats {
+        DRM_FORMAT_ARGB8888,
+        DRM_FORMAT_XRGB8888,
+        DRM_FORMAT_ABGR8888,
+        DRM_FORMAT_XBGR8888,
+
+        DRM_FORMAT_A8,
+        DRM_FORMAT_C8,
+        DRM_FORMAT_RGB332,
+        DRM_FORMAT_BGR233,
+        DRM_FORMAT_RGB565,
+        DRM_FORMAT_BGR565,
+        DRM_FORMAT_ARGB4444,
+        DRM_FORMAT_ABGR4444,
+        DRM_FORMAT_XRGB4444,
+        DRM_FORMAT_XBGR4444,
+        DRM_FORMAT_ARGB1555,
+        DRM_FORMAT_ABGR1555,
+        DRM_FORMAT_XRGB1555,
+        DRM_FORMAT_XBGR1555,
+        DRM_FORMAT_ARGB2101010,
+        DRM_FORMAT_ABGR2101010,
+        DRM_FORMAT_XRGB2101010,
+        DRM_FORMAT_XBGR2101010,
+        DRM_FORMAT_RGBA1010102,
+        DRM_FORMAT_BGRA1010102,
+
+        DRM_FORMAT_XRGB16161616F,
+        DRM_FORMAT_XBGR16161616F,
+        DRM_FORMAT_ARGB16161616F,
+        DRM_FORMAT_ABGR16161616F,
+
+        DRM_FORMAT_NV24,
+        DRM_FORMAT_NV42,
+        DRM_FORMAT_NV12,
+        DRM_FORMAT_NV21,
+        DRM_FORMAT_NV16,
+        DRM_FORMAT_NV61,
+        DRM_FORMAT_YUYV,
+        DRM_FORMAT_UYVY,
+        DRM_FORMAT_YVYU,
+        DRM_FORMAT_VYUY,
+        DRM_FORMAT_YUV420,
+        DRM_FORMAT_YVU420,
+        DRM_FORMAT_YUV422,
+        DRM_FORMAT_YVU422,
+        DRM_FORMAT_YUV444,
+        DRM_FORMAT_YVU444,
+        DRM_FORMAT_P010,
+        DRM_FORMAT_P012,
+        DRM_FORMAT_P016,
+        DRM_FORMAT_Y210,
+        DRM_FORMAT_Y212,
+        DRM_FORMAT_Y216,
+        DRM_FORMAT_XYUV8888,
+        DRM_FORMAT_XVYU2101010,
+        DRM_FORMAT_XVYU12_16161616,
+        DRM_FORMAT_XVYU16161616
+    };
+
+    return formats;
+}
+
 const RFormatInfo *RDRMFormat::GetInfo(RFormat format) noexcept
 {
     static RFormatInfoMap map;

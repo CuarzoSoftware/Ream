@@ -33,6 +33,7 @@ boost_dep       = dependency('boost', modules : ['container'])
 header_dirs = [
     ['src/CZ/Ream', ''],
     ['src/CZ/Ream/DRM', 'DRM'],
+    ['src/CZ/Ream/RS', 'RS'],
     ['src/CZ/Ream/GL', 'GL'],
     ['src/CZ/Ream/WL', 'WL'],
     ['src/CZ/Ream/GBM', 'GBM'],

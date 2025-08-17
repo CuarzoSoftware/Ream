@@ -17,7 +17,6 @@
 #include <CZ/skia/gpu/ganesh/SkImageGanesh.h>
 #include <CZ/skia/core/SkColorSpace.h>
 
-#include <mutex>
 #include <gbm.h>
 #include <xf86drm.h>
 #include <drm_fourcc.h>
