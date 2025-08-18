@@ -1,4 +1,5 @@
 #include <CZ/Ream/SK/RSKFormat.h>
+#include <CZ/Ream/DRM/RDRMFormat.h>
 #include <unordered_map>
 #include <drm_fourcc.h>
 
@@ -33,6 +34,8 @@ public:
         emplace(DRM_FORMAT_R8,            kR8_unorm_SkColorType);
         emplace(DRM_FORMAT_R16,           kA16_unorm_SkColorType);
         emplace(DRM_FORMAT_GR1616,        kR16G16_unorm_SkColorType);
+        emplace(DRM_FORMAT_A8,            kAlpha_8_SkColorType); // Fake
+
     }
 };
 
@@ -48,7 +51,7 @@ class RDRMFromSKMap : public std::unordered_map<SkColorType, RFormat>
 public:
     RDRMFromSKMap() noexcept
     {
-        emplace(kAlpha_8_SkColorType,             DRM_FORMAT_R8);
+        emplace(kAlpha_8_SkColorType,             DRM_FORMAT_A8); // Fake
         emplace(kRGB_565_SkColorType,             DRM_FORMAT_RGB565);
         emplace(kARGB_4444_SkColorType,           DRM_FORMAT_ARGB4444);
         emplace(kRGBA_8888_SkColorType,           DRM_FORMAT_ABGR8888);
@@ -106,7 +109,8 @@ const std::unordered_set<RFormat> &RSKFormat::SupportedFormats() noexcept
         DRM_FORMAT_GR88,
         DRM_FORMAT_R8,
         DRM_FORMAT_R16,
-        DRM_FORMAT_GR1616
+        DRM_FORMAT_GR1616,
+        DRM_FORMAT_A8 // Fake
     };
 
     return formats;

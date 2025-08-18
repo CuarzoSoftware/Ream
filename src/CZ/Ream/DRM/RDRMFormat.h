@@ -8,6 +8,7 @@
 #include <drm_fourcc.h>
 #include <unordered_set>
 
+// TODO: Replace with std::flat_set C++23
 #define REAM_FLAT_SET boost::container::flat_set
 
 // Little hack to support GL_ALPHA

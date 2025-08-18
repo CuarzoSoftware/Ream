@@ -17,9 +17,7 @@ public:
         emplace(DRM_FORMAT_ABGR8888,      RGLFormat{ .format = GL_RGBA,     .internalFormat = GL_RGBA8_OES,         .type = GL_UNSIGNED_BYTE });
         emplace(DRM_FORMAT_BGR888,        RGLFormat{ .format = GL_RGB,      .internalFormat = GL_RGB8_OES,          .type = GL_UNSIGNED_BYTE });
 
-        // Hacky
-        emplace(DRM_FORMAT_A8,            RGLFormat{ .format = GL_ALPHA,    .internalFormat = GL_ALPHA,             .type = GL_UNSIGNED_BYTE });
-        emplace(DRM_FORMAT_R8,            RGLFormat{ .format = GL_ALPHA,    .internalFormat = GL_ALPHA,             .type = GL_UNSIGNED_BYTE });
+        emplace(DRM_FORMAT_A8,            RGLFormat{ .format = GL_ALPHA,    .internalFormat = GL_ALPHA,             .type = GL_UNSIGNED_BYTE }); // Fake
 
         if (std::endian::native == std::endian::little)
         {

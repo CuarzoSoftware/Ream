@@ -17,7 +17,7 @@ public:
         emplace(DRM_FORMAT_ABGR8888, RFormatInfo{ .format = DRM_FORMAT_ABGR8888, .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = true});
         emplace(DRM_FORMAT_XBGR8888, RFormatInfo{ .format = DRM_FORMAT_XBGR8888, .bytesPerBlock = 4, .blockWidth = 1, .blockHeight = 1, .bpp = 32, .depth = 24, .planes = 1, .alpha = false});
 
-        emplace(DRM_FORMAT_A8, RFormatInfo{ .format = DRM_FORMAT_A8, .bytesPerBlock = 1, .blockWidth = 1, .blockHeight = 1, .bpp = 8, .depth = 0, .planes = 1, .alpha = true});
+        emplace(DRM_FORMAT_A8, RFormatInfo{ .format = DRM_FORMAT_A8, .bytesPerBlock = 1, .blockWidth = 1, .blockHeight = 1, .bpp = 8, .depth = 0, .planes = 1, .alpha = true}); // Fake
         emplace(DRM_FORMAT_C8, RFormatInfo{ .format = DRM_FORMAT_C8, .bytesPerBlock = 1, .blockWidth = 1, .blockHeight = 1, .bpp = 8, .depth = 8, .planes = 1, .alpha = false});
         emplace(DRM_FORMAT_RGB332,   RFormatInfo{ .format = DRM_FORMAT_RGB332,   .bytesPerBlock = 1, .blockWidth = 1, .blockHeight = 1, .bpp = 8,   .depth = 8,  .planes = 1, .alpha = false });
         emplace(DRM_FORMAT_BGR233,   RFormatInfo{ .format = DRM_FORMAT_BGR233,   .bytesPerBlock = 1, .blockWidth = 1, .blockHeight = 1, .bpp = 8,   .depth = 8,  .planes = 1, .alpha = false });
@@ -112,7 +112,7 @@ const std::unordered_set<RFormat> &RDRMFormat::SupportedFormats() noexcept
         DRM_FORMAT_ABGR8888,
         DRM_FORMAT_XBGR8888,
 
-        DRM_FORMAT_A8,
+        DRM_FORMAT_A8, // Fake
         DRM_FORMAT_C8,
         DRM_FORMAT_RGB332,
         DRM_FORMAT_BGR233,

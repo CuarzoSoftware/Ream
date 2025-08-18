@@ -87,6 +87,8 @@ namespace CZ
     class RVKPainter;
     class RVKSync;
 
+    class RVKExtensions;
+
     // Raster
     class RRSCore;
     class RRSDevice;
