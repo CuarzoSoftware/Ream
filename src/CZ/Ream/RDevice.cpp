@@ -23,12 +23,13 @@ RDevice::~RDevice() noexcept
             close(drmFd());
             m_drmFd = -1;
         }
+    }
+    // Else: fds are closed by the RDRMPlatformHandle
 
-        if (drmFdReadOnly() >= 0)
-        {
-            close(drmFdReadOnly());
-            m_drmFdReadOnly = -1;
-        }
+    if (drmFdReadOnly() >= 0)
+    {
+        close(drmFdReadOnly());
+        m_drmFdReadOnly = -1;
     }
 }
 

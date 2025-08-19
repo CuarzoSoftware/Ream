@@ -150,7 +150,7 @@ bool RVKCore::initInstanceValidationLayers() noexcept
 
     if (vkLog.level() >= CZInfo)
     {
-        vkLog(CZInfo, "Vk Instance Validation Layers:");
+        vkLog(CZInfo, "VkInstance Validation Layers:");
 
         for (const auto &ext : m_instanceValidationLayers)
             vkLog(CZInfo, " - {}", ext.layerName);

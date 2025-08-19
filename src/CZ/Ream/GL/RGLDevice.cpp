@@ -210,11 +210,11 @@ bool RGLDevice::initDRM() noexcept
 
 bool RGLDevice::initEGLDisplayDRM() noexcept
 {
-    drmDevicePtr device;
-
     struct stat stat;
     if (fstat(m_drmFd, &stat) == 0)
         m_id = stat.st_rdev;
+
+    drmDevicePtr device;
 
     if (drmGetDevice(m_drmFd, &device) == 0)
     {

@@ -12,12 +12,11 @@
  * It is created via RSurface::beginPass().
  *
  * Rendering commands can be recorded via the associated RPainter, accessible using the
- * call operator `operator()`. Once all rendering commands are recorded, you must call
- * end() to finalize the pass.
+ * call operator `operator()`. Once all rendering commands are recorded, call end() to
+ * finalize the pass or wait for it to go out of scope. The pass is automatically ended
+ * on destruction if it hasn't been explicitly ended.
  *
- * @warning If the pass is in an invalid state (see isValid()), it MUST NOT be used.
- *
- * The pass is automatically ended on destruction if it hasn't been explicitly ended.
+ * @warning Do not attempt to record more commands after the pass finishes.
  */
 class CZ::RPass
 {
