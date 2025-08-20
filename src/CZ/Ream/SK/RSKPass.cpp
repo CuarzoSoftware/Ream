@@ -6,6 +6,7 @@
 #include <CZ/Ream/RDevice.h>
 #include <CZ/Ream/RSync.h>
 #include <CZ/Ream/RImage.h>
+#include <CZ/Ream/RCore.h>
 
 using namespace CZ;
 
@@ -15,7 +16,10 @@ bool RSKPass::end() noexcept
         return false;
 
     m_canvas->restore();
-    m_canvas->getSurface()->recordingContext()->asDirectContext()->flush();
+
+    if (m_image->core()->asGL())
+        m_canvas->getSurface()->recordingContext()->asDirectContext()->flush();
+
     m_image->setWriteSync(RSync::Make(m_device));
     m_image.reset();
     m_glCurrent.reset();
@@ -49,7 +53,9 @@ RSKPass::RSKPass(const SkMatrix &matrix, std::shared_ptr<RImage> image, RDevice 
     if (device->asGL())
         m_glCurrent.reset(new RGLMakeCurrent(RGLMakeCurrent::FromDevice(device->asGL(), true)));
 
-    skSurface->recordingContext()->asDirectContext()->resetContext();
+    if (m_image->core()->asGL())
+        skSurface->recordingContext()->asDirectContext()->resetContext();
+
     m_canvas = skSurface->getCanvas();
     m_canvas->save();
     m_canvas->setMatrix(matrix);

@@ -126,6 +126,8 @@ namespace CZ
         RImageCap_SkSurface = 1u << 3,
         RImageCap_DRMFb     = 1u << 4,
         RImageCap_GBMBo     = 1u << 5,
+
+        RImageCap_All       = 0x3F
     };
 
     struct RImageConstraints
