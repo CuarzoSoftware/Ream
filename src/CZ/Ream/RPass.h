@@ -21,6 +21,7 @@
 class CZ::RPass
 {
 public:
+    static RPass MakeInvalid() noexcept { return RPass(); }
 
     /// Automatically ends the pass if still valid.
     ~RPass() noexcept { end(); }
@@ -58,14 +59,30 @@ public:
     RPass(const RPass&) = delete;
     RPass& operator=(const RPass&) = delete;
 
-    RPass(RPass&&) noexcept = default;
-    RPass& operator=(RPass&&) noexcept = default;
+    RPass(RPass&& other) noexcept
+    {
+        m_surface = std::move(other.m_surface);
+        m_painter = other.m_painter;
+        other.m_painter = nullptr;
+    }
+
+    // Move assignment
+    RPass& operator=(RPass&& other) noexcept
+    {
+        if (this != &other)
+        {
+            end();
+            m_surface = std::move(other.m_surface);
+            m_painter = other.m_painter;
+            other.m_painter = nullptr;
+        }
+        return *this;
+    }
 private:
     friend class RSurface;
     RPass(std::shared_ptr<RSurface> surface = nullptr, RPainter *painter = nullptr) noexcept;
     RPainter *m_painter {};
     std::shared_ptr<RSurface> m_surface;
-    RLockGuard m_lock;
 };
 
 #endif // CZ_RPASS_H

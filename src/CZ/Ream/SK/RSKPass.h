@@ -24,6 +24,8 @@ class CZ::RSKPass
 {
 public:
 
+    static RSKPass MakeInvalid() noexcept { return RSKPass(); }
+
     /// Automatically ends the pass if still valid.
     ~RSKPass() noexcept { end(); }
 
@@ -60,10 +62,33 @@ public:
     RSKPass(const RSKPass&) = delete;
     RSKPass& operator=(const RSKPass&) = delete;
 
-    RSKPass(RSKPass&&) noexcept = default;
-    RSKPass& operator=(RSKPass&&) noexcept = default;
+    RSKPass(RSKPass&& other) noexcept
+    {
+        m_glCurrent = std::move(other.m_glCurrent);
+        m_image = std::move(other.m_image);
+        m_device = other.m_device;
+        m_canvas = other.m_canvas;
+        other.m_device = nullptr;
+        other.m_canvas = nullptr;
+    }
+
+    // Move assignment
+    RSKPass& operator=(RSKPass&& other) noexcept
+    {
+        if (this != &other) {
+            end();
+            m_glCurrent = std::move(other.m_glCurrent);
+            m_image = std::move(other.m_image);
+            m_device = other.m_device;
+            m_canvas = other.m_canvas;
+            other.m_device = nullptr;
+            other.m_canvas = nullptr;
+        }
+        return *this;
+    }
 private:
     friend class RSurface;
+    RSKPass() noexcept = default;
     RSKPass(const SkMatrix &matrix, std::shared_ptr<RImage> image = nullptr, RDevice *device = nullptr) noexcept;
     std::shared_ptr<RGLMakeCurrent> m_glCurrent;
     RDevice *m_device {};
