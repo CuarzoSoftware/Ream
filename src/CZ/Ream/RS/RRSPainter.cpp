@@ -99,7 +99,7 @@ static sk_sp<SkShader> MakeImageShader(const RDrawImageInfo &image) noexcept
 
 bool RRSPainter::drawImage(const RDrawImageInfo &image, const SkRegion *region, const RDrawImageInfo *mask) noexcept
 {
-    const auto surface { m_surface.lock() };
+    const auto surface { m_surface };
     SkPath clip;
 
     switch (validateDrawImage(image, region, mask, surface, clip))
@@ -115,7 +115,7 @@ bool RRSPainter::drawImage(const RDrawImageInfo &image, const SkRegion *region, 
     auto *c { surface->image()->skSurface()->getCanvas() };
     c->save();
     c->resetMatrix();
-    c->setMatrix(RMatrixUtils::VirtualToImage(surface->transform(), surface->viewport(), surface->dst()));
+    c->setMatrix(RMatrixUtils::VirtualToImage(geometry().transform, geometry().viewport, geometry().dst));
     c->clipPath(clip);
 
     // Color factor
@@ -152,12 +152,9 @@ bool RRSPainter::drawColor(const SkRegion &region) noexcept
     if (blendMode() == RBlendMode::SrcOver && (SkColorGetA(color()) == 0 || factor().fA <= 0.f || opacity() <= 0.f))
         return true;
 
-    const auto surface { m_surface.lock() };
+    const auto surface { m_surface };
 
-    if (!surface || !surface->image())
-        return false;
-
-    SkRegion clip { surface->viewport().roundOut() };
+    SkRegion clip { geometry().viewport.roundOut() };
     clip.op(region, SkRegion::kIntersect_Op);
     if (clip.isEmpty())
         return true;
@@ -167,7 +164,7 @@ bool RRSPainter::drawColor(const SkRegion &region) noexcept
 
     auto *c { surface->image()->skSurface()->getCanvas() };
     c->save();
-    c->setMatrix(RMatrixUtils::VirtualToImage(surface->transform(), surface->viewport(), surface->dst()));
+    c->setMatrix(RMatrixUtils::VirtualToImage(geometry().transform, geometry().viewport, geometry().dst));
     c->clipPath(path);
 
     auto unColor { SkColor4f::FromColor(state().options.has(Option::ColorIsPremult) ? SKColorUnpremultiply(color()) : color()) };
@@ -178,16 +175,6 @@ bool RRSPainter::drawColor(const SkRegion &region) noexcept
     c->drawColor(unColor, static_cast<SkBlendMode>(blendMode()));
     c->restore();
     return true;
-}
-
-std::shared_ptr<RRSPainter> RRSPainter::Make(RRSDevice *device) noexcept
-{
-    return std::shared_ptr<RRSPainter>(new RRSPainter(device));
-}
-
-void RRSPainter::beginPass() noexcept
-{
-    clearHistory();
 }
 
 RRSPainter::ValRes RRSPainter::validateDrawImage(const RDrawImageInfo &image, const SkRegion *region, const RDrawImageInfo *mask, std::shared_ptr<RSurface> surface, SkPath &outClip) noexcept
@@ -213,7 +200,7 @@ RRSPainter::ValRes RRSPainter::validateDrawImage(const RDrawImageInfo &image, co
         return ValRes::Error;
     }
 
-    SkRegion clip { surface->viewport().roundOut() };
+    SkRegion clip { geometry().viewport.roundOut() };
 
     if (region)
         clip.op(*region, SkRegion::kIntersect_Op);
@@ -226,4 +213,14 @@ RRSPainter::ValRes RRSPainter::validateDrawImage(const RDrawImageInfo &image, co
 
     clip.getBoundaryPath(&outClip);
     return ValRes::Ok;
+}
+
+bool RRSPainter::setGeometry(const RSurfaceGeometry &geometry) noexcept
+{
+    // TODO: optimize
+    if (!geometry.isValid())
+        return false;
+
+    m_state.geometry = geometry;
+    return true;
 }

@@ -520,15 +520,16 @@ bool RGLDevice::initPainter() noexcept
         return new ThreadData(device);
     });
 
-    return painter() != nullptr;
+    return true;
 }
 
-RPainter *RGLDevice::painter() const noexcept
+std::shared_ptr<RPainter> RGLDevice::makePainter(std::shared_ptr<RSurface> surface) noexcept
 {
-    return static_cast<ThreadData*>(m_threadData->getData((RGLDevice*)this))->painter.get();
+    assert(surface);
+    return std::shared_ptr<RPainter>(new RGLPainter(surface, this));
 }
 
 RGLDevice::ThreadData::ThreadData(RGLDevice *device) noexcept
 {
-    painter = RGLPainter::Make(device);
+    CZ_UNUSED(device)
 }

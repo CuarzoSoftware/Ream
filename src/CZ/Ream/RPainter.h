@@ -4,6 +4,7 @@
 #include <CZ/skia/core/SkRRect.h>
 #include <CZ/skia/core/SkColor.h>
 #include <CZ/skia/core/SkCanvas.h>
+#include <CZ/Ream/RSurfaceGeometry.h>
 #include <CZ/Ream/RObject.h>
 #include <CZ/Ream/RImageFilter.h>
 #include <CZ/Ream/RImageWrap.h>
@@ -115,11 +116,15 @@ public:
         SkScalar opacity { 1.f };
         SkColor color { SK_ColorBLACK };
         SkColor4f factor { 1.f, 1.f, 1.f, 1.f };
+        RSurfaceGeometry geometry {};
     };
 
     const State &state() const noexcept { return m_state; }
     void setState(const State &state) noexcept
     {
+        if (!state.geometry.isValid())
+            return;
+
         m_state = state;
         setOpacity(m_state.opacity);
     }
@@ -146,18 +151,9 @@ public:
     void reset() noexcept;
 
     /**
-     * @brief Enables a rendering option.
-     *
-     * @param option The option to enable.
+     * @brief Sets an option.
      */
-    void enable(Option option) noexcept { m_state.options.add(option); }
-
-    /**
-     * @brief Disables a rendering option.
-     *
-     * @param option The option to disable.
-     */
-    void disable(Option option) noexcept { m_state.options.remove(option); }
+    void setOption(Option option, bool enabled) noexcept { m_state.options.setFlag(option, enabled); }
 
     /**
      * @brief Sets the current rendering options, replacing any previously set flags.
@@ -265,32 +261,29 @@ public:
      */
     virtual bool drawColor(const SkRegion& region) noexcept = 0;
 
+    virtual bool setGeometry(const RSurfaceGeometry &geometry) noexcept = 0;
+    const RSurfaceGeometry &geometry() const noexcept { return m_state.geometry; }
+
     /**
-     * @brief Clears the entire surface using the current color.
-     *
-     * This is equivalent to filling the entire surface with the color set by color().
-     *
-     * @return true if the surface was successfully cleared; false otherwise.
+     * @brief Clears the current viewport using the current color.
      */
-    bool clearSurface() noexcept;
+    void clear() noexcept;
 
     /**
      * @brief Returns the device used for rendering by this painter.
      *
      * @return Pointer to the associated RDevice.
      */
-    RDevice* device() const noexcept { return m_device; }
-
-    bool endPass() noexcept;
+    RDevice *device() const noexcept { return m_device; }
+    std::shared_ptr<RSurface> surface() const noexcept { return m_surface; }
 protected:
     friend class RSurface;
     friend class RPass;
     friend class RSKPass;
-    virtual void beginPass() noexcept = 0;
     State m_state {};
     std::vector<State> m_history;
-    RPainter(RDevice *device) noexcept : m_device(device) {}
-    std::weak_ptr<RSurface> m_surface;
+    RPainter(std::shared_ptr<RSurface> surface, RDevice *device) noexcept : m_surface(surface), m_device(device) { reset(); }
+    std::shared_ptr<RSurface> m_surface;
     RDevice *m_device;
 };
 

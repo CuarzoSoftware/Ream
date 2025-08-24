@@ -30,24 +30,24 @@ public:
 
     static constexpr CZBitset<Features> VertFeatures { HasImage | HasMask };
 
-    static std::shared_ptr<RGLShader> GetOrMake(RGLPainter *painter, CZBitset<Features> features, GLenum type) noexcept;
+    static std::shared_ptr<RGLShader> GetOrMake(RGLDevice *device, CZBitset<Features> features, GLenum type) noexcept;
 
     ~RGLShader() noexcept;
     GLuint id() const noexcept { return m_id; }
     GLenum type() const noexcept { return m_type; }
     CZBitset<Features> features() const noexcept { return m_features; };
-    RGLPainter *painter() const noexcept { return m_painter; };
+    RGLDevice *device() const noexcept { return m_device; };
 
 private:
-    RGLShader(RGLPainter *painter, CZBitset<Features> features, GLenum type) noexcept :
-        m_type(type), m_features(features), m_painter(painter)
+    RGLShader(RGLDevice *device, CZBitset<Features> features, GLenum type) noexcept :
+        m_type(type), m_features(features), m_device(device)
     {}
 
     bool build() noexcept;
     GLuint m_id;
     GLenum m_type;
     CZBitset<Features> m_features;
-    RGLPainter *m_painter;
+    RGLDevice *m_device;
 };
 
 #endif // RGLSHADER_H

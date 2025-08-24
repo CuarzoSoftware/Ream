@@ -2,7 +2,6 @@
 #define CZ_RRSDEVICE_H
 
 #include <CZ/Ream/RDevice.h>
-#include <thread>
 
 class CZ::RRSDevice : public RDevice
 {
@@ -18,8 +17,7 @@ private:
     bool initWL() noexcept;
     bool initDRM() noexcept;
     bool initFormats() noexcept;
-    RPainter *painter() const noexcept override;
-    mutable std::unordered_map<std::thread::id, std::shared_ptr<RRSPainter>> m_painters;
+    std::shared_ptr<RPainter> makePainter(std::shared_ptr<RSurface> surface) noexcept override;
 };
 
 #endif // CZ_RRSDEVICE_H

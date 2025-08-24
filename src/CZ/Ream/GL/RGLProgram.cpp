@@ -1,22 +1,23 @@
 #include <CZ/Ream/GL/RGLDevice.h>
 #include "CZ/Ream/GL/RGLMakeCurrent.h"
 #include <CZ/Ream/GL/RGLProgram.h>
-#include <CZ/Ream/GL/RGLPainter.h>
+#include <CZ/Ream/GL/RGLDevice.h>
 
 using namespace CZ;
 
-std::shared_ptr<RGLProgram> RGLProgram::GetOrMake(RGLPainter *painter, CZBitset<RGLShader::Features> features) noexcept
+std::shared_ptr<RGLProgram> RGLProgram::GetOrMake(RGLDevice *device, CZBitset<RGLShader::Features> features) noexcept
 {
-    auto it { painter->m_programs.find(features) };
+    auto *deviceData { (RGLDevice::ThreadData*)device->m_threadData->getData(device) };
+    auto it { deviceData->programs.find(features) };
 
-    if (it != painter->m_programs.end())
+    if (it != deviceData->programs.end())
         return it->second;
 
-    auto program { std::shared_ptr<RGLProgram>(new RGLProgram(painter, features)) };
+    auto program { std::shared_ptr<RGLProgram>(new RGLProgram(device, features)) };
 
     if (program->link())
     {
-        painter->m_programs.emplace(features, program);
+        deviceData->programs.emplace(features, program);
         return program;
     }
 
@@ -28,7 +29,7 @@ RGLProgram::~RGLProgram() noexcept
     if (m_id == 0)
         return;
 
-    auto current { RGLMakeCurrent::FromDevice(m_painter->device(), false) };
+    // MakeCurrent by RGLDevice::ThreadData
     glUseProgram(0);
     glDeleteProgram(m_id);
 }
@@ -38,21 +39,21 @@ void RGLProgram::bind() noexcept
     glUseProgram(m_id);
 }
 
-RGLProgram::RGLProgram(RGLPainter *painter, CZBitset<RGLShader::Features> features) noexcept :
+RGLProgram::RGLProgram(RGLDevice *device, CZBitset<RGLShader::Features> features) noexcept :
     m_features(features),
-    m_painter(painter)
+    m_device(device)
 {}
 
 bool RGLProgram::link() noexcept
 {
-    auto current { RGLMakeCurrent::FromDevice(m_painter->device(), false) };
+    auto current { RGLMakeCurrent::FromDevice(m_device, false) };
 
-    m_frag = RGLShader::GetOrMake(m_painter, m_features, GL_FRAGMENT_SHADER);
+    m_frag = RGLShader::GetOrMake(m_device, m_features, GL_FRAGMENT_SHADER);
 
     if (!m_frag)
         return false;
 
-    m_vert = RGLShader::GetOrMake(m_painter, m_features, GL_VERTEX_SHADER);
+    m_vert = RGLShader::GetOrMake(m_device, m_features, GL_VERTEX_SHADER);
 
     if (!m_vert)
         return false;
@@ -73,7 +74,7 @@ bool RGLProgram::link() noexcept
         std::string log(logLength, '\0'); // or use a char buffer
         glGetProgramInfoLog(m_id, logLength, nullptr, &log[0]);
 
-        m_painter->device()->log(CZError, CZLN, "Failed to link GL program: {}", log);
+        m_device->log(CZError, CZLN, "Failed to link GL program: {}", log);
         return false;
     }
 

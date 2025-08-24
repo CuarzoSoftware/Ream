@@ -1,7 +1,6 @@
 #include <CZ/skia/gpu/ganesh/GrDirectContext.h>
 #include <CZ/skia/gpu/ganesh/GrRecordingContext.h>
 #include <CZ/Ream/RMatrixUtils.h>
-#include <CZ/Ream/SK/RSKPass.h>
 #include <CZ/Ream/RResourceTracker.h>
 #include <CZ/Ream/RLog.h>
 #include <CZ/Ream/RSurface.h>
@@ -50,10 +49,9 @@ std::shared_ptr<RSurface> RSurface::Make(SkISize size, SkScalar scale, bool alph
 
     auto surface { std::shared_ptr<RSurface>(new RSurface(image)) };
     surface->m_self = surface;
-    surface->m_viewport = SkRect::MakeWH(size.width(), size.height());
+    surface->m_geometry.viewport = SkRect::MakeWH(size.width(), size.height());
     return surface;
 }
-
 
 std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image) noexcept
 {
@@ -71,37 +69,20 @@ std::shared_ptr<RSurface> RSurface::WrapImage(std::shared_ptr<RImage> image) noe
     return surface;
 }
 
-RPass RSurface::beginPass(RDevice *device) const noexcept
+std::shared_ptr<RPass> RSurface::beginPass(CZBitset<RPassCap> caps, RDevice *device) const noexcept
 {
-    if (!device)
-        device = RCore::Get()->mainDevice();
-
-    auto *painter { device->painter() };
-
-    if (!painter)
-        return {};
-
-    return { m_self.lock(), painter };
+    return RPass::Make(caps, m_self.lock(), device);
 }
 
-RSKPass RSurface::beginSKPass(RDevice *device) const noexcept
+bool RSurface::setGeometry(const RSurfaceGeometry &geometry) noexcept
 {
-    if (!device)
-        device = RCore::Get()->mainDevice();
-
-    return { RMatrixUtils::VirtualToImage(transform(), viewport(), dst()), m_image, device };
-}
-
-bool RSurface::setGeometry(SkRect viewport, SkRect dst, CZTransform transform) noexcept
-{
-    if (!viewport.isSorted() || !dst.isSorted() ||
-        viewport.isEmpty() || dst.isEmpty() ||
-        !viewport.isFinite() || !dst.isFinite())
+    if (!geometry.isValid())
+    {
+        RLog(CZError, CZLN, "Failed to set RSurface geometry (invalid geometry)");
         return false;
+    }
 
-    m_viewport = viewport;
-    m_dst = dst;
-    m_transform = transform;
+    m_geometry = geometry;
     return true;
 }
 
@@ -115,9 +96,9 @@ bool RSurface::resize(SkISize size, SkScalar scale, bool shrink) noexcept
         imageSize = size = {1, 1};
     }
 
-    m_viewport.fRight = m_viewport.fLeft + size.width();
-    m_viewport.fBottom = m_viewport.fTop + size.height();
-    m_dst = SkRect::MakeWH(imageSize.width(), imageSize.height());
+    m_geometry.viewport.fRight = m_geometry.viewport.fLeft + size.width();
+    m_geometry.viewport.fBottom = m_geometry.viewport.fTop + size.height();
+    m_geometry.dst = SkRect::MakeWH(imageSize.width(), imageSize.height());
 
     if (shrink)
     {
@@ -153,5 +134,8 @@ RSurface::RSurface(std::shared_ptr<RImage> image) noexcept :
 {
     assert(m_image);
     RResourceTrackerAdd(RSurfaceRes);
-    setGeometry(SkRect::Make(m_image->size()), SkRect::Make(m_image->size()), CZTransform::Normal);
+    setGeometry({
+        .viewport = SkRect::Make(m_image->size()),
+        .dst = SkRect::Make(m_image->size()),
+        .transform = CZTransform::Normal});
 }

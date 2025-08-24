@@ -17,9 +17,9 @@ using namespace CZ;
 void RGLPainter::calcPosProj(RSurface *surface, bool flipY, SkScalar *outMat) const noexcept
 {
     SkMatrix mat { RMatrixUtils::VirtualToNDC(
-        surface->transform(),
-        surface->viewport(),
-        surface->dst(),
+        geometry().transform,
+        geometry().viewport,
+        geometry().dst,
         surface->image()->size(),
         flipY) };
     mat.get9(outMat);
@@ -37,7 +37,7 @@ void RGLPainter::setScissors(RSurface *surface, bool flipY, const SkRegion &regi
     SkRect virtualBounds { SkRect::Make(region.getBounds()) };
 
     SkMatrix toFB = RMatrixUtils::VirtualToImage(
-        surface->transform(), surface->viewport(), surface->dst());
+        geometry().transform, geometry().viewport, geometry().dst);
 
     SkRect mapped;
     toFB.mapRect(&mapped, virtualBounds); // axis-aligned bounding box after rotation/flip
@@ -98,7 +98,7 @@ bool RGLPainter::drawImage(const RDrawImageInfo &imageInfo, const SkRegion *clip
     if (blendMode() == RBlendMode::SrcOver && (factor().fA <= 0.f || opacity() <= 0.f))
         return true;
 
-    auto surface { m_surface.lock() };
+    auto surface { m_surface };
 
     if (!surface || !surface->image())
     {
@@ -179,7 +179,7 @@ skipMask:
         RGLMakeCurrent(device()->eglDisplay(), eglSurface, eglSurface, device()->eglContext())
     };
     const auto features { calcDrawImageFeatures(image, &tex, mask ? &maskTex : nullptr) };
-    const auto prog { RGLProgram::GetOrMake(this, features) };
+    const auto prog { RGLProgram::GetOrMake(device(), features) };
 
     if (!prog)
     {
@@ -401,7 +401,7 @@ std::vector<GLfloat> RGLPainter::genVBO(const SkRegion &region) const noexcept
 
 SkRegion RGLPainter::calcDrawImageRegion(RSurface *surface, const RDrawImageInfo &imageInfo, const SkRegion *clip, const RDrawImageInfo *maskInfo) const noexcept
 {
-    SkRegion region { surface->viewport().roundOut() };
+    SkRegion region { geometry().viewport.roundOut() };
     region.op(imageInfo.dst, SkRegion::Op::kIntersect_Op);
 
     if (maskInfo)
@@ -418,12 +418,12 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
     if (blendMode() == RBlendMode::SrcOver && (SkColorGetA(color()) == 0 || factor().fA <= 0.f || opacity() <= 0.f))
         return true;
 
-    const auto surface { m_surface.lock() };
+    const auto surface { m_surface };
 
     if (!surface || !surface->image())
         return false;
 
-    const SkIRect clipRect { surface->viewport().roundOut() };
+    const SkIRect clipRect { geometry().viewport.roundOut() };
 
     SkRegion region;
 
@@ -455,7 +455,7 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
     }
 
     const auto features { calcDrawColorFeatures(colorF.fA) };
-    const auto prog { RGLProgram::GetOrMake(this, features) };
+    const auto prog { RGLProgram::GetOrMake(device(), features) };
 
     if (!prog)
     {
@@ -489,38 +489,14 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
     return true;
 }
 
-void RGLPainter::beginPass() noexcept
+bool RGLPainter::setGeometry(const RSurfaceGeometry &geometry) noexcept
 {
-    auto current { RGLMakeCurrent::FromDevice(device(), false) };
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1.0f);
-    glEnable(GL_BLEND);
-    glEnable(GL_TEXTURE_2D);
-    glEnable(GL_SCISSOR_TEST);
-    glDisable(GL_STENCIL_TEST);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DITHER);
-    glDisable(GL_POLYGON_OFFSET_FILL);
-    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-    glDisable(GL_SAMPLE_COVERAGE);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glCullFace(GL_BACK);
-    glLineWidth(1);
-    glHint(GL_GENERATE_MIPMAP_HINT, GL_FASTEST);
-    glPolygonOffset(0, 0);
-    glDepthFunc(GL_LESS);
-    glDepthRangef(0, 1);
-    glStencilMask(1);
-    glDepthMask(GL_FALSE);
-    glFrontFace(GL_CCW);
-    glBlendColor(0, 0, 0, 0);
-    glBlendEquation(GL_FUNC_ADD);
-    clearHistory();
+    // TODO: Optimize
+    if (!geometry.isValid())
+        return false;
+
+    m_state.geometry = geometry;
+    return true;
 }
 
 CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<RImage> image, RGLTexture *imageTex, RGLTexture *maskTex) const noexcept
@@ -671,30 +647,4 @@ SkColor4f RGLPainter::calcDrawColorColor() const noexcept
     }
 
     return colorF;
-}
-
-std::shared_ptr<RGLPainter> RGLPainter::Make(RGLDevice *device) noexcept
-{
-    auto painter { std::shared_ptr<RGLPainter>(new RGLPainter(device)) };
-
-    if (painter->init())
-        return painter;
-
-    return {};
-}
-
-bool RGLPainter::init() noexcept
-{
-    return true;
-    // TODO
-    auto current { RGLMakeCurrent::FromDevice(device(), false) };
-    auto testA { RGLProgram::GetOrMake(this, RGLShader::HasImage) };
-    auto testB { RGLProgram::GetOrMake(this, 0) };
-    return testA != nullptr && testB != nullptr;
-}
-
-bool RGLPainter::setSurface(std::shared_ptr<RSurface> surface) noexcept
-{
-    m_surface = surface;
-    return true;
 }

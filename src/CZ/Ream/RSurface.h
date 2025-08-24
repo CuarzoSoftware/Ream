@@ -2,7 +2,10 @@
 #define RSURFACE_H
 
 #include <CZ/CZTransform.h>
+#include <CZ/CZBitset.h>
 #include <CZ/Ream/RObject.h>
+#include <CZ/Ream/RSurfaceGeometry.h>
+#include <CZ/Ream/RPassCap.h>
 #include <CZ/skia/core/SkRect.h>
 #include <memory>
 
@@ -34,7 +37,7 @@ public:
      *
      * @note If additional caps are needed, create an RImage manually and use WrapImage().
      */
-    static std::shared_ptr<RSurface> Make(SkISize size, SkScalar scale, bool alpha) noexcept;
+    [[nodiscard]] static std::shared_ptr<RSurface> Make(SkISize size, SkScalar scale, bool alpha) noexcept;
 
     /**
      * @brief Creates a surface from an existing RImage.
@@ -46,7 +49,7 @@ public:
      * @param image An existing image with suitable caps.
      * @return A new surface wrapping the image, or nullptr on failure.
      */
-    static std::shared_ptr<RSurface> WrapImage(std::shared_ptr<RImage> image) noexcept;
+    [[nodiscard]] static std::shared_ptr<RSurface> WrapImage(std::shared_ptr<RImage> image) noexcept;
 
     /**
      * @brief Begins a rendering pass using an RPainter.
@@ -54,15 +57,7 @@ public:
      * @param device Optional device to use. If nullptr, the main device is used.
      * @return A valid RPass object on success, or an invalid RPass on failure.
      */
-    RPass beginPass(RDevice *device = nullptr) const noexcept;
-
-    /**
-     * @brief Begins a rendering pass using Skia’s SkCanvas.
-     *
-     * @param device Optional device to use. If nullptr, the main device is used.
-     * @return A valid RSKPass on success, or an invalid RSKPass on failure.
-     */
-    RSKPass beginSKPass(RDevice *device = nullptr) const noexcept;
+    [[nodiscard]] std::shared_ptr<RPass> beginPass(CZBitset<RPassCap> caps = RPassCap_Painter | RPassCap_SkCanvas, RDevice *device = nullptr) const noexcept;
 
     /**
      * @brief Returns the backing image used by the surface.
@@ -70,32 +65,6 @@ public:
      * @return Shared pointer to the underlying RImage. Always valid.
      */
     std::shared_ptr<RImage> image() const noexcept { return m_image; }
-
-    /**
-     * @brief Returns the current transformation applied to the surface.
-     *
-     * @return The transform currently applied.
-     */
-    CZTransform transform() const noexcept { return m_transform; }
-
-    /**
-     * @brief Portion of the world to capture.
-     */
-    SkRect viewport() const noexcept { return m_viewport; }
-
-    /**
-     * @brief Sets the position of the viewport without changing its size.
-     *
-     * @param pos New top-left position in virtual coordinates.
-     */
-    void setViewportPos(SkPoint pos) noexcept { m_viewport.offsetTo(pos.x(), pos.y()); }
-
-    /**
-     * @brief Returns the destination rectangle within the surface’s pixel buffer.
-     *
-     * @return A SkRect representing the destination in pixel coordinates.
-     */
-    SkRect dst() const noexcept { return m_dst; }
 
     /**
      * @brief Updates the viewport -> (transform) -> dst mapping.
@@ -107,7 +76,8 @@ public:
      * @param transform Optional transform to apply (defaults to CZTransform::Normal).
      * @return True if geometry was successfully set; false otherwise.
      */
-    bool setGeometry(SkRect viewport, SkRect dst, CZTransform transform = CZTransform::Normal) noexcept;
+    bool setGeometry(const RSurfaceGeometry &geometry) noexcept;
+    const RSurfaceGeometry &geometry() const noexcept { return m_geometry; }
 
     /**
      * @brief Resizes the surface and optionally shrinks the backing image to fit the new destination size.
@@ -127,9 +97,7 @@ public:
 private:
     RSurface(std::shared_ptr<RImage> image) noexcept;
     std::shared_ptr<RImage> m_image;
-    SkRect m_viewport {};
-    SkRect m_dst {};
-    CZTransform m_transform { CZTransform::Normal };
+    RSurfaceGeometry m_geometry {};
     std::weak_ptr<RSurface> m_self;
 };
 

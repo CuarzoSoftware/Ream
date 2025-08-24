@@ -40,6 +40,13 @@ RGLDevice *RDevice::asGL() noexcept
     return nullptr;
 }
 
+RRSDevice *RDevice::asRS() noexcept
+{
+    if (core().graphicsAPI() == RGraphicsAPI::RS)
+        return (RRSDevice*)this;
+    return nullptr;
+}
+
 RDevice::RDevice(RCore &core) noexcept :
     m_core(core)
 {

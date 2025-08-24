@@ -204,6 +204,7 @@ void Window::update() noexcept
     if (surf)
     {
         auto pass { surf->beginPass() };
+        auto *p { pass->getPainter() };
 
         RDrawImageInfo info {};
         info.image = testImage;
@@ -215,10 +216,9 @@ void Window::update() noexcept
             testImage->size().width(),
             testImage->size().height());
         info.dst = SkIRect::MakeXYWH(10, 10, 256, 256);
-        pass()->drawImage(info);
-        pass()->setColor(SK_ColorCYAN);
-        pass()->drawColor(SkRegion(SkIRect::MakeXYWH(10, 10, 40, 40)));
-        pass.end();
+        p->drawImage(info);
+        p->setColor(SK_ColorCYAN);
+        p->drawColor(SkRegion(SkIRect::MakeXYWH(10, 10, 40, 40)));
     }
     else
         RLog(CZError, "NO SURF");

@@ -132,14 +132,8 @@ bool RRSDevice::initFormats() noexcept
     return true;
 }
 
-RPainter *RRSDevice::painter() const noexcept
+std::shared_ptr<RPainter> RRSDevice::makePainter(std::shared_ptr<RSurface> surface) noexcept
 {
-    auto it { m_painters.find(std::this_thread::get_id()) };
-
-    if (it != m_painters.end())
-        return it->second.get();
-
-    auto p { RRSPainter::Make((RRSDevice*)this) };
-    m_painters.emplace(std::this_thread::get_id(), p);
-    return p.get();
+    assert(surface);
+    return std::shared_ptr<RPainter>(new RRSPainter(surface, this));
 }

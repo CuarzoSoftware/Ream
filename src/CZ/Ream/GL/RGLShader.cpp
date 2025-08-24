@@ -1,15 +1,10 @@
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
 #include <CZ/Ream/GL/RGLShader.h>
-#include <CZ/Ream/GL/RGLPainter.h>
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <format>
 
 #include <string>
-#include <sstream>
 #include <unordered_map>
-#include <stack>
-#include <regex>
-#include <iostream>
 
 using namespace CZ;
 
@@ -187,15 +182,16 @@ void main()
 }
 )";
 
-std::shared_ptr<RGLShader> RGLShader::GetOrMake(RGLPainter *painter, CZBitset<Features> features, GLenum type) noexcept
+std::shared_ptr<RGLShader> RGLShader::GetOrMake(RGLDevice *device, CZBitset<Features> features, GLenum type) noexcept
 {
-    auto current { RGLMakeCurrent::FromDevice(painter->device(), false) };
-    auto *map { &painter->m_fragShaders };
+    auto current { RGLMakeCurrent::FromDevice(device, false) };
+    auto *deviceData { (RGLDevice::ThreadData*)device->m_threadData->getData(device) };
+    auto *map { &deviceData->fragShaders };
 
     if (type == GL_VERTEX_SHADER)
     {
         features = features.get() & VertFeatures;
-        map = &painter->m_vertShaders;
+        map = &deviceData->vertShaders;
     }
 
     auto it { map->find(features) };
@@ -203,7 +199,7 @@ std::shared_ptr<RGLShader> RGLShader::GetOrMake(RGLPainter *painter, CZBitset<Fe
     if (it != map->end())
         return it->second;
 
-    auto shader { std::shared_ptr<RGLShader>(new RGLShader(painter, features, type)) };
+    auto shader { std::shared_ptr<RGLShader>(new RGLShader(device, features, type)) };
 
     if (shader->build())
     {
@@ -219,7 +215,7 @@ RGLShader::~RGLShader() noexcept
     if (m_id == 0)
         return;
 
-    auto current { RGLMakeCurrent::FromDevice(painter()->device(), false) };
+    // MakeCurrent by RGLDevice::ThreadData
     glDeleteShader(m_id);
 }
 
@@ -275,6 +271,6 @@ bool RGLShader::build() noexcept
             UInt32(m_features.get() & 0x3)) // Blend Mode
     };
 
-    m_id = CompileShader(painter()->device(), type(), featuresStr);
+    m_id = CompileShader(device(), type(), featuresStr);
     return m_id != 0;
 }

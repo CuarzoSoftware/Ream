@@ -9,6 +9,7 @@ public:
     bool drawImage(const RDrawImageInfo &image, const SkRegion *region = nullptr, const RDrawImageInfo *mask = nullptr) noexcept override;
     bool drawColor(const SkRegion &region) noexcept override;
     RRSDevice *device() const noexcept { return (RRSDevice*)m_device; }
+    bool setGeometry(const RSurfaceGeometry &geometry) noexcept override;
 private:
     friend class RRSDevice;
 
@@ -19,10 +20,7 @@ private:
         Error
     };
 
-    static std::shared_ptr<RRSPainter> Make(RRSDevice *device) noexcept;
-    RRSPainter(RRSDevice *device) noexcept : RPainter((RDevice*)device) {};
-    void beginPass() noexcept override;
-
+    RRSPainter(std::shared_ptr<RSurface> surface, RRSDevice *device) noexcept : RPainter(surface, (RDevice*)device) {};
     ValRes validateDrawImage(const RDrawImageInfo &image, const SkRegion *region, const RDrawImageInfo *mask, std::shared_ptr<RSurface> surface, SkPath &outClip) noexcept;
 };
 

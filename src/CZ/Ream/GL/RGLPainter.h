@@ -12,9 +12,9 @@ public:
     bool drawImage(const RDrawImageInfo& image, const SkRegion *region = nullptr, const RDrawImageInfo* mask = nullptr) noexcept override;
     bool drawColor(const SkRegion &region) noexcept override;
     RGLDevice *device() const noexcept { return (RGLDevice*)m_device; }
+    bool setGeometry(const RSurfaceGeometry &geometry) noexcept override;
 
 private:
-    void beginPass() noexcept override;
     CZBitset<RGLShader::Features> calcDrawImageFeatures(std::shared_ptr<RImage> image, RGLTexture *imageTex, RGLTexture *maskTex) const noexcept;
     CZBitset<RGLShader::Features> calcDrawColorFeatures(SkScalar finalAlpha) const noexcept;
     SkColor4f calcDrawColorColor() const noexcept;
@@ -30,13 +30,7 @@ private:
     friend class RGLDevice;
     friend class RGLShader;
     friend class RGLProgram;
-    static std::shared_ptr<RGLPainter> Make(RGLDevice *device) noexcept;
-    bool init() noexcept;
-    RGLPainter(RGLDevice *device) noexcept : RPainter((RDevice*)device) {};
-    bool setSurface(std::shared_ptr<RSurface> surface) noexcept;
-    std::unordered_map<UInt32, std::shared_ptr<RGLShader>> m_vertShaders;
-    std::unordered_map<UInt32, std::shared_ptr<RGLShader>> m_fragShaders;
-    std::unordered_map<UInt32, std::shared_ptr<RGLProgram>> m_programs;
+    RGLPainter(std::shared_ptr<RSurface> surface, RGLDevice *device) noexcept : RPainter(surface, (RDevice*)device) {};
 };
 
 #endif // RGLPAINTER_H

@@ -17,11 +17,6 @@ bool RVKDevice::hasExtension(const char *extension) const noexcept
     return false;
 }
 
-RPainter *RVKDevice::painter() const noexcept
-{
-    return nullptr;
-}
-
 RVKDevice *RVKDevice::Make(RVKCore &core, VkPhysicalDevice physicalDevice) noexcept
 {
     auto device { new RVKDevice(core, physicalDevice) };
@@ -38,6 +33,12 @@ RVKDevice::RVKDevice(RVKCore &core, VkPhysicalDevice physicalDevice) noexcept :
     m_physicalDevice(physicalDevice)
 {
 
+}
+
+std::shared_ptr<RPainter> RVKDevice::makePainter(std::shared_ptr<RSurface>) noexcept
+{
+    // TODO
+    return {};
 }
 
 bool RVKDevice::init() noexcept

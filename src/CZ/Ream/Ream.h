@@ -61,9 +61,6 @@ namespace CZ
     struct RPresentationTime;
     struct RDMABufferInfo;
 
-    // Skia
-    class RSKPass;
-
     // GL/EGL
     class RGLCore;
     class RGLDevice;
@@ -72,6 +69,7 @@ namespace CZ
     class RGLSync;
     class RGLShader;
     class RGLProgram;
+    class RGLPass;
 
     class RGLStrings;
     class RGLMakeCurrent;
@@ -94,6 +92,7 @@ namespace CZ
     class RRSDevice;
     class RRSImage;
     class RRSPainter;
+    class RRSPass;
 }
 
 #endif

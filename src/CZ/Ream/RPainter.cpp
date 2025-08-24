@@ -17,7 +17,7 @@ void RPainter::save() noexcept
 void RPainter::restore() noexcept
 {
     if (m_history.empty())
-        m_state = {};
+        reset();
     else
     {
         m_state = m_history.back();
@@ -34,48 +34,16 @@ void RPainter::clearHistory() noexcept
 void RPainter::reset() noexcept
 {
     m_state = {};
+    m_state.geometry = m_surface->geometry();
 }
 
-bool RPainter::clearSurface() noexcept
+void RPainter::clear() noexcept
 {
-    auto surface { m_surface.lock() };
-
-    if (!surface)
-        return false;
-
-    auto image { surface->image() };
-
-    if (!image)
-        return false;
-
     save();
     setOptions(ColorIsPremult);
     setBlendMode(RBlendMode::Src);
     setFactor();
     setOpacity(1.f);
-    const bool ret { drawColor(SkRegion(surface->viewport().roundOut())) };
+    drawColor(SkRegion(geometry().viewport.roundOut()));
     restore();
-    return ret;
-}
-
-bool RPainter::endPass() noexcept
-{
-    auto surface { m_surface.lock() };
-
-    if (!surface)
-    {
-        device()->log(CZError, CZLN, "endPass() failed, missing RSurface");
-        return false;
-    }
-
-    auto image { surface->image() };
-
-    if (!image)
-    {
-        device()->log(CZError, CZLN, "endPass() failed, missing RSurface image");
-        return false;
-    }
-
-    image->setWriteSync(RSync::Make(device()));
-    return true;
 }

@@ -25,6 +25,8 @@ public:
 private:
     friend class RGLCore;
     friend struct RGLThreadDataManager;
+    friend class RGLProgram;
+    friend class RGLShader;
     static RGLDevice *Make(RGLCore &core, int drmFd, void *userData) noexcept;
     RGLDevice(RGLCore &core, int drmFd, void *userData) noexcept;
     ~RGLDevice() noexcept;
@@ -44,13 +46,16 @@ private:
     bool initFormats() noexcept;
     bool initPainter() noexcept;
 
-    RPainter *painter() const noexcept override;
+    std::shared_ptr<RPainter> makePainter(std::shared_ptr<RSurface> surface) noexcept override;
 
     class ThreadData : public RGLContextData
     {
     public:
         ThreadData(RGLDevice *device) noexcept;
-        std::shared_ptr<RGLPainter> painter;
+        // Features => Shader/Program
+        std::unordered_map<UInt32, std::shared_ptr<RGLShader>> vertShaders;
+        std::unordered_map<UInt32, std::shared_ptr<RGLShader>> fragShaders;
+        std::unordered_map<UInt32, std::shared_ptr<RGLProgram>> programs;
     };
 
     mutable std::shared_ptr<RGLContextDataManager> m_threadData;

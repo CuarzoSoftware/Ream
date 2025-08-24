@@ -14,9 +14,9 @@ public:
     bool hasExtension(const char *extension) const noexcept;
 private:
     friend class RVKCore;
-    RPainter *painter() const noexcept override;
     static RVKDevice *Make(RVKCore &core, VkPhysicalDevice physicalDevice) noexcept;
     RVKDevice(RVKCore &core, VkPhysicalDevice physicalDevice) noexcept;
+    std::shared_ptr<RPainter> makePainter(std::shared_ptr<RSurface> surface) noexcept override;
     bool init() noexcept;
     bool initPropsAndFeatures() noexcept;
     bool initExtensions() noexcept;

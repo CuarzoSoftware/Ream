@@ -75,13 +75,13 @@ public:
 
     RCore &core() const noexcept { return m_core; }
     RGLDevice *asGL() noexcept;
+    RRSDevice *asRS() noexcept;
 
     const Caps &caps() const noexcept { return m_caps; }
 
-    // Formats than can be used as a source
+    // DMA formats than can be used as a source
     const RDRMFormatSet &dmaTextureFormats() const noexcept { return m_dmaTextureFormats; }
 
-    // Formats that can be used as a render destination
     // If a format/modifier pair exists in textures but not here, then its external only
     const RDRMFormatSet &dmaRenderFormats() const noexcept { return m_dmaRenderFormats; }
 
@@ -93,7 +93,8 @@ public:
 protected:
     friend class SRMCore;
     friend class RSurface;
-    virtual RPainter *painter() const noexcept = 0;
+    friend class RPass;
+    virtual std::shared_ptr<RPainter> makePainter(std::shared_ptr<RSurface> surface) noexcept = 0;
     RDevice(RCore &core) noexcept;
     void setDRMDriverName(int fd) noexcept;
     RCore &m_core;
