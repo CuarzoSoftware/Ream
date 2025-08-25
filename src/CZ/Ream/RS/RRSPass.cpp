@@ -6,15 +6,17 @@ using namespace CZ;
 
 RRSPass::~RRSPass() noexcept {}
 
-SkCanvas *RRSPass::getCanvas() const noexcept
+SkCanvas *RRSPass::getCanvas(bool sync) const noexcept
 {
+    CZ_UNUSED(sync)
     if (m_skSurface)
         return m_skSurface->getCanvas();
     return nullptr;
 }
 
-RPainter *RRSPass::getPainter() const noexcept
+RPainter *RRSPass::getPainter(bool sync) const noexcept
 {
+    CZ_UNUSED(sync)
     return m_painter.get();
 }
 

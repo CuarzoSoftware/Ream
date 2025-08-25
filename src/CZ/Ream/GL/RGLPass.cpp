@@ -21,21 +21,23 @@ RGLPass::~RGLPass() noexcept
     updateCurrent((RPassCap)currentUsage);
 }
 
-SkCanvas *RGLPass::getCanvas() const noexcept
+SkCanvas *RGLPass::getCanvas(bool sync) const noexcept
 {
     if (!m_caps.has(RPassCap_SkCanvas))
         return nullptr;
 
-    updateCurrent(RPassCap_SkCanvas);
+    if (sync)
+        updateCurrent(RPassCap_SkCanvas);
     return m_skSurface->getCanvas();
 }
 
-RPainter *RGLPass::getPainter() const noexcept
+RPainter *RGLPass::getPainter(bool sync) const noexcept
 {
     if (!m_caps.has(RPassCap_Painter))
         return nullptr;
 
-    updateCurrent(RPassCap_Painter);
+    if (sync)
+        updateCurrent(RPassCap_Painter);
     return m_painter.get();
 }
 

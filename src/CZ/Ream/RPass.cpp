@@ -30,6 +30,24 @@ void RPass::resetGeometry() noexcept
     setGeometry(surface()->geometry());
 }
 
+void RPass::save() noexcept
+{
+    if (m_painter)
+        m_painter->save();
+
+    if (m_skSurface)
+        m_skSurface->getCanvas()->save();
+}
+
+void RPass::restore() noexcept
+{
+    if (m_painter)
+        m_painter->restore();
+
+    if (m_skSurface)
+        m_skSurface->getCanvas()->restore();
+}
+
 std::shared_ptr<RPass> RPass::Make(CZBitset<RPassCap> caps, std::shared_ptr<RSurface> surface, RDevice *device) noexcept
 {
     auto core { RCore::Get() };

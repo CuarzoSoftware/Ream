@@ -171,7 +171,7 @@ bool RRSPainter::drawColor(const SkRegion &region) noexcept
     unColor.fR *= state().factor.fR;
     unColor.fG *= state().factor.fG;
     unColor.fB *= state().factor.fB;
-    unColor.fA *= state().factor.fA;
+    unColor.fA *= state().factor.fA * opacity();
     c->drawColor(unColor, static_cast<SkBlendMode>(blendMode()));
     c->restore();
     return true;

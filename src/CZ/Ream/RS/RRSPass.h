@@ -8,8 +8,8 @@ class CZ::RRSPass : public RPass
 {
 public:
     ~RRSPass() noexcept;
-    SkCanvas *getCanvas() const noexcept override;
-    RPainter *getPainter() const noexcept override;
+    SkCanvas *getCanvas(bool sync = true) const noexcept override;
+    RPainter *getPainter(bool sync = true) const noexcept override;
     void setGeometry(const RSurfaceGeometry &geometry) noexcept override;
 protected:
     friend class RPass;

@@ -25,10 +25,12 @@ public:
     CZBitset<RPassCap> caps() const noexcept { return m_caps; }
 
     // Can be nullptr depending on the caps
-    virtual SkCanvas *getCanvas() const noexcept = 0;
+    // sync: Pass false only if you want to update the canvas params but wont perfomr any rendering
+    virtual SkCanvas *getCanvas(bool sync = true) const noexcept = 0;
 
     // Can be nullptr depending on the caps
-    virtual RPainter *getPainter() const noexcept = 0;
+    // sync: Pass false only if you want to update the painter params but wont perfomr any rendering
+    virtual RPainter *getPainter(bool sync = true) const noexcept = 0;
 
     // Updates RPainter and SkCanvas matrices to match the given geometry
     virtual void setGeometry(const RSurfaceGeometry &geometry) noexcept = 0;
@@ -36,10 +38,15 @@ public:
     // Restores the geometry to RSurface::geometry()
     void resetGeometry() noexcept;
 
+    // Defaults to RSurface::geometry() at creation time
     const RSurfaceGeometry &geometry() const noexcept { return m_geometry; }
 
     // The desination surface
     std::shared_ptr<RSurface> surface() const noexcept { return m_surface; }
+
+    // Handy functions to save/restore the state of both RPainter and SkCanvas
+    void save() noexcept;
+    void restore() noexcept;
 protected:
     friend class RSurface;
     static std::shared_ptr<RPass> Make(CZBitset<RPassCap> caps, std::shared_ptr<RSurface> surface, RDevice *device) noexcept;
