@@ -353,6 +353,10 @@ skipMask:
     glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
     glDisableVertexAttribArray(prog->loc().pos);
     glUseProgram(0);
+    auto sync { RSync::Make(device()) };
+    image->setReadSync(sync);
+    if (mask)
+        mask->setReadSync(sync);
     return true;
 }
 

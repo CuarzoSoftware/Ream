@@ -10,15 +10,10 @@ using namespace CZ;
 RGLPass::~RGLPass() noexcept
 {
     if (m_lastUsage == 0)
-    {
-        // Was not used at all
-        return;
-    }
+        return; // Was not used at all
 
-    // Force flush
-    const auto currentUsage { m_lastUsage };
-    m_lastUsage = 0;
-    updateCurrent((RPassCap)currentUsage);
+    if (m_lastUsage == RPassCap_SkCanvas)
+        m_skSurface->recordingContext()->asDirectContext()->flush(m_skSurface.get());
 }
 
 SkCanvas *RGLPass::getCanvas(bool sync) const noexcept

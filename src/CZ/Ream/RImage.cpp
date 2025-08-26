@@ -39,7 +39,25 @@ std::shared_ptr<RImage> RImage::Make(SkISize size, const RDRMFormat &format, con
 
 std::shared_ptr<RImage> RImage::MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, const RImageConstraints *constraints) noexcept
 {
-    auto image { Make(info.size, format, constraints) };
+    auto core { RCore::Get() };
+
+    if (!core)
+    {
+        RLog(CZError, CZLN, "Missing RCore");
+        return {};
+    }
+
+    RImageConstraints cons {};
+
+    if (constraints)
+        cons = *constraints;
+
+    if (!cons.allocator)
+        cons.allocator = core->mainDevice();
+
+    cons.writeFormats.emplace(info.format);
+
+    auto image { Make(info.size, format, &cons) };
 
     if (!image)
         return {};

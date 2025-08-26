@@ -20,6 +20,11 @@
 #include <gbm.h>
 #include <xf86drm.h>
 #include <drm_fourcc.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <linux/dma-buf.h>
+#include <linux/dma-heap.h>
 
 static auto skSRGB { SkColorSpace::MakeSRGB() };
 
@@ -279,10 +284,10 @@ std::shared_ptr<RGLImage> RGLImage::Make(SkISize size, const RDRMFormat &format,
 {
     RLockGuard lock {};
 
-    std::shared_ptr<RGLImage> image { MakeWithGBMStorage(size, format, constraints) };
+    std::shared_ptr<RGLImage> image { MakeWithNativeStorage(size, format, constraints) };
 
     if (!image)
-        image = MakeWithNativeStorage(size, format, constraints);
+        image = MakeWithGBMStorage(size, format, constraints);
 
     return image;
 }
@@ -624,13 +629,13 @@ bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
     if (!writeFormats().contains(region.format))
         return false;
 
-    if (writePixelsGBMMapWrite(region))
+    if (writePixelsNative(region))
     {
         m_writeSerial++;
         return true;
     }
 
-    if (writePixelsNative(region))
+    if (writePixelsGBMMapWrite(region))
     {
         m_writeSerial++;
         return true;
@@ -731,7 +736,7 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithNativeStorage(SkISize size, const RD
     if (constraints)
     {
         for (const auto &dev : constraints->caps)
-            if (dev.first != allocator && dev.second.get() != 0)
+            if (dev.second.has(RImageCap_DRMFb | RImageCap_GBMBo) || (dev.first != allocator && dev.second.get() != 0))
                 return {};
 
         allocator = (RGLDevice*)constraints->allocator;
@@ -820,9 +825,18 @@ bool RGLImage::writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept
     UInt32 stride;
     void *mapData {};
 
+    const auto current { RGLMakeCurrent::FromDevice(bo->allocator()->asGL(), false) };
+
+    if (readSync())
+        readSync()->cpuWait(-1);
+
     auto *dst { static_cast<UInt8*>(gbm_bo_map(bo->bo(), 0, 0, size().width(), size().height(), GBM_BO_TRANSFER_WRITE, &stride, &mapData)) };
 
     if (!dst) return false;
+
+    dma_buf_sync sync;
+    sync.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE;
+    ioctl(bo->dmaInfo().fd[0], DMA_BUF_IOCTL_SYNC, &sync);
 
     const auto bpb { formatInfo().bytesPerBlock };
 
@@ -854,6 +868,9 @@ bool RGLImage::writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept
     }
 
     gbm_bo_unmap(bo->bo(), mapData);
+    sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE;
+    ioctl(bo->dmaInfo().fd[0], DMA_BUF_IOCTL_SYNC, &sync);
+    setWriteSync(RSync::Make(bo->allocator()));
     return true;
 }
 
@@ -1123,17 +1140,8 @@ void RGLImage::assignReadWriteFormats() noexcept
 
         if (glFb(glDev).has_value())
         {
-            m_writeFormats.emplace(DRM_FORMAT_A8);
-            m_writeFormats.emplace(DRM_FORMAT_ABGR8888);
-            m_writeFormats.emplace(DRM_FORMAT_XBGR8888);
             m_readFormats.emplace(DRM_FORMAT_ABGR8888);
             m_readFormats.emplace(DRM_FORMAT_XBGR8888);
-
-            if (glDev->glExtensions().EXT_texture_format_BGRA8888)
-            {
-                m_writeFormats.emplace(DRM_FORMAT_ARGB8888);
-                m_writeFormats.emplace(DRM_FORMAT_XRGB8888);
-            }
 
             if (glDev->glExtensions().EXT_read_format_bgra)
             {

@@ -9,43 +9,96 @@
 /**
  * @brief A Ream render pass.
  *
- * An RPass allows an RDevice to render into an RSurface using both RPainter or SkCanvas depending on the requested capabilities at creation time (see RSurface::beginPass()).
+ * An RPass allows an RDevice to render into an RSurface using either RPainter or SkCanvas,
+ * depending on the capabilities requested at creation time (see RSurface::beginPass()).
  *
- * If you mix both RPainter and SkCanvas commands make sure to always call getCanvas() or getPainter() first dependening on which one you start using.
- * Not doing so may lead to sync issues or even a segfault depending on the current graphics backend.
+ * If you mix both RPainter and SkCanvas commands, make sure to call either getPainter() or getCanvas()
+ * first, depending on which API you intend to start using. Failing to do so may lead to synchronization issues,
+ * or in some cases, may cause Skia to crash.
  *
- * At destruction time a fence is added to the backign storage RImage to ensure other threads wait before using the image as source.
- * Destroying the pass may also trigger flushing of Skia commands depending on the current grapgic backend.
+ * Upon destruction, a fence is inserted into the underlying surface RImage to ensure that other threads wait
+ * before using the image as a source. Destroying the pass may also trigger flushing of pending Skia commands,
+ * depending on the current graphics backend.
  */
 class CZ::RPass : public RObject
 {
 public:
+    /**
+     * @brief Destroys the render pass.
+     *
+     * Inserts a fence into the backing storage to ensure that subsequent use of the resulting RImage
+     * from other threads is properly synchronized. May also flush pending Skia commands.
+     */
     ~RPass() noexcept;
 
+    /**
+     * @brief Returns the capabilities enabled for this pass.
+     *
+     * Indicates whether RPainter and/or SkCanvas is available, based on the flags passed to RSurface::beginPass().
+     *
+     * @return A bitset of enabled RPassCap values.
+     */
     CZBitset<RPassCap> caps() const noexcept { return m_caps; }
 
-    // Can be nullptr depending on the caps
-    // sync: Pass false only if you want to update the canvas params but wont perfomr any rendering
+    /**
+     * @brief Returns the SkCanvas associated with this pass, if available.
+     *
+     * @param sync Whether to synchronize and prepare the canvas for rendering.
+     *             Pass false only if you intend to update canvas parameters without rendering.
+     *
+     * @return A pointer to the SkCanvas, or nullptr if SkCanvas is not supported by this pass.
+     */
     virtual SkCanvas *getCanvas(bool sync = true) const noexcept = 0;
 
-    // Can be nullptr depending on the caps
-    // sync: Pass false only if you want to update the painter params but wont perfomr any rendering
+    /**
+     * @brief Returns the RPainter associated with this pass, if available.
+     *
+     * @param sync Whether to synchronize and prepare the painter for rendering.
+     *             Pass false only if you intend to update painter parameters without rendering.
+     *
+     * @return A pointer to the RPainter, or nullptr if RPainter is not supported by this pass.
+     */
     virtual RPainter *getPainter(bool sync = true) const noexcept = 0;
 
-    // Updates RPainter and SkCanvas matrices to match the given geometry
+    /**
+     * @brief Sets transformation matrices.
+     *
+     * Updates both SkCanvas and RPainter transformation matrices to align with the given surface geometry.
+     *
+     * @param geometry The geometry to apply.
+     */
     virtual void setGeometry(const RSurfaceGeometry &geometry) noexcept = 0;
 
-    // Restores the geometry to RSurface::geometry()
+    /**
+     * @brief Resets the geometry to the default RSurface geometry.
+     */
     void resetGeometry() noexcept;
 
-    // Defaults to RSurface::geometry() at creation time
+    /**
+     * @brief Returns the current geometry for this pass.
+     *
+     * Defaults to the geometry of the associated RSurface at creation time,
+     * unless overridden via setGeometry().
+     *
+     * @return The current RSurfaceGeometry in use.
+     */
     const RSurfaceGeometry &geometry() const noexcept { return m_geometry; }
 
-    // The desination surface
+    /**
+     * @brief Returns the destination surface being rendered into.
+     *
+     * @return A shared pointer to the target RSurface.
+     */
     std::shared_ptr<RSurface> surface() const noexcept { return m_surface; }
 
-    // Handy functions to save/restore the state of both RPainter and SkCanvas
+    /**
+     * @brief Saves the state of both RPainter and SkCanvas.
+     */
     void save() noexcept;
+
+    /**
+     * @brief Restores the most recently saved state of RPainter and SkCanvas.
+     */
     void restore() noexcept;
 protected:
     friend class RSurface;

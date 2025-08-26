@@ -22,7 +22,7 @@ RPass::RPass(std::shared_ptr<RSurface> surface, std::shared_ptr<RImage> image, s
 
 RPass::~RPass() noexcept
 {
-   m_image->setWriteSync(RSync::Make(m_device));
+    m_image->setWriteSync(RSync::Make(m_device));
 }
 
 void RPass::resetGeometry() noexcept
