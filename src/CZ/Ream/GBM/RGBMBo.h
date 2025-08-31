@@ -1,8 +1,8 @@
 #ifndef RGBMBO_H
 #define RGBMBO_H
 
-#include <CZ/Cuarzo.h>
-#include <CZ/CZOwn.h>
+#include <CZ/Core/Cuarzo.h>
+#include <CZ/Core/CZOwn.h>
 #include <CZ/Ream/RObject.h>
 #include <CZ/Ream/RDMABufferInfo.h>
 #include <memory>

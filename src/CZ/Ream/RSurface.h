@@ -1,8 +1,8 @@
 #ifndef RSURFACE_H
 #define RSURFACE_H
 
-#include <CZ/CZTransform.h>
-#include <CZ/CZBitset.h>
+#include <CZ/Core/CZTransform.h>
+#include <CZ/Core/CZBitset.h>
 #include <CZ/Ream/RObject.h>
 #include <CZ/Ream/RSurfaceGeometry.h>
 #include <CZ/Ream/RPassCap.h>

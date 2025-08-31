@@ -9,8 +9,8 @@
 #include <CZ/Ream/RImageFilter.h>
 #include <CZ/Ream/RImageWrap.h>
 #include <CZ/Ream/RBlendMode.h>
-#include <CZ/CZTransform.h>
-#include <CZ/CZBitset.h>
+#include <CZ/Core/CZTransform.h>
+#include <CZ/Core/CZBitset.h>
 #include <memory>
 
 namespace CZ

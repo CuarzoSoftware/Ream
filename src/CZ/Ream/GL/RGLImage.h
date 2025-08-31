@@ -1,7 +1,7 @@
 #ifndef RGLIMAGE_H
 #define RGLIMAGE_H
 
-#include <CZ/CZBitset.h>
+#include <CZ/Core/CZBitset.h>
 #include <CZ/Ream/GL/RGLTexture.h>
 #include <CZ/Ream/RImage.h>
 #include <CZ/Ream/GL/RGLFormat.h>

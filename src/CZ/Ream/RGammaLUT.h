@@ -2,7 +2,7 @@
 #define CZ_RGAMMALUT_H
 
 #include <CZ/Ream/RObject.h>
-#include <CZ/CZWeak.h>
+#include <CZ/Core/CZWeak.h>
 #include <memory>
 #include <span>
 

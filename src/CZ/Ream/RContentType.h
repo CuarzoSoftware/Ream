@@ -1,7 +1,7 @@
 #ifndef RCONTENTTYPE_H
 #define RCONTENTTYPE_H
 
-#include <CZ/Cuarzo.h>
+#include <CZ/Core/Cuarzo.h>
 #include <string_view>
 #include <array>
 

@@ -4,7 +4,7 @@
 #include <CZ/Ream/DRM/RDRMFormat.h>
 #include <CZ/Ream/RLog.h>
 #include <CZ/Ream/RObject.h>
-#include <CZ/CZWeak.h>
+#include <CZ/Core/CZWeak.h>
 #include <string>
 
 namespace CZ

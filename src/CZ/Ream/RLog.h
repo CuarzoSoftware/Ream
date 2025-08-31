@@ -1,7 +1,7 @@
 #ifndef RLOG_H
 #define RLOG_H
 
-#include <CZ/CZLogger.h>
+#include <CZ/Core/CZLogger.h>
 
 #define RLog RLogger()
 

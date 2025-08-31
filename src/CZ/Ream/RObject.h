@@ -1,7 +1,7 @@
 #ifndef ROBJECT_H
 #define ROBJECT_H
 
-#include <CZ/CZObject.h>
+#include <CZ/Core/CZObject.h>
 #include <CZ/Ream/Ream.h>
 
 class CZ::RObject : public CZObject

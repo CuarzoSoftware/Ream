@@ -2,8 +2,8 @@
 #define CZ_RRSIMAGE_H
 
 #include <CZ/Ream/RImage.h>
-#include <CZ/CZSharedMemory.h>
-#include <CZ/CZBitset.h>
+#include <CZ/Core/CZSharedMemory.h>
+#include <CZ/Core/CZBitset.h>
 #include <EGL/egl.h>
 
 class CZ::RRSImage : public RImage

@@ -2,7 +2,7 @@
 #define RVKCORE_H
 
 #include <CZ/Ream/VK/RVKExtensions.h>
-#include <CZ/CZLogger.h>
+#include <CZ/Core/CZLogger.h>
 #include <CZ/Ream/RCore.h>
 #include <vulkan/vulkan.h>
 

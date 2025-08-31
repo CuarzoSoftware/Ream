@@ -9,8 +9,8 @@
 #include <CZ/skia/core/SkAlphaType.h>
 #include <CZ/skia/core/SkImage.h>
 #include <CZ/skia/core/SkSurface.h>
-#include <CZ/CZWeak.h>
-#include <CZ/CZOwn.h>
+#include <CZ/Core/CZWeak.h>
+#include <CZ/Core/CZOwn.h>
 #include <filesystem>
 #include <memory>
 #include <unordered_set>

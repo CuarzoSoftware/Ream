@@ -4,7 +4,7 @@
 #include <CZ/Ream/RPainter.h>
 #include <CZ/Ream/RPassCap.h>
 #include <CZ/Ream/RSurfaceGeometry.h>
-#include <CZ/CZBitset.h>
+#include <CZ/Core/CZBitset.h>
 
 /**
  * @brief A Ream render pass.

@@ -1,7 +1,7 @@
 #ifndef RGLCONTEXT_H
 #define RGLCONTEXT_H
 
-#include <CZ/CZWeak.h>
+#include <CZ/Core/CZWeak.h>
 #include <CZ/Ream/RObject.h>
 #include <thread>
 #include <memory>

@@ -2,7 +2,7 @@
 #define RGLSHADER_H
 
 #include <CZ/Ream/RObject.h>
-#include <CZ/CZBitset.h>
+#include <CZ/Core/CZBitset.h>
 #include <GLES2/gl2.h>
 #include <memory>
 

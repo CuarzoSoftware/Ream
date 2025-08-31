@@ -1,7 +1,7 @@
 #ifndef RSUBPIXEL_H
 #define RSUBPIXEL_H
 
-#include <CZ/Cuarzo.h>
+#include <CZ/Core/Cuarzo.h>
 #include <algorithm>
 #include <string_view>
 #include <array>

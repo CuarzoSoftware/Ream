@@ -4,7 +4,7 @@
 #include <memory>
 #include <CZ/Ream/RObject.h>
 #include <CZ/skia/core/SkSize.h>
-#include <CZ/CZOwn.h>
+#include <CZ/Core/CZOwn.h>
 
 class CZ::RDRMFramebuffer final : public RObject
 {

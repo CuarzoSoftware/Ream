@@ -2,7 +2,7 @@
 #define RSYNC_H
 
 #include <CZ/Ream/RObject.h>
-#include <CZ/CZSpFd.h>
+#include <CZ/Core/CZSpFd.h>
 #include <memory>
 
 class CZ::RSync : public RObject

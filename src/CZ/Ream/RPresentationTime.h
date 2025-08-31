@@ -2,7 +2,7 @@
 #define RPRESENTATIONTIME_H
 
 #include <CZ/Ream/Ream.h>
-#include <CZ/CZBitset.h>
+#include <CZ/Core/CZBitset.h>
 #include <ctime>
 
 /**
