@@ -128,6 +128,9 @@ bool RRSImage::writePixels(const RPixelBufferRegion &region) noexcept
     if (region.format != formatInfo().format)
         return false;
 
+    if (region.region.isEmpty())
+        return true;
+
     auto *dst { (UInt8*)m_shm->map() };
     const auto bpb { formatInfo().bytesPerBlock };
     SkRegion::Iterator iter(region.region);
@@ -156,7 +159,7 @@ bool RRSImage::writePixels(const RPixelBufferRegion &region) noexcept
 
         iter.next();
     }
-
+    m_writeSerial++;
     return true;
 }
 
