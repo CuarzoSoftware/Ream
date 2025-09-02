@@ -19,14 +19,16 @@ HEADERS_INSTALL_PATH = join_paths(get_option('prefix'), get_option('includedir')
 
 cpp             = meson.get_compiler('cpp')
 pkg             = import('pkgconfig')
+cz_core_dep     = dependency('cz-core')
+cz_skia_dep     = dependency('cz-skia')
+wayland_egl_dep = dependency('wayland-egl')
 egl_dep         = dependency('egl', version: '>= 1.5')
 gles2_dep       = dependency('glesv2', version: '>= 3.2')
 gbm_dep         = dependency('gbm', version: '>= 23.2.1')
+boost_dep       = dependency('boost', modules : ['container'])
 drm_dep         = dependency('libdrm', version: '>= 2.4.113')
 drm_headers_dep = drm_dep.partial_dependency(compile_args: true, includes: true)
-cz_core_dep     = dependency('cz-core')
-cz_skia_dep     = dependency('cz-skia')
-boost_dep       = dependency('boost', modules : ['container'])
+
 
 # -------------- HEADERS --------------
 
@@ -54,6 +56,7 @@ cz_ream = library(
     include_directories : ['src'],
     dependencies : [
         egl_dep,
+        wayland_egl_dep,
         gles2_dep,
         gbm_dep,
         drm_dep,

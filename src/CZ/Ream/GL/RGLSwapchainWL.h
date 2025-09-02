@@ -15,7 +15,7 @@ public:
 private:
     friend class RWLSwapchain;
     static std::shared_ptr<RGLSwapchainWL> Make(wl_surface *surface, SkISize size) noexcept;
-    RGLSwapchainWL(std::shared_ptr<RGLCore> core, RGLDevice *device, std::shared_ptr<RGLImage> image, wl_surface *surface, EGLSurface eglSurface, SkISize size) noexcept;
+    RGLSwapchainWL(std::shared_ptr<RGLCore> core, RGLDevice *device, std::shared_ptr<RGLImage> image, wl_egl_window *window, wl_surface *surface, EGLSurface eglSurface, SkISize size) noexcept;
     std::shared_ptr<RGLCore> m_core;
     RGLDevice *m_device;
     std::shared_ptr<RGLImage> m_image;

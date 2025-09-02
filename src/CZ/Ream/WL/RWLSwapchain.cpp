@@ -1,4 +1,5 @@
 #include <CZ/Ream/WL/RWLSwapchain.h>
+#include <CZ/Ream/GL/RGLSwapchainWL.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
 
@@ -25,4 +26,14 @@ std::shared_ptr<RWLSwapchain> RWLSwapchain::Make(wl_surface *surface, SkISize si
         RLog(CZError, CZLN, "Missing RCore");
         return {};
     }
+
+    std::shared_ptr<RWLSwapchain> ss;
+
+    if (core->asGL())
+        ss = RGLSwapchainWL::Make(surface, size);
+
+    if (!ss)
+        RLog(CZError, CZLN, "Failed to create RWLSwapchain");
+
+    return ss;
 }

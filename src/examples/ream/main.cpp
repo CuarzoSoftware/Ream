@@ -3,6 +3,7 @@
 #include <GL/RGLCore.h>
 #include <GL/RGLDevice.h>
 #include <GL/RGLMakeCurrent.h>
+#include <GL/RGLSwapchainWL.h>
 #include <RImage.h>
 #include <RSurface.h>
 #include <RPainter.h>
@@ -10,8 +11,6 @@
 
 #include <GL/RGLImage.h>
 
-
-#include <thread>
 #include <wayland-client.h>
 #include <wayland-egl.h>
 #include "xdg-shell.h"
@@ -27,7 +26,6 @@ static struct
     wl_registry *wlRegistry;
     wl_compositor *wlCompositor { nullptr };
     xdg_wm_base *xdgWmBase { nullptr };
-    EGLConfig eglConfig;
 } app;
 
 struct Window
@@ -38,28 +36,19 @@ struct Window
     {
         xdg_toplevel_destroy(xdgToplevel);
         xdg_surface_destroy(xdgSurface);
-        wl_egl_window_destroy(wlEGLWindow);
+        swapchain.reset();
         wl_surface_destroy(wlSurface);
     }
 
-
-    //wl_callback *wlCallback { nullptr };
+    wl_callback *wlCallback { nullptr };
     wl_surface *wlSurface;
     xdg_surface *xdgSurface;
     xdg_toplevel *xdgToplevel;
-    wl_egl_window *wlEGLWindow { nullptr };
-    EGLSurface eglSurface;
-
-    SkISize size;
-    SkISize bufferSize;
+    std::shared_ptr<RWLSwapchain> swapchain;
+    SkISize size { 200, 200 };
     int32_t scale { 1 };
-    bool needsNewSurface { true };
     bool ready { false };
-
-    std::shared_ptr<RSurface> surf;
-    std::thread::id thread { std::this_thread::get_id() };
-
-
+    bool needsNewSurface { true };
 };
 
 static wl_surface_listener wlSurfaceLis
@@ -85,8 +74,8 @@ static xdg_surface_listener xdgSurfaceLis
     {
         Window &window { *static_cast<Window*>(data) };
         xdg_surface_ack_configure(xdgSurface, serial);
-        //window.update();
         window.ready = true;
+        window.update();
     }
 };
 
@@ -119,17 +108,17 @@ Window::Window() noexcept
     xdgToplevel = xdg_surface_get_toplevel(xdgSurface);
     xdg_toplevel_add_listener(xdgToplevel, &xdgToplevelLis, this);
     wl_surface_commit(wlSurface);
+    swapchain = RWLSwapchain::Make(wlSurface, size);
 }
 
 static wl_callback_listener wlCallbackLis
 {
     .done = [](void *data, wl_callback *wlCallback, uint32_t)
     {
-        /*
         Window &window { *static_cast<Window*>(data) };
         window.wlCallback = nullptr;
         window.update();
-        wl_callback_destroy(wlCallback);*/
+        wl_callback_destroy(wlCallback);
     }
 };
 
@@ -138,100 +127,61 @@ void Window::update() noexcept
     if (!ready)
         return;
 
-    auto core { RGLCore::Get()->asGL() };
-    auto dev { core->mainDevice() };
-
-    bufferSize = { size.width() * scale, size.height() * scale };
-
-    auto current1 = RGLMakeCurrent::FromDevice(dev, false);
-
-    if (!wlEGLWindow)
-    {
-        wlEGLWindow = wl_egl_window_create(wlSurface, bufferSize.width(), bufferSize.height());
-        eglSurface = eglCreateWindowSurface(dev->eglDisplay(), app.eglConfig, (EGLNativeWindowType)wlEGLWindow, NULL);
-        assert("Failed to create EGLSurface" && eglSurface != EGL_NO_SURFACE);
-        eglMakeCurrent(dev->eglDisplay(), eglSurface, eglSurface, dev->eglContext());
-        eglSwapInterval(dev->eglDisplay(), 0);
-    }
-
-    auto current = RGLMakeCurrent(dev->eglDisplay(), eglSurface, eglSurface, dev->eglContext());
+    SkISize bufferSize = { size.width() * scale, size.height() * scale };
 
     if (needsNewSurface)
     {
         needsNewSurface = false;
-        wl_egl_window_resize(wlEGLWindow, bufferSize.width(), bufferSize.height(), 0, 0);
-        REGLSurfaceInfo info {};
-        info.size = bufferSize;
-        info.format = DRM_FORMAT_ARGB8888;
-        info.surface = eglSurface;
-
-        surf = RSurface::WrapImage(RGLImage::FromEGLSurface(info, CZOwn::Borrow, dev));
-
-        /*
-        const GrGLFramebufferInfo fbInfo
-            {
-                0,
-                GL_RGBA8,
-                skgpu::Protected::kNo
-            };
-
-        const GrBackendRenderTarget backendTarget = GrBackendRenderTargets::MakeGL(
-            bufferSize.width(),
-            bufferSize.height(),
-            0, 0,
-            fbInfo);
-
-        skSurface = SkSurfaces::WrapBackendRenderTarget(
-            akApp()->glContext()->skContext().get(),
-            backendTarget,
-            GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin,
-            SkColorType::kRGBA_8888_SkColorType,
-            SkColorSpace::MakeSRGB(),
-            &skSurfaceProps);
-
-        assert("Failed to create SkSurface" && skSurface.get());*/
+        swapchain->resize(bufferSize);
     }
 
     wl_surface_set_buffer_scale(wlSurface, scale);
 
-    glViewport(0, 0, bufferSize.width(), bufferSize.height());
-    glScissor(0, 0, bufferSize.width(), bufferSize.height());
-    static float f { 0.f };
-    f += 0.05f;
-    glClearColor(SkScalarCos(f) * 0.5f + 0.5f, 0.f, 0.f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    auto image { swapchain->acquire() };
+    assert(image);
 
-    if (surf)
-    {
-        auto pass { surf->beginPass() };
-        auto *p { pass->getPainter() };
+    RLog(CZInfo, "Age: {}", image.value().age);
+    auto surface = RSurface::WrapImage(image.value().image);
+    assert(surface);
 
-        RDrawImageInfo info {};
-        info.image = testImage;
-        info.srcScale = 1.f;
-        info.srcTransform = CZTransform::Normal;
-        info.src = SkRect::MakeXYWH(
-            0,
-            0,
-            testImage->size().width(),
-            testImage->size().height());
-        info.dst = SkIRect::MakeXYWH(10, 10, 256, 256);
-        p->drawImage(info);
-        p->setColor(SK_ColorCYAN);
-        p->drawColor(SkRegion(SkIRect::MakeXYWH(10, 10, 40, 40)));
-    }
-    else
-        RLog(CZError, "NO SURF");
+    RSurfaceGeometry geo { surface->geometry() };
+    geo.viewport = SkRect::Make(size);
+    surface->setGeometry(geo);
 
-        /*
+    auto pass { surface->beginPass() };
+    assert(pass);
+    auto p { pass->getPainter() };
+
+    RDrawImageInfo info {};
+    info.image = testImage;
+    info.srcScale = 1.f;
+    info.srcTransform = CZTransform::Normal;
+    info.src = SkRect::MakeXYWH(
+        0,
+        0,
+        testImage->size().width(),
+        testImage->size().height());
+    info.dst = SkIRect::MakeXYWH(10, 10, size.width() - 20, size.height() - 20);
+    p->drawImage(info);
+    p->setColor(SK_ColorCYAN);
+    p->drawColor(SkRegion(SkIRect::MakeXYWH(10, 10, 40, 40)));
+
     if (!wlCallback)
     {
-        //std::cout << "wl_surface::frame" << std::endl;
         wlCallback = wl_surface_frame(wlSurface);
         wl_callback_add_listener(wlCallback, &wlCallbackLis ,this);
-    }*/
+    }
 
-    eglSwapBuffers(dev->eglDisplay(), eglSurface);
+    // Animate window size
+    static SkScalar f { 0.f }; f += 0.1f;
+    size.fWidth = 500 + 250 * SkScalarCos(f);
+    size.fHeight = 500 + 250 * SkScalarSin(f);
+    needsNewSurface = true;
+
+    // End pass
+    pass.reset();
+
+    swapchain->present(image.value());
 }
 
 static xdg_wm_base_listener xdgWmBaseLis
@@ -254,51 +204,9 @@ static wl_registry_listener wlRegistryLis
         .global_remove = [](auto, auto, auto){}
 };
 
-static void initEGL() noexcept
-{
-    auto core { RGLCore::Get()->asGL() };
-    auto dev { core->mainDevice() };
-
-    EGLint numConfigs;
-    assert("Failed to get EGL configurations." && eglGetConfigs(dev->eglDisplay(), NULL, 0, &numConfigs) == EGL_TRUE && numConfigs > 0);
-
-    const EGLint fbAttribs[]
-    {
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_RED_SIZE,        8,
-        EGL_GREEN_SIZE,      8,
-        EGL_BLUE_SIZE,       8,
-        EGL_ALPHA_SIZE,      8,
-        EGL_NONE
-    };
-
-    assert("Failed to choose EGL configuration." &&
-           eglChooseConfig(dev->eglDisplay(), fbAttribs, &app.eglConfig, 1, &numConfigs) == EGL_TRUE && numConfigs == 1);
-
-    eglMakeCurrent(dev->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, dev->eglContext());
-}
-
-static std::mutex mutex;
-static std::shared_ptr<RCore> core;
-
-void thread()
-{
-    Window win {};
-
-    for (int i = 0; i < 50; i++)
-    {
-        mutex.lock();
-        wl_display_dispatch(app.wlDisplay);
-        win.update();
-        core->clearGarbage();
-        mutex.unlock();
-        usleep(50000);
-    }
-}
-
 int main()
 {
+
     setenv("CZ_REAM_LOG_LEVEL", "6", 0);
     setenv("CZ_REAM_EGL_LOG_LEVEL", "6", 0);
 
@@ -319,8 +227,7 @@ int main()
     RCore::Options options {};
     options.graphicsAPI = RGraphicsAPI::GL;
     options.platformHandle = RWLPlatformHandle::Make(app.wlDisplay);
-    core = RCore::Make(options);
-    initEGL();
+    auto core = RCore::Make(options);
 
     auto buff = std::vector<UInt8>();
     buff.resize(100*100*4);
@@ -332,36 +239,18 @@ int main()
 
             if (y < 50)
             {
-                if (x < 50)
-                {
-                    buff[i++] = 255;
-                    buff[i++] = 0;
-                    buff[i++] = 0;
-                    buff[i++] = 255;
-                }
-                else
-                {
-                    buff[i++] = 0;
-                    buff[i++] = 255;
-                    buff[i++] = 0;
-                    buff[i++] = 255;
+                if (x < 50) {
+                    buff[i++] = 255; buff[i++] = 0;   buff[i++] = 0; buff[i++] = 255;
+                } else {
+                    buff[i++] = 0;   buff[i++] = 255; buff[i++] = 0; buff[i++] = 255;
                 }
             }
             else
             {
-                if (x < 50)
-                {
-                    buff[i++] = 0;
-                    buff[i++] = 0;
-                    buff[i++] = 255;
-                    buff[i++] = 255;
-                }
-                else
-                {
-                    buff[i++] = 255;
-                    buff[i++] = 255;
-                    buff[i++] = 255;
-                    buff[i++] = 255;
+                if (x < 50) {
+                    buff[i++] = 0;   buff[i++] = 0;   buff[i++] = 255;  buff[i++] = 255;
+                } else {
+                    buff[i++] = 255; buff[i++] = 255; buff[i++] = 255;  buff[i++] = 255;
                 }
             }
         }
@@ -376,27 +265,19 @@ int main()
     testImage = RImage::Make({100, 100}, { DRM_FORMAT_ABGR8888, { DRM_FORMAT_MOD_INVALID } });
     assert(testImage);
     assert(testImage->writePixels({
-                                   .offset = {0, 0},
-                                   .stride = 100 * 4,
-                                   .pixels = buff.data(),
-                                   .region = SkRegion(SkIRect::MakeWH(100, 100)),
-                                   .format = DRM_FORMAT_ABGR8888,
-                                   }));
-
-    std::thread([]{
-        thread();
-    }).detach();
+        .offset = {0, 0},
+        .stride = 100 * 4,
+        .pixels = buff.data(),
+        .region = SkRegion(SkIRect::MakeWH(100, 100)),
+        .format = DRM_FORMAT_ABGR8888,
+    }));
 
     Window win {};
 
-    for (int i = 0; i < 100; i++)
+    for (int i = 0; i < 60 * 5; i++)
     {
-        mutex.lock();
         wl_display_dispatch(app.wlDisplay);
-        win.update();
         core->clearGarbage();
-        mutex.unlock();
-        usleep(50000);
     }
 
     return 0;
