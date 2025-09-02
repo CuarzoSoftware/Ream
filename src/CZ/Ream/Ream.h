@@ -47,6 +47,8 @@ namespace CZ
     class RWLPlatformHandle;
     class RDRMPlatformHandle;
 
+    class RWLSwapchain;
+
     // Base
     class RObject;
     class RCore;
@@ -71,6 +73,8 @@ namespace CZ
     class RGLShader;
     class RGLProgram;
     class RGLPass;
+    class RGLSwapchainWL;
+
 
     class RGLStrings;
     class RGLMakeCurrent;
@@ -94,6 +98,7 @@ namespace CZ
     class RRSImage;
     class RRSPainter;
     class RRSPass;
+    class RRSSwapchainWL;
 }
 
 #endif
