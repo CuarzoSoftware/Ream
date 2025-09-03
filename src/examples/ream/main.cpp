@@ -16,9 +16,11 @@
 #include "xdg-shell.h"
 #include <drm_fourcc.h>
 
+#include <CZ/Ream/RS/RRSImage.h>
+
 using namespace CZ;
 
-static std::shared_ptr<RImage> testImage;
+static std::shared_ptr<RImage> testImage, image;
 
 static struct
 {
@@ -52,21 +54,21 @@ struct Window
 };
 
 static wl_surface_listener wlSurfaceLis
+{
+    .enter = [](auto, auto, auto){},
+    .leave = [](auto, auto, auto){},
+    .preferred_buffer_scale = [](void *data, wl_surface */*wlSurface*/, int32_t factor)
     {
-        .enter = [](auto, auto, auto){},
-        .leave = [](auto, auto, auto){},
-        .preferred_buffer_scale = [](void *data, wl_surface */*wlSurface*/, int32_t factor)
-        {
-            Window &window { *static_cast<Window*>(data) };
+        Window &window { *static_cast<Window*>(data) };
 
-            if (factor == window.scale)
-                return;
+        if (factor == window.scale)
+            return;
 
-            window.scale = factor;
-            window.needsNewSurface = true;
-        },
-        .preferred_buffer_transform = [](auto, auto, auto){}
-    };
+        window.scale = factor;
+        window.needsNewSurface = true;
+    },
+    .preferred_buffer_transform = [](auto, auto, auto){}
+};
 
 static xdg_surface_listener xdgSurfaceLis
 {
@@ -122,6 +124,47 @@ static wl_callback_listener wlCallbackLis
     }
 };
 
+static void drawIntoSubImage() noexcept
+{
+    SkISize size { 300, 300 };
+
+    /*
+    static SkScalar f { 0.f }; f += 0.1f;
+    size.fWidth = 500 + 150 * SkScalarCos(f);
+    size.fHeight = 500 + 150 * SkScalarSin(f);*/
+
+    if (!image)
+        image = RImage::Make(size, { DRM_FORMAT_ARGB8888, { DRM_FORMAT_MOD_LINEAR } });
+    //else
+    //    image->asRS()->resize(size);
+
+    auto surface { RSurface::WrapImage(image) };
+
+    RSurfaceGeometry geo { surface->geometry() };
+    geo.viewport = SkRect::Make(size);
+    surface->setGeometry(geo);
+
+    auto pass { surface->beginPass() };
+    assert(pass);
+    auto p { pass->getPainter() };
+    p->clear();
+
+    RDrawImageInfo info {};
+    info.image = testImage;
+    info.srcScale = 1.f;
+    info.srcTransform = CZTransform::Normal;
+    info.src = SkRect::MakeXYWH(
+        0,
+        0,
+        testImage->size().width(),
+        testImage->size().height());
+    info.dst = SkIRect::MakeSize(size);
+    p->drawImage(info);
+    p->setColor(SK_ColorCYAN);
+    p->drawColor(SkRegion(SkIRect::MakeXYWH(10, 10, 40, 40)));
+
+}
+
 void Window::update() noexcept
 {
     if (!ready)
@@ -137,11 +180,13 @@ void Window::update() noexcept
 
     wl_surface_set_buffer_scale(wlSurface, scale);
 
-    auto image { swapchain->acquire() };
-    assert(image);
+    drawIntoSubImage();
 
-    RLog(CZInfo, "Age: {}", image.value().age);
-    auto surface = RSurface::WrapImage(image.value().image);
+    auto ssImage { swapchain->acquire() };
+    assert(ssImage);
+
+    RLog(CZInfo, "Age: {} Index: {}", ssImage.value().age, ssImage.value().index);
+    auto surface = RSurface::WrapImage(ssImage.value().image);
     assert(surface);
 
     RSurfaceGeometry geo { surface->geometry() };
@@ -151,20 +196,23 @@ void Window::update() noexcept
     auto pass { surface->beginPass() };
     assert(pass);
     auto p { pass->getPainter() };
+    p->setColor(SK_ColorTRANSPARENT);
+    p->clear();
+
+    static SkScalar op { 0.f }; op += 0.1f;
+    p->setOpacity(0.5f + 0.5f * SkScalarCos(op));
 
     RDrawImageInfo info {};
-    info.image = testImage;
+    info.image = image;
     info.srcScale = 1.f;
     info.srcTransform = CZTransform::Normal;
     info.src = SkRect::MakeXYWH(
         0,
         0,
-        testImage->size().width(),
-        testImage->size().height());
-    info.dst = SkIRect::MakeXYWH(10, 10, size.width() - 20, size.height() - 20);
+        image->size().width(),
+        image->size().height());
+    info.dst = SkIRect::MakeXYWH(20, 20, size.width() - 40, size.height() - 40);
     p->drawImage(info);
-    p->setColor(SK_ColorCYAN);
-    p->drawColor(SkRegion(SkIRect::MakeXYWH(10, 10, 40, 40)));
 
     if (!wlCallback)
     {
@@ -172,16 +220,20 @@ void Window::update() noexcept
         wl_callback_add_listener(wlCallback, &wlCallbackLis ,this);
     }
 
-    // Animate window size
-    static SkScalar f { 0.f }; f += 0.1f;
-    size.fWidth = 500 + 250 * SkScalarCos(f);
-    size.fHeight = 500 + 250 * SkScalarSin(f);
-    needsNewSurface = true;
-
     // End pass
     pass.reset();
 
-    swapchain->present(image.value());
+    // Animate window size
+    /*
+    static SkScalar f { 0.f }; f += 0.1f;
+    size.fWidth = 500 + 150 * SkScalarCos(f);
+    size.fHeight = 500 + 150 * SkScalarSin(f);
+    needsNewSurface = true;*/
+
+    SkRegion damage { SkIRect::MakeXYWH(40, 40, 100, 100) };
+    damage.op(SkIRect::MakeXYWH(140, 140, 10, 10), SkRegion::kUnion_Op);
+
+    swapchain->present(ssImage.value(), &damage);
 }
 
 static xdg_wm_base_listener xdgWmBaseLis
@@ -207,6 +259,7 @@ static wl_registry_listener wlRegistryLis
 int main()
 {
 
+    setenv("CZ_REAM_GAPI", "RS", 1);
     setenv("CZ_REAM_LOG_LEVEL", "6", 0);
     setenv("CZ_REAM_EGL_LOG_LEVEL", "6", 0);
 
@@ -225,7 +278,7 @@ int main()
     assert("Failed to get xdg_wm_base" && app.wlCompositor);
 
     RCore::Options options {};
-    options.graphicsAPI = RGraphicsAPI::GL;
+    options.graphicsAPI = RGraphicsAPI::Auto;
     options.platformHandle = RWLPlatformHandle::Make(app.wlDisplay);
     auto core = RCore::Make(options);
 
@@ -274,7 +327,7 @@ int main()
 
     Window win {};
 
-    for (int i = 0; i < 60 * 5; i++)
+    for (int i = 0; i < 60 * 10; i++)
     {
         wl_display_dispatch(app.wlDisplay);
         core->clearGarbage();

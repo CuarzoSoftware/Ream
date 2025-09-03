@@ -202,6 +202,8 @@ RRSPainter::ValRes RRSPainter::validateDrawImage(const RDrawImageInfo &image, co
 
     SkRegion clip { geometry().viewport.roundOut() };
 
+    clip.op(image.dst, SkRegion::kIntersect_Op);
+
     if (region)
         clip.op(*region, SkRegion::kIntersect_Op);
 

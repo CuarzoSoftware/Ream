@@ -25,6 +25,7 @@ namespace CZ
         bool KHR_image_base;
         bool EXT_image_dma_buf_import;
         bool EXT_image_dma_buf_import_modifiers;
+        bool KHR_swap_buffers_with_damage;
         bool KHR_image_pixmap;
         bool KHR_gl_texture_2D_image;
         bool KHR_gl_renderbuffer_image;
@@ -59,6 +60,7 @@ namespace CZ
         PFNEGLQUERYDMABUFMODIFIERSEXTPROC eglQueryDmaBufModifiersEXT;
         PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES;
         PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC glEGLImageTargetRenderbufferStorageOES;
+        PFNEGLSWAPBUFFERSWITHDAMAGEKHRPROC eglSwapBuffersWithDamageKHR;
         PFNEGLCREATESYNCKHRPROC eglCreateSyncKHR;
         PFNEGLDESTROYSYNCKHRPROC eglDestroySyncKHR;
         PFNEGLWAITSYNCKHRPROC eglWaitSyncKHR;

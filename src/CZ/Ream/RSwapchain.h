@@ -10,9 +10,10 @@ namespace CZ
 {
     struct RSwapchainImage
     {
-        UInt32 index;
-        UInt32 age;
         std::shared_ptr<RImage> image;
+        UInt32 age;
+        UInt32 frame;
+        UInt32 index;
     };
 };
 
@@ -69,6 +70,7 @@ public:
     virtual bool resize(SkISize size) noexcept = 0;
 protected:
     SkISize m_size;
+    UInt32 m_frame { 0 };
 };
 
 #endif // RSWAPCHAIN_H

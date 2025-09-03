@@ -308,6 +308,7 @@ bool RGLDevice::initEGLDisplayExtensions() noexcept
     exts.KHR_image_pixmap = CZStringUtils::CheckExtension(extensions, "EGL_KHR_image_pixmap");
     exts.KHR_gl_texture_2D_image = CZStringUtils::CheckExtension(extensions, "EGL_KHR_gl_texture_2D_image");
     exts.KHR_gl_renderbuffer_image = CZStringUtils::CheckExtension(extensions, "EGL_KHR_gl_renderbuffer_image");
+    exts.KHR_swap_buffers_with_damage = CZStringUtils::CheckExtension(extensions, "EGL_KHR_swap_buffers_with_damage");
 
     m_caps.SyncCPU = exts.KHR_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_fence_sync");
 
@@ -394,6 +395,9 @@ bool RGLDevice::initEGLDisplayProcs() noexcept
                 procs.glEGLImageTargetRenderbufferStorageOES = (PFNGLEGLIMAGETARGETRENDERBUFFERSTORAGEOESPROC) eglGetProcAddress("glEGLImageTargetRenderbufferStorageOES");
         }
     }
+
+    if (exts.KHR_swap_buffers_with_damage)
+        procs.eglSwapBuffersWithDamageKHR = (PFNEGLSWAPBUFFERSWITHDAMAGEKHRPROC)eglGetProcAddress("eglSwapBuffersWithDamageKHR");
 
     if (glExts.OES_EGL_sync)
     {

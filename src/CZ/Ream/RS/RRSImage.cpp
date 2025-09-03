@@ -200,6 +200,47 @@ bool RRSImage::readPixels(const RPixelBufferRegion &region) noexcept
     return true;
 }
 
+int RRSImage::resize(SkISize size) noexcept
+{
+    if (size.isEmpty())
+    {
+        RLog(CZError, CZLN, "Invalid size {}x{}", size.width(), size.height());
+        return -1;
+    }
+
+    int ret { 0 };
+
+    if (size == m_size)
+        return ret;
+
+    const auto newStride { size.width() * formatInfo().bytesPerBlock };
+    const size_t newByteSize { size.height() * newStride };
+
+    m_stride = newStride;
+    m_size = size;
+    m_skSurface.reset();
+    m_skImage.reset();
+
+    if (newByteSize > m_shm->size())
+    {
+        ret = 1;
+        assert(m_shm->resize(newByteSize));
+    }
+
+    auto data { SkData::MakeWithoutCopy(m_shm->map(), m_shm->size()) };
+    assert(data);
+
+    const auto skFormat { RSKFormat::FromDRM(formatInfo().format) };
+    auto info { SkImageInfo::Make(size, skFormat, kPremul_SkAlphaType) };
+
+    m_skImage = SkImages::RasterFromData(info, data, newStride);
+    assert(m_skImage);
+
+    m_skSurface = SkSurfaces::WrapPixels(info, m_shm->map(), newStride);
+    assert(m_skSurface);
+    return ret;
+}
+
 RRSImage::RRSImage(std::shared_ptr<RCore> core, std::shared_ptr<CZSharedMemory> shm, sk_sp<SkImage> skImage, sk_sp<SkSurface> skSurface, RDevice *device,
                    SkISize size, size_t stride, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept :
     RImage(core, device, size, formatInfo, alphaType, modifier),

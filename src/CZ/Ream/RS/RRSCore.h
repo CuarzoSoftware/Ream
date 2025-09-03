@@ -3,6 +3,8 @@
 
 #include <CZ/Ream/RCore.h>
 
+struct wl_shm;
+
 class CZ::RRSCore : public RCore
 {
 public:
@@ -11,10 +13,13 @@ public:
     void clearGarbage() noexcept override {};
 private:
     friend class RCore;
+    friend class RRSSwapchainWL;
     bool init() noexcept override;
+    bool initWL() noexcept;
     bool initDevices() noexcept;
     void unitDevices() noexcept;
     RRSCore(const Options &options) noexcept;
+    wl_shm *m_shm { nullptr };
 };
 
 #endif // CZ_RRSCORE_H

@@ -1,5 +1,5 @@
-#ifndef RGLSWAPCHAINWL_H
-#define RGLSWAPCHAINWL_H
+#ifndef CZ_RGLSWAPCHAINWL_H
+#define CZ_RGLSWAPCHAINWL_H
 
 #include <CZ/Ream/WL/RWLSwapchain.h>
 #include <wayland-egl-core.h>
@@ -24,4 +24,4 @@ private:
     bool m_acquired { false };
 };
 
-#endif // RGLSWAPCHAINWL_H
+#endif // CZ_RGLSWAPCHAINWL_H

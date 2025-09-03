@@ -40,6 +40,10 @@ public:
     bool readPixels(const RPixelBufferRegion &region) noexcept override;
     RRSDevice *allocator() const noexcept { return (RRSDevice*)m_allocator; }
     size_t stride() const noexcept { return m_stride; }
+    std::shared_ptr<CZSharedMemory> shm() const noexcept { return m_shm; };
+
+    // -1 error 0 no shm truncate 1 shm truncate
+    int resize(SkISize size) noexcept;
 private:
     RRSImage(std::shared_ptr<RCore> core, std::shared_ptr<CZSharedMemory> shm, sk_sp<SkImage> skImage, sk_sp<SkSurface> skSurface,
              RDevice *device, SkISize size, size_t stride, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept;

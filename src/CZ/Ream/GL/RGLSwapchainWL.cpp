@@ -13,7 +13,7 @@ static const EGLint eglConfigAttribs[]
     EGL_RED_SIZE, 8,
     EGL_GREEN_SIZE, 8,
     EGL_BLUE_SIZE, 8,
-    EGL_ALPHA_SIZE, 0,
+    EGL_ALPHA_SIZE, 8,
     EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
     EGL_NONE
 };
@@ -84,7 +84,7 @@ std::optional<const RSwapchainImage> RGLSwapchainWL::acquire() noexcept
     m_acquired = true;
     RSwapchainImage ssImage {};
     ssImage.image = m_image;
-
+    ssImage.frame = m_frame++;
     auto current { RGLMakeCurrent(m_device->eglDisplay(), m_eglSurface, m_eglSurface, m_device->eglContext()) };
 
     EGLint age;
@@ -101,11 +101,33 @@ bool RGLSwapchainWL::present(const RSwapchainImage &image, SkRegion *damage) noe
     if (image.image != m_image || !m_acquired)
         return false;
 
-    // TODO: handle damage
     m_acquired = false;
     auto current { RGLMakeCurrent(m_device->eglDisplay(), m_eglSurface, m_eglSurface, m_device->eglContext()) };
     eglSwapInterval(m_device->eglDisplay(), 0);
-    return eglSwapBuffers(m_device->eglDisplay(), m_eglSurface);
+
+    if (!damage || !m_device->eglDisplayProcs().eglSwapBuffersWithDamageKHR)
+        return eglSwapBuffers(m_device->eglDisplay(), m_eglSurface);
+    else
+    {
+        const auto nRects { damage->computeRegionComplexity() };
+        std::vector<EGLint> rects;
+        rects.resize(nRects * 4);
+
+        SkRegion::Iterator it { *damage };
+        size_t i { 0 };
+
+        // Y-flip is needed
+        while (!it.done())
+        {
+            rects[i++] = it.rect().x();
+            rects[i++] = image.image->size().height() - it.rect().fBottom;
+            rects[i++] = it.rect().width();
+            rects[i++] = it.rect().height();
+            it.next();
+        }
+
+        return m_device->eglDisplayProcs().eglSwapBuffersWithDamageKHR(m_device->eglDisplay(), m_eglSurface, rects.data(), nRects);
+    }
 }
 
 bool RGLSwapchainWL::resize(SkISize size) noexcept
