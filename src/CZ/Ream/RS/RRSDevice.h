@@ -16,6 +16,7 @@ private:
     bool init() noexcept;
     bool initWL() noexcept;
     bool initDRM() noexcept;
+    bool initOF() noexcept;
     bool initFormats() noexcept;
     std::shared_ptr<RPainter> makePainter(std::shared_ptr<RSurface> surface) noexcept override;
 };

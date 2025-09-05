@@ -25,6 +25,8 @@ std::string_view CZ::RPlatformString(RPlatform platform) noexcept
         return "DRM";
     case RPlatform::Wayland:
         return "Wayland";
+    case RPlatform::Offscreen:
+        return "Offscreen";
     default:
         return "Unknown";
     }

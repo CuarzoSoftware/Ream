@@ -33,7 +33,8 @@ namespace CZ
     enum class RPlatform
     {
         DRM,
-        Wayland
+        Wayland,
+        Offscreen
     };
 
     std::string_view RPlatformString(RPlatform platform) noexcept;
@@ -46,6 +47,7 @@ namespace CZ
     class RPlatformHandle;
     class RWLPlatformHandle;
     class RDRMPlatformHandle;
+    class ROFPlatformHandle;
 
     class RWLSwapchain;
 

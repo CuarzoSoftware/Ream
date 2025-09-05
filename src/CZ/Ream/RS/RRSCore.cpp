@@ -62,7 +62,7 @@ bool RRSCore::initDevices() noexcept
         if (m_mainDevice)
             m_devices.emplace_back(m_mainDevice);
     }
-    else // DRM
+    else if (platform() == RPlatform::DRM)
     {
         for (auto &handle : options().platformHandle->asDRM()->fds())
         {
@@ -75,6 +75,11 @@ bool RRSCore::initDevices() noexcept
                 m_devices.emplace_back(dev);
             }
         }
+    }
+    else // Offscreen
+    {
+        m_mainDevice = RRSDevice::Make(*this, -1, nullptr);
+        m_devices.emplace_back(m_mainDevice);
     }
 
     return !m_devices.empty();

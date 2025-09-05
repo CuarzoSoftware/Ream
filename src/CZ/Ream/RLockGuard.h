@@ -3,7 +3,7 @@
 
 namespace CZ
 {
-    // Do not use it
+    // Meant for internal use, do not use it
     struct RLockGuard
     {
         // Creates a scoped lock

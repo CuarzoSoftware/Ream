@@ -93,6 +93,12 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
             goto fail;
     }
 
+    if (options.platformHandle->platform() == RPlatform::Offscreen)
+    {
+        RLog(CZFatal, CZLN, "The offscreen platform supports only the Raster GAPI");
+        goto fail;
+    }
+
     if (gAPI == RGraphicsAPI::VK || gAPI == RGraphicsAPI::Auto)
     {
         auto core { std::shared_ptr<RCore>(new RVKCore(options)) };

@@ -13,7 +13,7 @@ using namespace CZ;
 
 RRSDevice *RRSDevice::Make(RRSCore &core, int drmFd, void *userData) noexcept
 {
-    auto dev { new RRSDevice(core, drmFd, userData)};
+    auto dev { new RRSDevice(core, drmFd, userData) };
 
     if (dev->init())
         return dev;
@@ -56,8 +56,10 @@ bool RRSDevice::init() noexcept
 {
     if (core().platform() == RPlatform::Wayland)
         return initWL();
-    else
+    else if (core().platform() == RPlatform::DRM)
         return initDRM();
+    else
+        return initOF();
 
     return false;
 }
@@ -115,6 +117,13 @@ bool RRSDevice::initDRM() noexcept
         return false;
     }
 
+    return initFormats();
+}
+
+bool RRSDevice::initOF() noexcept
+{
+    m_drmNode = "Raster Device";
+    log = RLog.newWithContext(m_drmNode);
     return initFormats();
 }
 
