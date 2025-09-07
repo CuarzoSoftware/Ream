@@ -25,7 +25,12 @@ public:
         HasFactorG          = 1u << 8,
         HasFactorB          = 1u << 9,
         HasFactorA          = 1u << 10,
-        PremultSrc          = 1u << 11
+        PremultSrc          = 1u << 11,
+        HasPixelSize        = 1u << 12,
+
+        /* The upper 4 bits represent events */
+        VibrancyLightH      = 1u << 28,
+        VibrancyLightV      = 2u << 28,
     };
 
     static constexpr CZBitset<Features> VertFeatures { HasImage | HasMask };

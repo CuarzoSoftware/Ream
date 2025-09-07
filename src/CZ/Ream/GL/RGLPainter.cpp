@@ -316,7 +316,7 @@ skipMask:
                 {
                     glEnable(GL_BLEND);
                     glBlendEquation(GL_FUNC_ADD);
-                    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+                    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
                 }
             }
             else if (image->alphaType() == kUnpremul_SkAlphaType)
@@ -357,6 +357,103 @@ skipMask:
     image->setReadSync(sync);
     if (mask)
         mask->setReadSync(sync);
+    return true;
+}
+
+bool RGLPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect effect, const SkRegion *clip) noexcept
+{
+    auto surface { m_surface };
+
+    if (!surface || !surface->image())
+    {
+        RLog(CZError, CZLN, "Invalid RSurface");
+        return false;
+    }
+
+    auto image { imageInfo.image };
+
+    if (!image)
+    {
+        RLog(CZError, CZLN, "Missing source RImage");
+        return false;
+    }
+
+    const SkRegion region { calcDrawImageRegion(surface.get(), imageInfo, clip, nullptr) };
+
+    if (region.isEmpty())
+        return true; // Nothing to draw
+
+    if (image->writeSync())
+        image->writeSync()->gpuWait(device());
+
+    auto fb { surface->image()->asGL()->glFb(device()) };
+
+    if (!fb.has_value())
+    {
+        device()->log(CZError, CZLN, "Failed to get GL framebuffer from RGLImage");
+        return false;
+    }
+
+    auto tex { image->asGL()->texture(device()) };
+
+    if (tex.id == 0)
+    {
+        device()->log(CZError, CZLN, "Failed to get GL texture from RGLImage");
+        return false;
+    }
+
+    const EGLSurface eglSurface { surface->image()->asGL()->eglSurface(device()) };
+    const auto current {
+        eglSurface == EGL_NO_SURFACE ?
+            RGLMakeCurrent::FromDevice(device(), true) :
+            RGLMakeCurrent(device()->eglDisplay(), eglSurface, eglSurface, device()->eglContext())
+    };
+
+    UInt32 features { RGLShader::HasImage  | RGLShader::HasPixelSize | (effect << 28) };
+
+    if (tex.target == GL_TEXTURE_EXTERNAL_OES)
+        features |= RGLShader::ImageExternal;
+
+    const auto prog { RGLProgram::GetOrMake(device(), features) };
+
+    if (!prog)
+    {
+        device()->log(CZError, CZLN, "Failed to create a GL program with the required features");
+        return false;
+    }
+
+    prog->bind();
+    glBindFramebuffer(GL_FRAMEBUFFER, fb.value());
+    bindTexture(tex, prog->loc().image, imageInfo, 0);
+
+    // posProj
+    SkScalar mat[9];
+    calcPosProj(surface.get(), fb.value() == 0, mat);
+    glUniformMatrix3fv(prog->loc().posProj, 1, GL_FALSE, mat);
+
+    // imageProj
+    calcImageProj(imageInfo, mat);
+    glUniformMatrix3fv(prog->loc().imageProj, 1, GL_FALSE, mat);
+
+    if (effect == VibrancyLightH)
+        glUniform1f(prog->loc().pixelSize, 2.f * imageInfo.srcScale/SkScalar(imageInfo.src.width()));
+    else
+        glUniform1f(prog->loc().pixelSize, 2.f * imageInfo.srcScale/SkScalar(imageInfo.src.height()));
+
+    glDisable(GL_BLEND);
+
+    std::vector<GLfloat> vbo { genVBO(region) };
+    glEnableVertexAttribArray(prog->loc().pos);
+    glVertexAttribPointer(prog->loc().pos, 2, GL_FLOAT, GL_FALSE, 0, vbo.data());
+    const auto size { surface->image()->size() };
+    glViewport(0, 0, size.width(), size.height());
+    setScissors(surface.get(), fb == 0, region);
+    glBlendEquation(GL_FUNC_ADD);
+    glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
+    glDisableVertexAttribArray(prog->loc().pos);
+    glUseProgram(0);
+    auto sync { RSync::Make(device()) };
+    image->setReadSync(sync);
     return true;
 }
 
@@ -403,7 +500,7 @@ std::vector<GLfloat> RGLPainter::genVBO(const SkRegion &region) const noexcept
     return vbo;
 }
 
-SkRegion RGLPainter::calcDrawImageRegion(RSurface *surface, const RDrawImageInfo &imageInfo, const SkRegion *clip, const RDrawImageInfo *maskInfo) const noexcept
+SkRegion RGLPainter::calcDrawImageRegion(RSurface */*surface*/, const RDrawImageInfo &imageInfo, const SkRegion *clip, const RDrawImageInfo *maskInfo) const noexcept
 {
     SkRegion region { geometry().viewport.roundOut() };
     region.op(imageInfo.dst, SkRegion::Op::kIntersect_Op);

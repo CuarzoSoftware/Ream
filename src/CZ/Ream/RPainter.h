@@ -109,6 +109,15 @@ public:
         ColorIsPremult = 1u << 1
     };
 
+    enum ImageEffect : UInt32
+    {
+        /* Sigma 6 horizontal blur pass */
+        VibrancyLightH = 1u,
+
+        /* Sigma 3 vertical blur pass + saturation */
+        VibrancyLightV = 2u,
+    };
+
     struct State
     {
         CZBitset<Option> options { 0 };
@@ -260,6 +269,9 @@ public:
      * @return true if the operation succeeded, false otherwise.
      */
     virtual bool drawColor(const SkRegion& region) noexcept = 0;
+
+    // Alpha, factor, blend mode, etc are ignored
+    virtual bool drawImageEffect(const RDrawImageInfo& image, ImageEffect effect, const SkRegion *region = nullptr) noexcept = 0;
 
     virtual bool setGeometry(const RSurfaceGeometry &geometry) noexcept = 0;
     const RSurfaceGeometry &geometry() const noexcept { return m_state.geometry; }

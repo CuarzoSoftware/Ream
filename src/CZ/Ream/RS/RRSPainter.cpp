@@ -147,6 +147,25 @@ bool RRSPainter::drawImage(const RDrawImageInfo &image, const SkRegion *region, 
     return true;
 }
 
+bool RRSPainter::drawImageEffect(const RDrawImageInfo &image, ImageEffect effect, const SkRegion *region) noexcept
+{
+    save();
+    reset();
+
+    CZ_UNUSED(effect) // TODO: Handle dark mode
+    setColor(0xCCEEEEEE);
+
+    SkRegion clip { image.dst };
+
+    if (region)
+        clip.op(*region, SkRegion::kIntersect_Op);
+
+    auto ret { drawColor(clip) };
+
+    restore();
+    return ret;
+}
+
 bool RRSPainter::drawColor(const SkRegion &region) noexcept
 {
     if (blendMode() == RBlendMode::SrcOver && (SkColorGetA(color()) == 0 || factor().fA <= 0.f || opacity() <= 0.f))

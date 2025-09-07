@@ -25,6 +25,8 @@ public:
         GLint factorG;
         GLint factorB;
         GLint factorA;
+
+        GLint pixelSize;
     };
 
     static std::shared_ptr<RGLProgram> GetOrMake(RGLDevice *device, CZBitset<RGLShader::Features> features) noexcept;

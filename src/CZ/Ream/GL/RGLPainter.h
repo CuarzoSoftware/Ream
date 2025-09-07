@@ -10,6 +10,7 @@ class CZ::RGLPainter final : public RPainter
 {
 public:
     bool drawImage(const RDrawImageInfo& image, const SkRegion *region = nullptr, const RDrawImageInfo* mask = nullptr) noexcept override;
+    bool drawImageEffect(const RDrawImageInfo& image, ImageEffect effect, const SkRegion *region = nullptr) noexcept override;
     bool drawColor(const SkRegion &region) noexcept override;
     RGLDevice *device() const noexcept { return (RGLDevice*)m_device; }
     bool setGeometry(const RSurfaceGeometry &geometry) noexcept override;

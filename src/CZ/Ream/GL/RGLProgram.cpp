@@ -97,6 +97,9 @@ bool RGLProgram::link() noexcept
 
     if (features().has(RGLShader::HasImage))
     {
+        if (features().has(RGLShader::HasPixelSize))
+            m_loc.pixelSize = glGetUniformLocation(m_id, "pixelSize");
+
         m_loc.imageProj = glGetUniformLocation(m_id, "imageProj");
         m_loc.image = glGetUniformLocation(m_id, "image");
 
