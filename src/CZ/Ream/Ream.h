@@ -63,7 +63,6 @@ namespace CZ
     class RMatrixUtils;
     class RGammaLUT;
     class RSwapchain;
-    struct RPresentationTime;
     struct RDMABufferInfo;
 
     // GL/EGL
