@@ -89,6 +89,7 @@ public:
     const RDRMFormatSet &textureFormats() const noexcept { return m_textureFormats; }
     const RDRMFormatSet &renderFormats() const noexcept { return m_renderFormats; }
 
+    CZWeak<CZObject> drmLeaseGlobal; // Reserved for Louvre's DRM lease globals
     CZLogger log { RLog };
 protected:
     friend class SRMCore;
