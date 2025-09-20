@@ -256,11 +256,18 @@ std::shared_ptr<RImage> RImage::FromDMA(const RDMABufferInfo &info, CZOwn owners
     if (!core)
     {
         RLog(CZError, CZLN, "Missing RCore");
-        return {};
+        goto fail;
     }
 
     if (core->graphicsAPI() == RGraphicsAPI::GL)
         return RGLImage::FromDMA(info, ownership, constraints);
+
+fail:
+    if (ownership == CZOwn::Own)
+    {
+        auto copy { info };
+        copy.closeFds();
+    }
 
     return {};
 }

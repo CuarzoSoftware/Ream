@@ -41,6 +41,7 @@ namespace CZ
 
     class RDRMFormat;
     class RDRMFramebuffer;
+    class RDRMTimeline;
     class RDumbBuffer;
     class RGBMBo;
 

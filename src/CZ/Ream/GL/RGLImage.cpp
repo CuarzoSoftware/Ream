@@ -377,7 +377,12 @@ std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwn ow
     const auto size { SkISize::Make(info.width, info.height) };
 
     auto core { ValidateMake(size, info.format, kUnknown_SkAlphaType, &allocator, &formatInfo, &alphaType) };
-    if (!core) return {};
+
+    if (!core)
+    {
+        infoCopy->closeFds();
+        return {};
+    }
 
     auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, info.modifier)) };
     image->m_self = image;
