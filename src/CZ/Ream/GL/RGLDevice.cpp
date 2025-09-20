@@ -316,6 +316,14 @@ bool RGLDevice::initEGLDisplayExtensions() noexcept
     {
         m_caps.SyncGPU = exts.KHR_wait_sync = CZStringUtils::CheckExtension(extensions, "EGL_KHR_wait_sync");
         m_caps.SyncImport = m_caps.SyncExport = exts.ANDROID_native_fence_sync = CZStringUtils::CheckExtension(extensions, "EGL_ANDROID_native_fence_sync");
+
+        if (m_caps.SyncImport)
+        {
+            UInt64 soCap { 0 }, tlCap { 0 };
+            drmGetCap(drmFd(), DRM_CAP_SYNCOBJ, &soCap);
+            drmGetCap(drmFd(), DRM_CAP_SYNCOBJ_TIMELINE, &tlCap);
+            m_caps.Timeline = soCap == 1 && tlCap == 1;
+        }
     }
 
     exts.IMG_context_priority = CZStringUtils::CheckExtension(extensions, "EGL_IMG_context_priority");

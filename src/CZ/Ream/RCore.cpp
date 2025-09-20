@@ -40,6 +40,7 @@ void RCore::logInfo() noexcept
             RLog(CZInfo, "        Sync CPU: {}", dev->caps().SyncCPU);
             RLog(CZInfo, "        Sync Import: {}", dev->caps().SyncImport);
             RLog(CZInfo, "        Sync Export: {}", dev->caps().SyncExport);
+            RLog(CZInfo, "        Timeline: {}", dev->caps().Timeline);
         }
         RLog(CZInfo, "------------------------------------\n");
     }

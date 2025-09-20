@@ -49,6 +49,8 @@ public:
         /// Supports RSync synchronization with external devices.
         bool SyncImport;
         bool SyncExport;
+
+        bool Timeline;
     };
 
     ~RDevice() noexcept;

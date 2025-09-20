@@ -22,7 +22,11 @@ std::shared_ptr<RDRMTimeline> RDRMTimeline::Make(RDevice *device) noexcept
     if (!device)
         device = core->mainDevice();
 
-    // TODO: Check timeline cap
+    if (!device->caps().Timeline)
+    {
+        device->log(CZError, CZLN, "Missing Timeline cap");
+        return {};
+    }
 
     UInt32 handle;
     if (drmSyncobjCreate(device->drmFd(), 0, &handle) != 0)
@@ -47,7 +51,11 @@ std::shared_ptr<RDRMTimeline> RDRMTimeline::Import(int timelineFd, CZOwn own, RD
     if (!device)
         device = core->mainDevice();
 
-    // TODO: Check timeline cap
+    if (!device->caps().Timeline)
+    {
+        device->log(CZError, CZLN, "Missing Timeline cap");
+        return {};
+    }
 
     UInt32 handle {};
 
