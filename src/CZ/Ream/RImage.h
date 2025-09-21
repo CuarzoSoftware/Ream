@@ -188,6 +188,9 @@ public:
     std::shared_ptr<RRSImage> asRS() const noexcept;
 
     ~RImage() noexcept;
+
+    // Reserved for Louvre
+    std::shared_ptr<CZObjectBase> louvre;
 protected:
     RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifiers) noexcept;
     SkISize m_size;
