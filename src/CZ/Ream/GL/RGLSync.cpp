@@ -181,7 +181,7 @@ bool RGLSync::gpuWait(RDevice *waiter) const noexcept
     return sync->gpuWait(waiter);
 }
 
-bool RGLSync::cpuWait(int timeoutMs) const noexcept
+int RGLSync::cpuWait(int timeoutMs) const noexcept
 {
     RLockGuard lock {};
 
@@ -195,8 +195,11 @@ bool RGLSync::cpuWait(int timeoutMs) const noexcept
             0,
             timeoutMs < 0 ? EGL_FOREVER_KHR : timeoutMs * 1000000);
 
-        return ret == EGL_CONDITION_SATISFIED_KHR;
+        if (ret == EGL_CONDITION_SATISFIED_KHR)
+            return 1;
+        else if (ret == EGL_TIMEOUT_EXPIRED)
+            return 0;
     }
 
-    return false;
+    return -1;
 }

@@ -16,8 +16,8 @@ public:
     // True on success or if already signaled, non-blocking
     virtual bool gpuWait(RDevice *waiter = nullptr) const noexcept = 0;
 
-    // True on success or if already signaled, false on error or timeout, blocking
-    virtual bool cpuWait(int timeoutMs = -1) const noexcept = 0;
+    // 1 if already signaled, -1 on error, 0 on timeout, blocking
+    virtual int cpuWait(int timeoutMs = -1) const noexcept = 0;
 
     // Returns a dup fd or -1 on error
     CZSpFd fd() const noexcept { return m_fd.dup(); }

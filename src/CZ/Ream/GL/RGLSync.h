@@ -15,7 +15,7 @@ public:
     ~RGLSync() noexcept;
     RGLDevice *device() const noexcept { return (RGLDevice*)m_device; }
     bool gpuWait(RDevice *waiter = nullptr) const noexcept override;
-    bool cpuWait(int timeoutMs = -1) const noexcept override;
+    int cpuWait(int timeoutMs = -1) const noexcept override;
 private:
     RGLSync(std::shared_ptr<RCore> core, RGLDevice *device, EGLSyncKHR sync, int fd, bool isExternal) noexcept;
     EGLSyncKHR m_eglSync;

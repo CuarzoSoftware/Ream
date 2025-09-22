@@ -833,7 +833,7 @@ bool RGLImage::writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept
     const auto current { RGLMakeCurrent::FromDevice(bo->allocator()->asGL(), false) };
 
     if (readSync())
-        readSync()->cpuWait(-1);
+        readSync()->cpuWait();
 
     auto *dst { static_cast<UInt8*>(gbm_bo_map(bo->bo(), 0, 0, size().width(), size().height(), GBM_BO_TRANSFER_WRITE, &stride, &mapData)) };
 
@@ -978,7 +978,7 @@ bool RGLImage::readPixelsGBMmapRead(const RPixelBufferRegion &region) noexcept
     bool deviceWait { true };
 
     if (writeSync())
-        deviceWait = !writeSync()->cpuWait();
+        deviceWait = writeSync()->cpuWait() != 1;
 
     if (deviceWait)
         allocator()->wait();
@@ -1052,7 +1052,7 @@ bool RGLImage::readPixelsNative(const RPixelBufferRegion &region) noexcept
     bool deviceWait { true };
 
     if (writeSync())
-        deviceWait = !writeSync()->cpuWait();
+        deviceWait = writeSync()->cpuWait() != 1;
 
     if (deviceWait)
         device->wait();
