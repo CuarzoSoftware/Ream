@@ -4,6 +4,7 @@
 #include <CZ/Ream/Ream.h>
 #include <EGL/egl.h>
 
+// Scoped eglMakeCurrent (restores the prev state on destruction)
 class CZ::RGLMakeCurrent
 {
 public:

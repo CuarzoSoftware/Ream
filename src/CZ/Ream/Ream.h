@@ -77,7 +77,6 @@ namespace CZ
     class RGLPass;
     class RGLSwapchainWL;
 
-
     class RGLStrings;
     class RGLMakeCurrent;
     class RGLContextData;

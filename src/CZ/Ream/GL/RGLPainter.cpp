@@ -33,24 +33,18 @@ void RGLPainter::calcImageProj(const RDrawImageInfo &info, SkScalar *outMat) con
 
 void RGLPainter::setScissors(RSurface *surface, bool flipY, const SkRegion &region) const noexcept
 {
-    // Map the region's bounds (virtual) through the pipeline to framebuffer pixel space.
     SkRect virtualBounds { SkRect::Make(region.getBounds()) };
 
     SkMatrix toFB = RMatrixUtils::VirtualToImage(
         geometry().transform, geometry().viewport, geometry().dst);
 
     SkRect mapped;
-    toFB.mapRect(&mapped, virtualBounds); // axis-aligned bounding box after rotation/flip
+    toFB.mapRect(&mapped, virtualBounds);
 
-    // If drawing to default framebuffer, the draw path applied a Y-flip to go from
-    // framebuffer(bottom-left) to virtual(top-left). Here we need the scissor in
-    // GL window coords (bottom-left), so *invert* that flip: y -> fbHeight - y.
     if (flipY) {
-        // mapped is in top-left-style pixel space; convert to bottom-left.
         SkScalar top = mapped.top();
         SkScalar bottom = mapped.bottom();
 
-        // After flip: new_y = fbHeight - bottom  (because bottom is larger in top-left)
         SkScalar flippedTop = surface->image()->size().height() - bottom;
         SkScalar flippedBottom = surface->image()->size().height() - top;
         mapped.setLTRB(
@@ -75,9 +69,8 @@ void RGLPainter::setScissors(RSurface *surface, bool flipY, const SkRegion &regi
 
     int w = x1 - x0;
     int h = y1 - y0;
-    if (w <= 0 || h <= 0) {
-        return;//return false; // nothing to draw
-    }
+    if (w <= 0 || h <= 0)
+        return; // nothing to draw
 
     glScissor(x0, y0, w, h);
 }

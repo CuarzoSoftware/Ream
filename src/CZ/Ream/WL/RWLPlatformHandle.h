@@ -9,6 +9,7 @@ struct wl_display;
 class CZ::RWLPlatformHandle : public RPlatformHandle
 {
 public:
+    // Does not take ownership
     static std::shared_ptr<RWLPlatformHandle> Make(wl_display *wlDisplay) noexcept;
     wl_display *wlDisplay() const noexcept { return m_wlDisplay; }
 

@@ -18,10 +18,21 @@ public:
     static std::shared_ptr<RCore> Make(const Options &options) noexcept;
     static std::shared_ptr<RCore> Get() noexcept;
 
+    /**
+     * @brief Clears resources pending destruction.
+     *
+     * This is primarily used by the OpenGL graphics API. For example,
+     * an `RGLImage` may hold framebuffers, renderbuffers, or other GPU
+     * resources that were created in contexts on other threads.
+     *
+     * Such resources are queued for deletion and will be released either
+     * when the owning thread is destroyed or when this function is called.
+     */
     virtual void clearGarbage() noexcept = 0;
 
     const std::vector<RDevice*> &devices() const noexcept { return m_devices; }
 
+    // The device used when an `RDevice*` parameter is `nullptr`.
     RDevice *mainDevice() const noexcept { return m_mainDevice; }
 
     // Must not be called after creating images, surfaces, etc

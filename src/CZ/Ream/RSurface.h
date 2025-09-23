@@ -22,7 +22,7 @@ class CZ::RSurface : public RObject
 public:
 
     /**
-     * @brief Creates a new surface with an internal image that supports all major capabilities.
+     * @brief Creates a new surface with an internal image.
      *
      * The created image will have at least the following caps for the main device:
      * - RImageCap_Src
@@ -52,7 +52,7 @@ public:
     [[nodiscard]] static std::shared_ptr<RSurface> WrapImage(std::shared_ptr<RImage> image) noexcept;
 
     /**
-     * @brief Begins a rendering pass using an RPainter.
+     * @brief Begins a rendering pass.
      *
      * @param device Optional device to use. If nullptr, the main device is used.
      * @return A valid RPass object on success, or an invalid RPass on failure.
@@ -74,7 +74,7 @@ public:
      * @param viewport Portion of the world to capture.
      * @param dst Pixel area within the image to render into.
      * @param transform Optional transform to apply (defaults to CZTransform::Normal).
-     * @return True if geometry was successfully set; false otherwise.
+     * @return true if geometry was successfully set, false if invalid.
      */
     bool setGeometry(const RSurfaceGeometry &geometry) noexcept;
     const RSurfaceGeometry &geometry() const noexcept { return m_geometry; }
@@ -86,7 +86,7 @@ public:
      * @param scale Scale factor.
      * @param shrink If true, a new image will be allocated if the new dst size is different than the current image.
      *               If false, the existing image is reused as long as it is large enough.
-     * @return True if a new image was allocated, false if the current image was reused.
+     * @return true if a new image was allocated, false if the current image was reused.
      */
     bool resize(SkISize size, SkScalar scale, bool shrink = false) noexcept;
 
