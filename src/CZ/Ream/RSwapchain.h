@@ -61,7 +61,7 @@ public:
     /**
      * @brief Request a resize of future swapchain images.
      *
-     * This affects only newly acquired images; currently acquired images
+     * This affects only newly acquired images, currently acquired images
      * remain at the previous size until released.
      *
      * @param size The new desired image size in pixels.

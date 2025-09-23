@@ -74,7 +74,7 @@ std::shared_ptr<REGLImage> REGLImage::MakeFromDMA(const RDMABufferInfo &info, RG
 
     if (!device->dmaTextureFormats().has(info.format, info.modifier))
     {
-        // device->log(CZTrace, CZLN, "Unsupported format {} - {}", RDRMFormat::FormatName(info.format), RDRMFormat::ModifierName(info.modifier));
+        device->log(CZTrace, CZLN, "Unsupported format {} - {}", RDRMFormat::FormatName(info.format), RDRMFormat::ModifierName(info.modifier));
         return {};
     }
 

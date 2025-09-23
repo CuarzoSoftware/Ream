@@ -18,7 +18,7 @@ class CZ::RGLContextData : public RObject
 public:
     RGLContextData() noexcept;
 
-    /* Populate with your own OpenGL resources */
+    /* Populate it with your own OpenGL resources */
 
 protected:
     friend struct RGLThreadDataManager;
@@ -104,7 +104,7 @@ private:
     friend struct RGLThreadDataManager;
     RGLContextDataManager(const AllocFunc &func) noexcept;
     void freeCurrentThreadData() noexcept;
-    // Stored data foeach [thread, device]
+    // Stored data for each [thread, device]
     std::unordered_map<pthread_t, std::unordered_map<RGLDevice*, RGLContextData*>> m_data;
     AllocFunc m_allocFunc;
     std::weak_ptr<RGLContextDataManager> m_self;

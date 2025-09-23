@@ -12,8 +12,21 @@ VERSION_MAJOR = meson.project_version().split('.')[0]
 VERSION_MINOR = meson.project_version().split('.')[1]
 VERSION_PATCH = meson.project_version().split('.')[2]
 VERSION_BUILD = run_command('cat', './BUILD', check : false).stdout()
-
 HEADERS_INSTALL_PATH = join_paths(get_option('prefix'), get_option('includedir'), 'CZ/Ream')
+CONF_FILE_NAME = 'CZ' + meson.project_name() + 'Version.h'
+
+conf = configuration_data()
+conf.set('VERSION_MAJOR', VERSION_MAJOR)
+conf.set('VERSION_MINOR', VERSION_MINOR)
+conf.set('VERSION_PATCH', VERSION_PATCH)
+conf_file = configure_file(
+    input : 'src/CZ/Ream/' + CONF_FILE_NAME +'.in',
+    output : CONF_FILE_NAME,
+    configuration : conf)
+
+install_data(
+    conf_file,
+    install_dir: HEADERS_INSTALL_PATH)
 
 # -------------- DEPENDENCIES --------------
 
@@ -29,19 +42,18 @@ boost_dep       = dependency('boost', modules : ['container'])
 drm_dep         = dependency('libdrm', version: '>= 2.4.113')
 drm_headers_dep = drm_dep.partial_dependency(compile_args: true, includes: true)
 
-
 # -------------- HEADERS --------------
 
 header_dirs = [
-    ['src/CZ/Ream', ''],
+    ['src/CZ/Ream',     ''],
     ['src/CZ/Ream/DRM', 'DRM'],
-    ['src/CZ/Ream/RS', 'RS'],
-    ['src/CZ/Ream/GL', 'GL'],
-    ['src/CZ/Ream/WL', 'WL'],
+    ['src/CZ/Ream/RS',  'RS'],
+    ['src/CZ/Ream/GL',  'GL'],
+    ['src/CZ/Ream/WL',  'WL'],
     ['src/CZ/Ream/GBM', 'GBM'],
     ['src/CZ/Ream/EGL', 'EGL'],
-    ['src/CZ/Ream/SK', 'SK'],
-    ['src/CZ/Ream/OF', 'OF']
+    ['src/CZ/Ream/SK',  'SK'],
+    ['src/CZ/Ream/OF',  'OF']
 ]
 
 foreach header_dir : header_dirs
@@ -56,13 +68,13 @@ cz_ream = library(
     sources : run_command('find', './src/CZ', '-type', 'f', '-name', '*[.cpp,.c]', check : false).stdout().strip().split('\n'),
     include_directories : ['src'],
     dependencies : [
+        cz_core_dep,
+        cz_skia_dep,
         egl_dep,
         wayland_egl_dep,
         gles2_dep,
         gbm_dep,
         drm_dep,
-        cz_core_dep,
-        cz_skia_dep,
         boost_dep
     ],
     soversion: VERSION_MAJOR,
@@ -76,7 +88,7 @@ cz_ream_dep = declare_dependency(
 pkg.generate(
     cz_ream,
     name: 'cz-ream',
-    description: 'C++ Library for Graphics Context and Buffer Management',
+    description: 'C++ graphics library for Linux',
     version: meson.project_version(),
     filebase: 'cz-ream',
     libraries: [
@@ -86,4 +98,4 @@ pkg.generate(
     ],
     subdirs:'CZ/Ream')
 
-subdir('src/examples/ream')
+subdir('src/examples/cz-ream-wl-swapchain')

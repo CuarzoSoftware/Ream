@@ -84,7 +84,7 @@ public:
     // DMA formats than can be used as a source
     const RDRMFormatSet &dmaTextureFormats() const noexcept { return m_dmaTextureFormats; }
 
-    // If a format/modifier pair exists in textures but not here, then its external only
+    // DMA formats than can be used as a destination
     const RDRMFormatSet &dmaRenderFormats() const noexcept { return m_dmaRenderFormats; }
 
     // DMA + Native ones

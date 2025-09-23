@@ -23,6 +23,8 @@ public:
     const std::vector<RDevice*> &devices() const noexcept { return m_devices; }
 
     RDevice *mainDevice() const noexcept { return m_mainDevice; }
+
+    // Must not be called after creating images, surfaces, etc
     bool overrideMainDevice(RDevice *device) noexcept
     {
         if (!device) return false;

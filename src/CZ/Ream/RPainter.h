@@ -26,7 +26,7 @@ namespace CZ
         /**
          * @brief The image to draw.
          *
-         * If nullptr, drawImage() will fail or return `false`.
+         * If nullptr, drawImage() will fail and return `false`.
          */
         std::shared_ptr<RImage> image;
 

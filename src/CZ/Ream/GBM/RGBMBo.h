@@ -39,7 +39,7 @@ public:
      */
     static std::shared_ptr<RGBMBo> Make(SkISize size, const RDRMFormat &format, RDevice *allocator = nullptr) noexcept;
 
-    // For hw cursors, gbm_bo_write is garanteed to work
+    // For hw cursors, gbm_bo_write is guaranteed to work
     static std::shared_ptr<RGBMBo> MakeCursor(SkISize size, RFormat format, RDevice *allocator = nullptr) noexcept;
 
     // Does not take ownership of the fds (dups them internally)

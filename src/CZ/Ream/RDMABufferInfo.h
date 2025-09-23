@@ -11,8 +11,7 @@
 
 struct CZ::RDMABufferInfo
 {
-    Int32 width;
-    Int32 height;
+    Int32 width, height;
     RFormat format;
     RModifier modifier;
     int planeCount;

@@ -8,6 +8,8 @@
 #include <CZ/Ream/VK/RVKCore.h>
 #include <CZ/Ream/RS/RRSCore.h>
 
+#include <CZReamVersion.h>
+
 #include <cstring>
 
 using namespace CZ;
@@ -25,6 +27,7 @@ void RCore::logInfo() noexcept
     {
         printf("\n");
         RLog(CZInfo, "--------------- Ream ---------------");
+        RLog(CZInfo, "Version: {}.{}.{}", CZ_REAM_VERSION_MAJOR, CZ_REAM_VERSION_MINOR, CZ_REAM_VERSION_PATCH);
         RLog(CZInfo, "Graphics API: {}", RGraphicsAPIString(graphicsAPI()));
         RLog(CZInfo, "Platform: {}", RPlatformString(platform()));
         RLog(CZInfo, "Main Device: {}", mainDevice()->drmNode());
