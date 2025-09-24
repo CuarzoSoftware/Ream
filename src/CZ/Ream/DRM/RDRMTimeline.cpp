@@ -73,20 +73,20 @@ std::shared_ptr<RDRMTimeline> RDRMTimeline::Import(int timelineFd, CZOwn own, RD
     return std::shared_ptr<RDRMTimeline>(new RDRMTimeline(core, device, handle));
 }
 
-int RDRMTimeline::exportTimeline() const noexcept
+CZSpFd RDRMTimeline::exportTimeline() const noexcept
 {
     int fd { -1 };
 
     if (drmSyncobjHandleToFD(device()->drmFd(), handle(), &fd) != 0)
     {
         RLog(CZError, CZLN, "drmSyncobjHandleToFD failed");
-        return -1;
+        return CZSpFd();
     }
 
-    return fd;
+    return CZSpFd(fd);
 }
 
-int RDRMTimeline::exportSyncFile(UInt64 point) const noexcept
+CZSpFd RDRMTimeline::exportSyncFile(UInt64 point) const noexcept
 {
     int fd { -1 };
     UInt32 tmpHandle;
@@ -94,25 +94,25 @@ int RDRMTimeline::exportSyncFile(UInt64 point) const noexcept
     if (drmSyncobjCreate(device()->drmFd(), 0, &tmpHandle) != 0)
     {
         RLog(CZError, CZLN, "drmSyncobjCreate failed");
-        return -1;
+        return CZSpFd();
     }
 
     if (drmSyncobjTransfer(device()->drmFd(), tmpHandle, 0, handle(), point, 0) != 0)
     {
         RLog(CZError, CZLN, "drmSyncobjTransfer failed");
         drmSyncobjDestroy(device()->drmFd(), tmpHandle);
-        return -1;
+        return CZSpFd();
     }
 
     if (drmSyncobjExportSyncFile(device()->drmFd(), tmpHandle, &fd) != 0)
     {
         RLog(CZError, CZLN, "drmSyncobjExportSyncFile failed");
         drmSyncobjDestroy(device()->drmFd(), tmpHandle);
-        return -1;
+        return CZSpFd();
     }
 
     drmSyncobjDestroy(device()->drmFd(), tmpHandle);
-    return fd;
+    return CZSpFd(fd);
 }
 
 bool RDRMTimeline::importSyncFile(int fd, UInt64 point, CZOwn own) noexcept

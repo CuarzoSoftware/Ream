@@ -3,6 +3,7 @@
 
 #include <CZ/Ream/RObject.h>
 #include <CZ/Core/CZOwn.h>
+#include <CZ/Core/CZSpFd.h>
 #include <memory>
 
 class CZ::RDRMTimeline : public RObject
@@ -13,11 +14,11 @@ public:
     static std::shared_ptr<RDRMTimeline> Make(RDevice *device = nullptr) noexcept;
     static std::shared_ptr<RDRMTimeline> Import(int timelineFd, CZOwn own, RDevice *device = nullptr) noexcept;
 
-    // -1 on failure, must be closed manually
-    [[nodiscard]] int exportTimeline() const noexcept;
+    // -1 on failure
+    [[nodiscard]] CZSpFd exportTimeline() const noexcept;
 
-    // -1 on failure, must be closed manually
-    [[nodiscard]] int exportSyncFile(UInt64 point) const noexcept;
+    // -1 on failure
+    [[nodiscard]] CZSpFd exportSyncFile(UInt64 point) const noexcept;
     bool importSyncFile(int fd, UInt64 point, CZOwn own) noexcept;
 
     // dst must belong to the same device
