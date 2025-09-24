@@ -152,7 +152,7 @@ App::App() noexcept
     // Initialize Ream
     RCore::Options options {};
     options.graphicsAPI    = RGraphicsAPI::Auto;
-    options.platformHandle = RWLPlatformHandle::Make(wl.display);
+    options.platformHandle = RWLPlatformHandle::Make(wl.display, CZOwn::Own);
     core = RCore::Make(options);
     assert(core && "Failed to create RCore");
 
@@ -186,9 +186,7 @@ App::~App() noexcept
     wl_compositor_destroy(wl.compositor);
     wl_registry_destroy(wl.registry);
 
-    // Must be destroyed before the wl_display
     core.reset();
-    wl_display_disconnect(wl.display);
 }
 
 /// Perform a rendering pass.

@@ -173,11 +173,11 @@ public:
     RDevice *allocator() const noexcept { return m_allocator; }
     std::shared_ptr<RCore> core() const noexcept { return m_core; }
 
-    // Signaled when no longer beind read
+    // Signalled when no longer being read
     std::shared_ptr<RSync> readSync() noexcept { return m_readSync; }
     void setReadSync(std::shared_ptr<RSync> sync) noexcept { m_readSync = sync;}
 
-    // Signaled when pending write operations end
+    // Signalled when pending write operations end
     std::shared_ptr<RSync> writeSync() noexcept { return m_writeSync; }
     void setWriteSync(std::shared_ptr<RSync> sync) noexcept { m_writeSync = sync; }
 
