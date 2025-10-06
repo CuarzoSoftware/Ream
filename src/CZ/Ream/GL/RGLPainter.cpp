@@ -11,6 +11,7 @@
 #include <CZ/skia/core/SkMatrix.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <GLES3/gl3.h>
 
 using namespace CZ;
 
@@ -78,11 +79,12 @@ void RGLPainter::setScissors(RSurface *surface, bool flipY, const SkRegion &regi
 void RGLPainter::bindTexture(RGLTexture tex, GLuint uniform, const RDrawImageInfo &info, GLuint slot) const noexcept
 {
     glActiveTexture(GL_TEXTURE0 + slot);
+    glBindSampler(slot, 0); // Skia messes with this...
     glBindTexture(tex.target, tex.id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, info.minFilter == RImageFilter::Linear ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, info.minFilter == RImageFilter::Linear ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, RImageWrapToGL(info.wrapS));
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, RImageWrapToGL(info.wrapT));
+    glTexParameteri(tex.target, GL_TEXTURE_MIN_FILTER, info.minFilter == RImageFilter::Linear ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(tex.target, GL_TEXTURE_MAG_FILTER, info.magFilter == RImageFilter::Linear ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(tex.target, GL_TEXTURE_WRAP_S, RImageWrapToGL(info.wrapS));
+    glTexParameteri(tex.target, GL_TEXTURE_WRAP_T, RImageWrapToGL(info.wrapT));
     glUniform1i(uniform, slot);
 }
 
@@ -429,9 +431,9 @@ bool RGLPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect ef
     glUniformMatrix3fv(prog->loc().imageProj, 1, GL_FALSE, mat);
 
     if (effect == VibrancyLightH)
-        glUniform1f(prog->loc().pixelSize, 2.f * imageInfo.srcScale/SkScalar(imageInfo.src.width()));
+        glUniform1f(prog->loc().pixelSize, imageInfo.srcScale/SkScalar(imageInfo.src.width()));
     else
-        glUniform1f(prog->loc().pixelSize, 2.f * imageInfo.srcScale/SkScalar(imageInfo.src.height()));
+        glUniform1f(prog->loc().pixelSize, imageInfo.srcScale/SkScalar(imageInfo.src.height()));
 
     glDisable(GL_BLEND);
 
