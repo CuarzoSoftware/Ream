@@ -430,7 +430,7 @@ bool RGLPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect ef
     calcImageProj(imageInfo, mat);
     glUniformMatrix3fv(prog->loc().imageProj, 1, GL_FALSE, mat);
 
-    if (effect == VibrancyLightH)
+    if (effect == VibrancyH)
         glUniform1f(prog->loc().pixelSize, imageInfo.srcScale/SkScalar(imageInfo.src.width()));
     else
         glUniform1f(prog->loc().pixelSize, imageInfo.srcScale/SkScalar(imageInfo.src.height()));

@@ -112,10 +112,13 @@ public:
     enum ImageEffect : UInt32
     {
         /* Sigma 6 horizontal blur pass */
-        VibrancyLightH = 1u,
+        VibrancyH = 1u,
 
-        /* Sigma 3 vertical blur pass + saturation */
+        /* Sigma 3 vertical blur pass + light tone saturation */
         VibrancyLightV = 2u,
+
+        /* Sigma 3 vertical blur pass + dark tone saturation */
+        VibrancyDarkV = 3u,
     };
 
     struct State

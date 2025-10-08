@@ -29,8 +29,9 @@ public:
         HasPixelSize        = 1u << 12,
 
         /* The upper 4 bits represent effects */
-        VibrancyLightH      = 1u << 28,
+        VibrancyH           = 1u << 28,
         VibrancyLightV      = 2u << 28,
+        VibrancyDarkV       = 3u << 28,
     };
 
     static constexpr CZBitset<Features> VertFeatures { HasImage | HasMask };

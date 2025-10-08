@@ -87,10 +87,7 @@ static bool CreateFb(RDevice *dev, int n, UInt32 w, UInt32 h, RFormat fmt, const
 std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromGBMBo(std::shared_ptr<RGBMBo> bo) noexcept
 {
     if (!bo)
-    {
-        RLog(CZError, CZLN, "Invalid RGBMBo");
         return {};
-    }
 
     auto core { bo->core() };
     UInt32 id { 0 };
