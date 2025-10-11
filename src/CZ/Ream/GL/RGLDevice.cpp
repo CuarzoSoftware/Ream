@@ -8,7 +8,7 @@
 #include <CZ/skia/gpu/ganesh/gl/GrGLAssembleInterface.h>
 #include <CZ/skia/gpu/ganesh/gl/GrGLDirectContext.h>
 
-#include <CZ/Utils/CZStringUtils.h>
+#include <CZ/Core/Utils/CZStringUtils.h>
 
 #include <fcntl.h>
 #include <gbm.h>

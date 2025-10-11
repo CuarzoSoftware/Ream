@@ -5,7 +5,7 @@
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
 #include <CZ/Ream/SK/RSKContext.h>
-#include <CZ/Utils/CZVectorUtils.h>
+#include <CZ/Core/Utils/CZVectorUtils.h>
 
 #include <CZ/skia/gpu/ganesh/gl/GrGLAssembleInterface.h>
 #include <CZ/skia/gpu/ganesh/gl/GrGLDirectContext.h>

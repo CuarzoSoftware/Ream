@@ -2,7 +2,7 @@
 #include <CZ/Ream/WL/RWLPlatformHandle.h>
 #include <CZ/Ream/RS/RRSDevice.h>
 #include <CZ/Ream/RS/RRSCore.h>
-#include <CZ/Utils/CZVectorUtils.h>
+#include <CZ/Core/Utils/CZVectorUtils.h>
 #include <wayland-client-protocol.h>
 
 using namespace CZ;

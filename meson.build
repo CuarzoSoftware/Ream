@@ -6,7 +6,7 @@ project(
     default_options: [
         'warning_level=2',
         'buildtype=release',
-        'cpp_std=c++23'])
+        'cpp_std=c++20'])
 
 VERSION_MAJOR = meson.project_version().split('.')[0]
 VERSION_MINOR = meson.project_version().split('.')[1]
@@ -42,6 +42,18 @@ boost_dep       = dependency('boost', modules : ['container'])
 drm_dep         = dependency('libdrm', version: '>= 2.4.113')
 drm_headers_dep = drm_dep.partial_dependency(compile_args: true, includes: true)
 
+deps = [
+    cz_core_dep,
+    cz_skia_dep,
+    wayland_egl_dep,
+    egl_dep,
+    gles2_dep,
+    gbm_dep,
+    boost_dep,
+    drm_dep,
+    drm_headers_dep
+]
+
 # -------------- HEADERS --------------
 
 header_dirs = [
@@ -67,21 +79,12 @@ cz_ream = library(
     'cz-ream',
     sources : run_command('find', './src/CZ', '-type', 'f', '-name', '*[.cpp,.c]', check : false).stdout().strip().split('\n'),
     include_directories : ['src'],
-    dependencies : [
-        cz_core_dep,
-        cz_skia_dep,
-        egl_dep,
-        wayland_egl_dep,
-        gles2_dep,
-        gbm_dep,
-        drm_dep,
-        boost_dep
-    ],
+    dependencies : deps,
     soversion: VERSION_MAJOR,
     install : true)
 
 cz_ream_dep = declare_dependency(
-    dependencies: [drm_headers_dep, cz_skia_dep],
+    dependencies: deps,
     include_directories : ['src', 'src/CZ/Ream'],
     link_with : cz_ream)
 
@@ -91,11 +94,7 @@ pkg.generate(
     description: 'C++ graphics library for Linux',
     version: meson.project_version(),
     filebase: 'cz-ream',
-    libraries: [
-        drm_headers_dep,
-        cz_core_dep,
-        cz_skia_dep
-    ],
+    libraries: deps,
     subdirs:'CZ/Ream')
 
 subdir('src/examples/cz-ream-wl-swapchain')

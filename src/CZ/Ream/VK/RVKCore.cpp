@@ -1,9 +1,9 @@
-#include <CZ/Ream/RVersion.h>
+#include <CZReamVersion.h>
 #include <CZ/Ream/RLog.h>
 #include <CZ/Ream/VK/RVKCore.h>
 #include <CZ/Ream/VK/RVKDevice.h>
 #include <CZ/Ream/VK/RVKExtensions.h>
-#include <CZ/Utils/CZVectorUtils.h>
+#include <CZ/Core/Utils/CZVectorUtils.h>
 
 using namespace CZ;
 
@@ -252,7 +252,7 @@ bool RVKCore::initInstance() noexcept
     VkApplicationInfo appInfo {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = CZ_REAM_VERSION_SERIAL;
+    appInfo.engineVersion = CZ_REAM_VERSION;
     appInfo.apiVersion = VK_API_VERSION_1_1;
 
     VkInstanceCreateInfo createInfo {};

@@ -2,8 +2,8 @@
 #include <CZ/Ream/RS/RRSDevice.h>
 #include <CZ/Ream/RS/RRSCore.h>
 #include <CZ/Ream/RS/RRSPainter.h>
-#include <CZ/Utils/CZStringUtils.h>
-#include <CZ/Utils/CZSetUtils.h>
+#include <CZ/Core/Utils/CZStringUtils.h>
+#include <CZ/Core/Utils/CZSetUtils.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <xf86drm.h>

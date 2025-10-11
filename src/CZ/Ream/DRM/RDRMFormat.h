@@ -2,7 +2,7 @@
 #define RDRMFORMAT_H
 
 #include <CZ/Ream/Ream.h>
-#include <CZ/Utils/CZMathUtils.h>
+#include <CZ/Core/Utils/CZMathUtils.h>
 #include <boost/container/flat_set.hpp>
 #include <string_view>
 #include <drm_fourcc.h>

@@ -33,3 +33,20 @@
 - Raster
 - OpenGL ES 2.0
 - Vulkan (WIP)
+
+### Environment Variables
+
+* **CZ_REAM_LOG_LEVEL**: Sets the minimum log level for runtime output.
+  Available levels (from least to most verbose):
+  0: Silent, 1: Fatal, 2: Error, 3: Warning, 4: Info, 5: Debug, 6: Trace
+
+* **CZ_REAM_GAPI**: Overrides the graphics API selection when `RCore` is initialized with `RGraphicsAPI::Auto`.
+  Accepted values are: `GL` (OpenGL), `VK` (Vulkan), and `RS` (Raster).
+
+### Abstraction
+
+Ream is designed to abstract away the underlying platform and graphics API (GAPI), allowing your code to remain platform and API-independent by default.
+To ensure portability, use the classes provided directly under the `/Ream` directory. For example, to create an image, use `RImage::Make()`, which will internally return an appropriate implementation such as `RGLImage`, `RSImage`, or `RVKImage`, depending on the active GAPI.
+Platform and API-specific implementations reside in the `/Ream/GL`, `/Ream/RS`, `/Ream/VK`, etc, subdirectories.
+In cases where you need access to API-specific functionality, most classes provide safe downcasting methods e.g. `image->asGL()`.
+The `RCore` class exposes information about the current platform and GAPI. It can be accessed globally via `RCore::Get()`.

@@ -4,8 +4,8 @@
 #include <CZ/Ream/WL/RWLPlatformHandle.h>
 #include <CZ/Ream/DRM/RDRMPlatformHandle.h>
 #include <CZ/Ream/RLog.h>
-#include <CZ/Utils/CZStringUtils.h>
-#include <CZ/Utils/CZVectorUtils.h>
+#include <CZ/Core/Utils/CZStringUtils.h>
+#include <CZ/Core/Utils/CZVectorUtils.h>
 #include <drm_fourcc.h>
 #include <EGL/egl.h>
 #include <fcntl.h>

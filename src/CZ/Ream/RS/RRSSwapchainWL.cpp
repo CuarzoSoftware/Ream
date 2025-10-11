@@ -3,7 +3,7 @@
 #include <CZ/Ream/RS/RRSCore.h>
 #include <CZ/Ream/WL/RWLFormat.h>
 #include <CZ/Ream/RLog.h>
-#include <CZ/Utils/CZVectorUtils.h>
+#include <CZ/Core/Utils/CZVectorUtils.h>
 
 using namespace CZ;
 
