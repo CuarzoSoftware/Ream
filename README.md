@@ -46,7 +46,11 @@
 ### Abstraction
 
 Ream is designed to abstract away the underlying platform and graphics API (GAPI), allowing your code to remain platform and API-independent by default.
+
 To ensure portability, use the classes provided directly under the `/Ream` directory. For example, to create an image, use `RImage::Make()`, which will internally return an appropriate implementation such as `RGLImage`, `RSImage`, or `RVKImage`, depending on the active GAPI.
+
 Platform and API-specific implementations reside in the `/Ream/GL`, `/Ream/RS`, `/Ream/VK`, etc, subdirectories.
+
 In cases where you need access to API-specific functionality, most classes provide safe downcasting methods e.g. `image->asGL()`.
+
 The `RCore` class exposes information about the current platform and GAPI. It can be accessed globally via `RCore::Get()`.
