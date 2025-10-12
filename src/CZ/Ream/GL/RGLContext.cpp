@@ -10,7 +10,6 @@
 #include <CZ/skia/gpu/ganesh/gl/GrGLAssembleInterface.h>
 #include <CZ/skia/gpu/ganesh/gl/GrGLDirectContext.h>
 
-#include <mutex>
 #include <unordered_set>
 
 using namespace CZ;
@@ -446,6 +445,10 @@ RGLContextDataManager::~RGLContextDataManager() noexcept
 void RGLContextDataManager::freeCurrentThreadData() noexcept
 {
     RLockGuard lock {};
+    auto core { RCore::Get() };
+
+    if (!core)
+        return;
 
     auto it { m_data.find(pthread_self()) };
 

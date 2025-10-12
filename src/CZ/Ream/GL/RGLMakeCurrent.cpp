@@ -1,3 +1,4 @@
+#include <CZ/Ream/RCore.h>
 #include <CZ/Ream/GL/RGLMakeCurrent.h>
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <CZ/Ream/RLog.h>
@@ -18,4 +19,13 @@ RGLMakeCurrent RGLMakeCurrent::FromDevice(RGLDevice *device, bool keepSurfaces) 
         return { device->eglDisplay(), eglGetCurrentSurface(EGL_DRAW), eglGetCurrentSurface(EGL_READ), ctx };
     else
         return { device->eglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, ctx };
+}
+
+bool RGLMakeCurrent::restore() noexcept
+{
+    if (restored) return false;
+    restored = true;
+    if (prevDisplay != EGL_NO_DISPLAY)
+        eglMakeCurrent(prevDisplay, prevDraw, prevRead, prevContext);
+    return true;
 }

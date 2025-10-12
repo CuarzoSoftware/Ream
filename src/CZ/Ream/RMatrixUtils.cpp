@@ -51,17 +51,33 @@ SkMatrix RMatrixUtils::DstTransform(CZTransform transform, SkSize dstSize) noexc
 
 SkMatrix RMatrixUtils::VirtualToImage(CZTransform transform, SkRect viewport, SkRect dst) noexcept
 {
-    const auto sX { dst.width() / viewport.width() };
-    const auto sY { dst.height() / viewport.height() };
-    const auto tX { dst.left() - viewport.left() * sX };
-    const auto tY { dst.top() - viewport.top() * sY };
+    SkSize size;
+
+    SkScalar sX, sY, tX, tY;
+
+    if (CZ::Is90Transform(transform))
+    {
+        size = SkSize::Make(dst.height(), dst.width());
+        sX = dst.height() / viewport.width();
+        sY = dst.width() / viewport.height();
+        tY = -viewport.top() * sX;
+        tX = -viewport.left() * sY;
+    }
+    else
+    {
+        size = SkSize::Make(dst.width(), dst.height());
+        sX = dst.width() / viewport.width();
+        sY = dst.height() / viewport.height();
+        tX = -viewport.left() * sX;
+        tY = -viewport.top() * sY;
+    }
 
     return
         SkMatrix::MakeAll(
             sX,  0.f, tX,
             0.f, sY,  tY,
             0.f, 0.f, 1.f).
-        postConcat(DstTransform(transform, SkSize::Make(dst.width(), dst.height())));
+        postConcat(DstTransform(transform, size)).postTranslate(dst.x(), dst.y());
 }
 
 SkMatrix RMatrixUtils::VirtualToNDC(CZTransform transform, SkRect viewport, SkRect dst, SkISize imageSize, bool flipY) noexcept

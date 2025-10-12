@@ -33,14 +33,7 @@ public:
         restore();
     }
 
-    bool restore() noexcept
-    {
-        if (restored) return false;
-        restored = true;
-        if (prevDisplay != EGL_NO_DISPLAY)
-            eglMakeCurrent(prevDisplay, prevDraw, prevRead, prevContext);
-        return true;
-    }
+    bool restore() noexcept;
 
 private:
     EGLDisplay prevDisplay;
