@@ -1,5 +1,5 @@
 project(
-    'Ream',
+    'cz-ream',
     'c','cpp',
     version : run_command('cat', files('./VERSION'), check : false).stdout().strip(),
     meson_version: '>= 0.62.0',
@@ -7,13 +7,13 @@ project(
         'warning_level=2',
         'buildtype=release',
         'cpp_std=c++20'])
-
+NAME='Ream'
 VERSION_MAJOR = meson.project_version().split('.')[0]
 VERSION_MINOR = meson.project_version().split('.')[1]
 VERSION_PATCH = meson.project_version().split('.')[2]
 VERSION_BUILD = run_command('cat', './BUILD', check : false).stdout()
 HEADERS_INSTALL_PATH = join_paths(get_option('prefix'), get_option('includedir'), 'CZ/Ream')
-CONF_FILE_NAME = 'CZ' + meson.project_name() + 'Version.h'
+CONF_FILE_NAME = 'CZ' + NAME + 'Version.h'
 
 conf = configuration_data()
 conf.set('VERSION_MAJOR', VERSION_MAJOR)
@@ -32,7 +32,7 @@ install_data(
 
 cpp             = meson.get_compiler('cpp')
 pkg             = import('pkgconfig')
-cz_core_dep     = dependency('cz-core')
+cz_core_dep     = dependency('cz-core', fallback:['cz-core', 'cz_core_dep'])
 cz_skia_dep     = dependency('cz-skia')
 wayland_egl_dep = dependency('wayland-egl')
 egl_dep         = dependency('egl', version: '>= 1.5')
@@ -85,7 +85,7 @@ cz_ream = library(
 
 cz_ream_dep = declare_dependency(
     dependencies: deps,
-    include_directories : ['src', 'src/CZ/Ream'],
+    include_directories : ['src', 'src/CZ','src/CZ/Ream'],
     link_with : cz_ream)
 
 pkg.generate(
