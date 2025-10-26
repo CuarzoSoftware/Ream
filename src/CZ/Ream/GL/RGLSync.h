@@ -16,8 +16,10 @@ public:
     RGLDevice *device() const noexcept { return (RGLDevice*)m_device; }
     bool gpuWait(RDevice *waiter = nullptr) const noexcept override;
     int cpuWait(int timeoutMs = -1) const noexcept override;
+    CZSpFd fd() const noexcept override;
+
 private:
-    RGLSync(std::shared_ptr<RCore> core, RGLDevice *device, EGLSyncKHR sync, int fd, bool isExternal) noexcept;
+    RGLSync(std::shared_ptr<RCore> core, RGLDevice *device, EGLSyncKHR sync, bool isExternal) noexcept;
     EGLSyncKHR m_eglSync;
     std::thread::id m_threadId;
 };

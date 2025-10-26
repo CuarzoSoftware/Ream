@@ -5,6 +5,7 @@
 #include <CZ/Ream/GL/RGLDevice.h>
 #include <CZ/Ream/RDMABufferInfo.h>
 #include <CZ/Ream/RLog.h>
+#include <CZ/Ream/RResourceTracker.h>
 #include <drm_fourcc.h>
 
 using namespace CZ;
@@ -187,6 +188,7 @@ REGLImage::~REGLImage() noexcept
     }
 
     eglDestroyImage(m_device->eglDisplay(), m_eglImage);
+    RResourceTrackerSub(REGLImageRes);
 }
 
 REGLImage::REGLImage(std::shared_ptr<RGLCore> core, RGLDevice *device, EGLImage image, GLenum target) noexcept :
@@ -194,6 +196,7 @@ REGLImage::REGLImage(std::shared_ptr<RGLCore> core, RGLDevice *device, EGLImage 
     m_eglImage(image),
     m_device(device)
 {
+    RResourceTrackerAdd(REGLImageRes);
     m_tex.target = target;
     assert(image != EGL_NO_IMAGE);
     assert(device);

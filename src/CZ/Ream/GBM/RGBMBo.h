@@ -3,6 +3,7 @@
 
 #include <CZ/Core/Cuarzo.h>
 #include <CZ/Core/CZOwn.h>
+#include <CZ/Core/CZSpFd.h>
 #include <CZ/Ream/RObject.h>
 #include <CZ/Ream/RDMABufferInfo.h>
 #include <memory>
@@ -42,18 +43,8 @@ public:
     // For hw cursors, gbm_bo_write is guaranteed to work
     static std::shared_ptr<RGBMBo> MakeCursor(SkISize size, RFormat format, RDevice *allocator = nullptr) noexcept;
 
-    // Does not take ownership of the fds (dups them internally)
+    // Does not take ownership of the fds
     static std::shared_ptr<RGBMBo> MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevice *importer = nullptr) noexcept;
-
-    /**
-     * @brief Returns DMA-BUF export information.
-     *
-     * @note File descriptors in the returned structure are owned by this object and must not be closed.
-     *       If another entity takes ownership of the fds you must duplicate them first.
-     *
-     * @return A reference to the DMA buffer info. The fds are always valid except for bos created with MakeCursor.
-     */
-    const RDMABufferInfo &dmaInfo() const noexcept { return m_dmaInfo; }
 
     /**
      * @brief Returns the allocator device used to create this buffer.
@@ -76,14 +67,16 @@ public:
      *
      * @see hasModifier()
      */
-    RModifier modifier() const noexcept { return m_dmaInfo.modifier; }
+    RModifier modifier() const noexcept;
+    RFormat format() const noexcept;
+    SkISize size() const noexcept;
 
     /**
      * @brief Returns the number of planes in the buffer.
      *
      * @return Number of planes (usually 1 for RGB, may be more for YUV).
      */
-    int planeCount() const noexcept { return m_dmaInfo.planeCount; }
+    int planeCount() const noexcept;
 
     /**
      * @brief Returns the GEM flink handle for a specific plane.
@@ -95,6 +88,9 @@ public:
      * @return The GEM flink handle (DRM buffer object handle) for the specified plane.
      */
     union gbm_bo_handle planeHandle(int planeIndex) const noexcept;
+    UInt32 planeStride(int planeIndex) const noexcept;
+    UInt32 planeOffset(int planeIndex) const noexcept;
+    CZSpFd planeFd(int planeIndex) const noexcept;
 
     /**
      * @brief Checks whether the buffer supports memory mapping for read access.
@@ -129,10 +125,12 @@ public:
      * This ensures the current RCore instance stays alive while the buffer exists.
      */
     std::shared_ptr<RCore> core() const noexcept { return m_core; }
+
+    // Must be closed manually
+    std::optional<RDMABufferInfo> dmaExport() const noexcept;
 private:
-    RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOwn ownership, bool hasModifier, const RDMABufferInfo &dmaInfo) noexcept;
+    RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOwn ownership, bool hasModifier) noexcept;
     gbm_bo *m_bo;
-    RDMABufferInfo m_dmaInfo;
     CZOwn m_ownership;
     RDevice *m_allocator;
     std::shared_ptr<RCore> m_core;

@@ -40,20 +40,19 @@ std::shared_ptr<RSync> RSync::Make(RDevice *device) noexcept
     return {};
 }
 
-RSync::RSync(std::shared_ptr<RCore> core, RDevice *device, int fd, bool isExternal) noexcept :
+RSync::RSync(std::shared_ptr<RCore> core, RDevice *device, bool isExternal) noexcept :
     m_isExternal(isExternal),
-    m_fd(fd),
     m_device(device),
     m_core(core)
 {
     assert(device);
     assert(core);
-    RResourceTrackerAdd(RResourceType::RSyncRes);
+    RResourceTrackerAdd(RSyncRes);
 }
 
 RSync::~RSync() noexcept
 {
-    RResourceTrackerSub(RResourceType::RSyncRes);
+    RResourceTrackerSub(RSyncRes);
 }
 
 

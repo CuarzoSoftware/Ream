@@ -187,6 +187,7 @@ public:
     std::shared_ptr<RGLImage> asGL() const noexcept;
     std::shared_ptr<RRSImage> asRS() const noexcept;
 
+
     ~RImage() noexcept;
 
     // Reserved for Louvre
@@ -206,8 +207,8 @@ protected:
     std::shared_ptr<RSync> m_readSync;
     std::shared_ptr<RSync> m_writeSync;
 
-    std::optional<RDMABufferInfo> m_dmaInfo;
-    CZOwn m_dmaInfoOwn;
+    // Stores DMA fds as GEM handles to reduce the number of open fds
+    std::shared_ptr<RGBMBo> m_bo;
 };
 
 #endif // RIMAGE_H

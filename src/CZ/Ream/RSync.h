@@ -19,8 +19,8 @@ public:
     // 1 if already signaled, -1 on error, 0 on timeout, blocking
     virtual int cpuWait(int timeoutMs = -1) const noexcept = 0;
 
-    // Returns a dup fd or -1 on error
-    CZSpFd fd() const noexcept { return m_fd.dup(); }
+    // Returns -1 on error
+    virtual CZSpFd fd() const noexcept = 0;
 
     // True if created with FromExternal
     bool isExternal() const noexcept { return m_isExternal; }
@@ -28,10 +28,9 @@ public:
     RDevice *device() const noexcept { return m_device; }
 
 protected:
-    RSync(std::shared_ptr<RCore> core, RDevice *device, int fd, bool isExternal) noexcept;
+    RSync(std::shared_ptr<RCore> core, RDevice *device, bool isExternal) noexcept;
     ~RSync() noexcept;
     bool m_isExternal;
-    CZSpFd m_fd;
     RDevice *m_device;
     std::shared_ptr<RCore> m_core;
 };

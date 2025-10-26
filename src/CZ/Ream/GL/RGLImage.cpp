@@ -262,8 +262,16 @@ std::shared_ptr<REGLImage> RGLImage::eglImage(RGLDevice *device) const noexcept
 
     /* Attempt to create one */
 
-    if (m_dmaInfo.has_value())
-        deviceData.eglImage = REGLImage::MakeFromDMA(m_dmaInfo.value(), device);
+    if (m_bo)
+    {
+        auto dmaInfo { m_bo->dmaExport() };
+
+        if (dmaInfo.has_value())
+        {
+            deviceData.eglImage = REGLImage::MakeFromDMA(dmaInfo.value(), device);
+            dmaInfo->closeFds();
+        }
+    }
 
     if (!deviceData.eglImage)
         deviceData.unsupportedCaps.add(NoEGLImage);
@@ -347,25 +355,7 @@ std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwn ow
 {
     RLockGuard lock {};
 
-    std::optional<RDMABufferInfo> infoCopy;
-
-    if (ownership == CZOwn::Borrow)
-    {
-        infoCopy = info.dup();
-
-        if (!infoCopy.has_value())
-            return {};
-    }
-    else
-    {
-        infoCopy = info;
-
-        if (!infoCopy->isValid())
-        {
-            infoCopy->closeFds();
-            return {};
-        }
-    }
+    RDMABufferInfo infoCopy { info };
 
     const RFormatInfo *formatInfo;
     SkAlphaType alphaType;
@@ -380,14 +370,28 @@ std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwn ow
 
     if (!core)
     {
-        infoCopy->closeFds();
+        if (ownership == CZOwn::Own)
+            infoCopy.closeFds();
         return {};
     }
 
+    std::shared_ptr<RGBMBo> bo;
+
+    for (auto *dev : core->devices())
+    {
+        bo = RGBMBo::MakeFromDMA(infoCopy, dev);
+        if (bo) break;
+    }
+
+    if (ownership == CZOwn::Own)
+        infoCopy.closeFds();
+
+    if (!bo)
+        return {};
+
     auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, info.modifier)) };
     image->m_self = image;
-    image->m_dmaInfoOwn = CZOwn::Own;
-    image->m_dmaInfo = infoCopy;
+    image->m_bo = bo;
 
     if (!ValidateConstraints(image, constraints))
         return {};
@@ -430,8 +434,16 @@ std::shared_ptr<RDRMFramebuffer> RGLImage::drmFb(RDevice *device) const noexcept
 
     data.drmFb = RDRMFramebuffer::MakeFromGBMBo(gbmBo(device));
 
-    if (!data.drmFb && m_dmaInfo.has_value())
-        data.drmFb = RDRMFramebuffer::MakeFromDMA(m_dmaInfo.value());
+    if (!data.drmFb && m_bo)
+    {
+        auto dmaInfo { m_bo->dmaExport() };
+
+        if (dmaInfo.has_value())
+        {
+            data.drmFb = RDRMFramebuffer::MakeFromDMA(dmaInfo.value());
+            dmaInfo->closeFds();
+        }
+    }
 
     if (!data.drmFb)
         data.unsupportedCaps.add(NoDRMFb);
@@ -709,8 +721,9 @@ std::shared_ptr<RGLImage> RGLImage::MakeWithGBMStorage(SkISize size, const RDRMF
     }
 
     auto image { std::shared_ptr<RGLImage>(new RGLImage(core, allocator, size, formatInfo, alphaType, data.gbmBo->modifier())) };
-    image->m_dmaInfo = data.gbmBo->dmaInfo();
-    image->m_dmaInfoOwn = CZOwn::Borrow;
+
+
+    image->m_bo = data.gbmBo;
     image->m_pf.add(PFStorageGBM);
     image->m_self = image;
     image->m_devicesMap.emplace(allocator, data);
@@ -839,10 +852,6 @@ bool RGLImage::writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept
 
     if (!dst) return false;
 
-    dma_buf_sync sync;
-    sync.flags = DMA_BUF_SYNC_START | DMA_BUF_SYNC_WRITE;
-    ioctl(bo->dmaInfo().fd[0], DMA_BUF_IOCTL_SYNC, &sync);
-
     const auto bpb { formatInfo().bytesPerBlock };
 
     SkRegion::Iterator iter(region.region);
@@ -873,8 +882,6 @@ bool RGLImage::writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept
     }
 
     gbm_bo_unmap(bo->bo(), mapData);
-    sync.flags = DMA_BUF_SYNC_END | DMA_BUF_SYNC_WRITE;
-    ioctl(bo->dmaInfo().fd[0], DMA_BUF_IOCTL_SYNC, &sync);
     setWriteSync(RSync::Make(bo->allocator()));
     return true;
 }

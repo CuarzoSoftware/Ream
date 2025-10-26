@@ -1,7 +1,8 @@
+#include <CZ/Ream/DRM/RDRMTimeline.h>
 #include <CZ/Ream/RDevice.h>
 #include <CZ/Ream/RCore.h>
-#include <CZ/Ream/DRM/RDRMTimeline.h>
 #include <CZ/Ream/RLog.h>
+#include <CZ/Ream/RResourceTracker.h>
 #include <CZ/Core/CZEventSource.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -242,10 +243,13 @@ bool RDRMTimeline::signalPoint(UInt64 point) noexcept
 RDRMTimeline::~RDRMTimeline() noexcept
 {
     drmSyncobjDestroy(m_device->drmFd(), m_handle);
+    RResourceTrackerSub(RDRMTimelineRes);
 }
 
 RDRMTimeline::RDRMTimeline(std::shared_ptr<RCore> core, RDevice *device, UInt32 handle) noexcept :
     m_core(core),
     m_device(device),
     m_handle(handle)
-{}
+{
+    RResourceTrackerAdd(RDRMTimelineRes);
+}

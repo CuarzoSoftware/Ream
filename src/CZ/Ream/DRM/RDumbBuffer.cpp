@@ -1,5 +1,6 @@
 #include <CZ/Ream/DRM/RDumbBuffer.h>
 #include <CZ/Ream/DRM/RDRMFramebuffer.h>
+#include <CZ/Ream/RResourceTracker.h>
 #include <CZ/Ream/RDevice.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
@@ -99,6 +100,7 @@ RDumbBuffer::~RDumbBuffer() noexcept
 {
     munmap(m_data, m_mapSize);
     drmModeDestroyDumbBuffer(allocator()->drmFd(), m_handle);
+    RResourceTrackerSub(RDumbBufferRes);
 }
 
 std::shared_ptr<RDRMFramebuffer> RDumbBuffer::fb() const noexcept
@@ -108,4 +110,6 @@ std::shared_ptr<RDRMFramebuffer> RDumbBuffer::fb() const noexcept
 
 RDumbBuffer::RDumbBuffer(std::shared_ptr<RCore> core, std::shared_ptr<RDRMFramebuffer> fb, SkISize size, const RFormatInfo *formatInfo, RDevice *allocator, UInt32 handle, UInt32 stride, UInt64 mapSize, UInt8 *data) noexcept :
     m_core(core), m_fb(fb), m_size(size), m_formatInfo(formatInfo), m_allocator(allocator), m_handle(handle), m_stride(stride), m_mapSize(mapSize), m_data(data)
-{}
+{
+    RResourceTrackerAdd(RDumbBufferRes);
+}

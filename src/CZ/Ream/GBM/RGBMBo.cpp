@@ -3,6 +3,7 @@
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RDevice.h>
 #include <CZ/Ream/DRM/RDRMFormat.h>
+#include <CZ/Ream/RResourceTracker.h>
 #include <CZ/skia/core/SkSize.h>
 
 #include <drm_fourcc.h>
@@ -45,10 +46,6 @@ std::shared_ptr<RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format, RDe
     }
 
     bool hasModifier;
-    RDMABufferInfo dmaInfo {};
-    dmaInfo.format = format.format();
-    dmaInfo.width = size.width();
-    dmaInfo.height = size.height();
 
     gbm_bo *bo { gbm_bo_create_with_modifiers(
         allocator->gbmDevice(),
@@ -61,20 +58,17 @@ std::shared_ptr<RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format, RDe
     if (bo)
     {
         hasModifier = true;
-        dmaInfo.modifier = gbm_bo_get_modifier(bo);
     }
     else
     {
         if (!bo && format.modifiers().contains(DRM_FORMAT_MOD_LINEAR))
         {
-            dmaInfo.modifier = DRM_FORMAT_MOD_LINEAR;
             hasModifier = false;
             bo = gbm_bo_create(allocator->gbmDevice(), size.width(), size.height(), format.format(), GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR);
         }
 
         if (format.modifiers().contains(DRM_FORMAT_MOD_INVALID))
         {
-            dmaInfo.modifier = DRM_FORMAT_MOD_INVALID;
             hasModifier = false;
             bo = gbm_bo_create(allocator->gbmDevice(), size.width(), size.height(), format.format(), GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
         }
@@ -86,27 +80,7 @@ std::shared_ptr<RGBMBo> RGBMBo::Make(SkISize size, const RDRMFormat &format, RDe
         return {};
     }
 
-    dmaInfo.planeCount = gbm_bo_get_plane_count(bo);
-
-    for (int i = 0; i < dmaInfo.planeCount; i++)
-    {
-        dmaInfo.stride[i] = gbm_bo_get_stride_for_plane(bo, i);
-        dmaInfo.offset[i] = gbm_bo_get_offset(bo, i);
-        dmaInfo.fd[i] = gbm_bo_get_fd_for_plane(bo, i);
-
-        if (dmaInfo.fd[i] < 0)
-        {
-            for (int j = 0; j < 4; j++)
-                if (dmaInfo.fd[j] >= 0)
-                    close(dmaInfo.fd[j]);
-
-            gbm_bo_destroy(bo);
-            allocator->log(CZError, CZLN, "Failed to export gbm_bo");
-            return {};
-        }
-    }
-
-    return std::shared_ptr<RGBMBo>(new RGBMBo(core, allocator, bo, CZOwn::Own, hasModifier, dmaInfo));
+    return std::shared_ptr<RGBMBo>(new RGBMBo(core, allocator, bo, CZOwn::Own, hasModifier));
 }
 
 std::shared_ptr<RGBMBo> RGBMBo::MakeCursor(SkISize size, RFormat format, RDevice *allocator) noexcept
@@ -143,11 +117,7 @@ std::shared_ptr<RGBMBo> RGBMBo::MakeCursor(SkISize size, RFormat format, RDevice
     }
 
     const bool hasModifier { false };
-    RDMABufferInfo dmaInfo {};
-    dmaInfo.format = format;
-    dmaInfo.width = size.width();
-    dmaInfo.height = size.height();
-    dmaInfo.modifier = DRM_FORMAT_MOD_LINEAR;
+
     gbm_bo *bo = gbm_bo_create(allocator->gbmDevice(), size.width(), size.height(), format, GBM_BO_USE_CURSOR | GBM_BO_USE_WRITE | GBM_BO_USE_LINEAR);
 
     if (!bo)
@@ -156,22 +126,7 @@ std::shared_ptr<RGBMBo> RGBMBo::MakeCursor(SkISize size, RFormat format, RDevice
         return {};
     }
 
-    dmaInfo.planeCount = gbm_bo_get_plane_count(bo);
-
-    for (int i = 0; i < dmaInfo.planeCount; i++)
-    {
-        dmaInfo.stride[i] = gbm_bo_get_stride_for_plane(bo, i);
-
-        if (dmaInfo.stride[i] != size.width() * formatInfo->bytesPerBlock)
-        {
-            allocator->log(CZError, CZLN, "Invalid bo stride");
-            return {};
-        }
-
-        dmaInfo.offset[i] = gbm_bo_get_offset(bo, i);
-    }
-
-    return std::shared_ptr<RGBMBo>(new RGBMBo(core, allocator, bo, CZOwn::Own, hasModifier, dmaInfo));
+    return std::shared_ptr<RGBMBo>(new RGBMBo(core, allocator, bo, CZOwn::Own, hasModifier));
 }
 
 std::shared_ptr<RGBMBo> RGBMBo::MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevice *importer) noexcept
@@ -243,21 +198,47 @@ std::shared_ptr<RGBMBo> RGBMBo::MakeFromDMA(const RDMABufferInfo &dmaInfo, RDevi
         return {};
     }
 
-    auto dmaDup { dmaInfo.dup() };
+    return std::shared_ptr<RGBMBo>(new RGBMBo(core, importer, bo, CZOwn::Own, hasModifier));
+}
 
-    if (!dmaDup.has_value())
-    {
-        RLog(CZError, CZLN, "Failed to dup DMA info");
-        gbm_bo_destroy(bo);
-        return {};
-    }
+RModifier RGBMBo::modifier() const noexcept
+{
+    return gbm_bo_get_modifier(m_bo);
+}
 
-    return std::shared_ptr<RGBMBo>(new RGBMBo(core, importer, bo, CZOwn::Own, hasModifier, dmaDup.value()));
+RFormat RGBMBo::format() const noexcept
+{
+    return gbm_bo_get_format(m_bo);
+}
+
+SkISize RGBMBo::size() const noexcept
+{
+    return SkISize(gbm_bo_get_width(m_bo), gbm_bo_get_height(m_bo));
+}
+
+int RGBMBo::planeCount() const noexcept
+{
+    return gbm_bo_get_plane_count(m_bo);
 }
 
 gbm_bo_handle RGBMBo::planeHandle(int planeIndex) const noexcept
 {
     return gbm_bo_get_handle_for_plane(m_bo, planeIndex);
+}
+
+UInt32 RGBMBo::planeStride(int planeIndex) const noexcept
+{
+    return gbm_bo_get_stride_for_plane(m_bo, planeIndex);
+}
+
+UInt32 RGBMBo::planeOffset(int planeIndex) const noexcept
+{
+    return gbm_bo_get_offset(m_bo, planeIndex);
+}
+
+CZSpFd RGBMBo::planeFd(int planeIndex) const noexcept
+{
+    return CZSpFd(gbm_bo_get_fd_for_plane(m_bo, planeIndex));
 }
 
 bool RGBMBo::supportsMapRead() const noexcept
@@ -298,26 +279,40 @@ bool RGBMBo::supportsMapWrite() const noexcept
     return m_supportsMapWrite == 1;
 }
 
+std::optional<RDMABufferInfo> RGBMBo::dmaExport() const noexcept
+{
+    RDMABufferInfo info {};
+    info.format = format();
+    info.modifier = modifier();
+    info.width = size().width();
+    info.height = size().height();
+    info.planeCount = planeCount();
+
+    for (int i = 0; i < planeCount(); i++)
+    {
+        info.stride[i] = planeStride(i);
+        info.offset[i] = planeOffset(i);
+        info.fd[i] = planeFd(i).release();
+
+        if (info.fd[i] < 0)
+        {
+            info.closeFds();
+            return {};
+        }
+    }
+
+    return info;
+}
+
 RGBMBo::~RGBMBo() noexcept
 {
-    for (int i = 0; i < planeCount(); i++)
-        close(m_dmaInfo.fd[i]);
-
+    RResourceTrackerSub(RGBMBoRes);
     if (m_ownership == CZOwn::Own)
         gbm_bo_destroy(m_bo);
 }
 
-RGBMBo::RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOwn ownership, bool hasModifier, const RDMABufferInfo &dmaInfo) noexcept :
-    m_bo(bo), m_dmaInfo(dmaInfo), m_ownership(ownership), m_allocator(allocator), m_core(core), m_hasModifier(hasModifier)
+RGBMBo::RGBMBo(std::shared_ptr<RCore> core, RDevice *allocator, gbm_bo *bo, CZOwn ownership, bool hasModifier) noexcept :
+    m_bo(bo), m_ownership(ownership), m_allocator(allocator), m_core(core), m_hasModifier(hasModifier)
 {
-    assert(core);
-    assert(bo);
-    assert(allocator);
-    assert(dmaInfo.planeCount > 0 && dmaInfo.planeCount < 4);
-    assert(dmaInfo.width > 0 && dmaInfo.height > 0);
-
-    if (hasModifier)
-        assert(dmaInfo.modifier != DRM_FORMAT_MOD_INVALID);
-    else
-        assert(dmaInfo.modifier == DRM_FORMAT_MOD_INVALID || dmaInfo.modifier == DRM_FORMAT_MOD_LINEAR);
+    RResourceTrackerAdd(RGBMBoRes);
 }

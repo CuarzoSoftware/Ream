@@ -7,6 +7,11 @@ struct ResourceTracker
 {
     ~ResourceTracker() noexcept
     {
+        log();
+    }
+
+    void log() noexcept
+    {
         if (lvl >= 6) // The tracker is created before RLog
         {
             RLog(CZTrace, "Memory leaks:");
@@ -14,6 +19,12 @@ struct ResourceTracker
             RLog(CZTrace, "- RImage: {}", count[RImageRes]);
             RLog(CZTrace, "- RSurface: {}", count[RSurfaceRes]);
             RLog(CZTrace, "- RDevice: {}", count[RDeviceRes]);
+            RLog(CZTrace, "- RSync: {}", count[RSyncRes]);
+            RLog(CZTrace, "- RDRMFramebuffer: {}", count[RDRMFramebufferRes]);
+            RLog(CZTrace, "- RDRMTimeline: {}", count[RDRMTimelineRes]);
+            RLog(CZTrace, "- RDumbBuffer: {}", count[RDumbBufferRes]);
+            RLog(CZTrace, "- RGBMBo: {}", count[RGBMBoRes]);
+            RLog(CZTrace, "- REGLImage: {}", count[REGLImageRes]);
         }
     }
     int count[RResLast] {};
@@ -36,4 +47,9 @@ void CZ::RResourceTrackerSub(RResourceType type) noexcept
 int CZ::RResourceTrackerGet(RResourceType type) noexcept
 {
     return rt.count[type];
+}
+
+void CZ::RResourceTrackerLog() noexcept
+{
+    rt.log();
 }

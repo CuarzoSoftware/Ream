@@ -1,7 +1,8 @@
 #include <CZ/Ream/DRM/RDRMFormat.h>
 #include <CZ/Ream/DRM/RDRMFramebuffer.h>
-#include <CZ/Ream/RLog.h>
 #include <CZ/Ream/GBM/RGBMBo.h>
+#include <CZ/Ream/RResourceTracker.h>
+#include <CZ/Ream/RLog.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RDevice.h>
 #include <xf86drm.h>
@@ -93,17 +94,23 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromGBMBo(std::shared_ptr<
     UInt32 id { 0 };
     bool hasModifier;
     UInt32 handles[4] { 0, 0, 0, 0 };
+    UInt32 stride[4] { 0, 0, 0, 0 };
+    UInt32 offset[4] { 0, 0, 0, 0 };
     RModifier modifiers[4] { 0, 0, 0, 0 };
-    RFormat format { bo->dmaInfo().format };
+    RFormat format { bo->format() };
     RDevice *device { bo->allocator() };
 
     for (int i = 0; i < bo->planeCount(); i++)
     {
         handles[i] = bo->planeHandle(i).u32;
+        stride[i] = bo->planeStride(i);
+        offset[i] = bo->planeOffset(i);
         modifiers[i] = bo->modifier();
     }
 
-    if (!CreateFb(bo->allocator(), bo->planeCount(), bo->dmaInfo().width, bo->dmaInfo().height, format, modifiers, handles, bo->dmaInfo().stride, bo->dmaInfo().offset, &id, &hasModifier))
+    auto size { bo->size() };
+
+    if (!CreateFb(bo->allocator(), bo->planeCount(), size.width(), size.height(), format, modifiers, handles, stride, offset, &id, &hasModifier))
     {
         device->log(CZError, CZLN, "Failed to create RDRMFramebuffer from RGBMBo");
         return {};
@@ -115,9 +122,9 @@ std::shared_ptr<RDRMFramebuffer> RDRMFramebuffer::MakeFromGBMBo(std::shared_ptr<
 
     return std::shared_ptr<RDRMFramebuffer>(new RDRMFramebuffer(
         core, device, id,
-        { bo->dmaInfo().width, bo->dmaInfo().height },
+        size,
         format,
-        bo->dmaInfo().modifier,
+        modifiers[0],
         hasModifier, handlesVec, CZOwn::Borrow));
 }
 
@@ -227,6 +234,7 @@ RDRMFramebuffer::RDRMFramebuffer(std::shared_ptr<RCore> core,
     m_handlesOwn(handlesOwnership),
     m_hasModifier(hasModifier)
 {
+    RResourceTrackerAdd(RDRMFramebufferRes);
 }
 
 RDRMFramebuffer::~RDRMFramebuffer() noexcept
@@ -241,4 +249,6 @@ RDRMFramebuffer::~RDRMFramebuffer() noexcept
 
     if (m_handlesOwn == CZOwn::Own)
         CloseHandles(m_device->drmFd(), m_handles.data(), m_handles.size());
+
+    RResourceTrackerSub(RDRMFramebufferRes);
 }
