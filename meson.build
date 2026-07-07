@@ -2,7 +2,7 @@ project(
     'cz-ream',
     'c','cpp',
     version : run_command('cat', files('./VERSION'), check : false).stdout().strip(),
-    meson_version: '>= 0.62.0',
+    meson_version: '>= 0.60.0',
     default_options: [
         'warning_level=2',
         'buildtype=release',

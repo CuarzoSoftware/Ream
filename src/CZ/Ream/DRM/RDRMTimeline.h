@@ -5,6 +5,7 @@
 #include <CZ/Core/CZOwn.h>
 #include <CZ/Core/CZSpFd.h>
 #include <memory>
+#include <functional>
 
 class CZ::RDRMTimeline : public RObject
 {

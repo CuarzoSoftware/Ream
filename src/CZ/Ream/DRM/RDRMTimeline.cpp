@@ -217,7 +217,7 @@ std::shared_ptr<CZEventSource> RDRMTimeline::waitAsync(UInt64 point, UInt32 flag
         return {};
     }
 
-    auto source { CZEventSource::Make(fd, EPOLLIN, CZOwn::Own, [this, callback](int, UInt32) {
+    auto source { CZEventSource::Make(fd, EPOLLIN, CZOwn::Own, [this, callback](int, UInt32, auto) {
         callback(this);
     }) };
 
