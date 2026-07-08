@@ -10,10 +10,36 @@
 #include <thread>
 #include <mutex>
 
+/**
+ * @brief Vulkan implementation of RImage, obtained via RImage::asVK().
+ *
+ * Backs the image with either native (VK_IMAGE_TILING_OPTIMAL, device-local) storage or
+ * GBM/dma-buf storage imported via VK_EXT_image_drm_format_modifier + external memory (for scanout
+ * and cross-device sharing). Explicit DRM format modifiers are used; multi-plane buffers are only
+ * supported when all planes reside in a single dma-buf memory object.
+ *
+ * The tracked VkImageLayout is kept in sync with Skia's backend texture/render target so manual
+ * barriers and Skia rendering can interoperate. For cross-device sampling (SRM Prime) the image is
+ * lazily re-imported on the sampling device, keyed per device.
+ */
 class CZ::RVKImage final : public RImage
 {
 public:
+    /**
+     * @brief Creates a Vulkan-backed image of the given size and DRM format.
+     *
+     * Uses GBM/dma-buf storage when scanout (DRMFb/GBMBo) or cross-device caps are requested and
+     * the required DMA extensions are available; otherwise native optimal storage. Returns nullptr
+     * if the format is unsupported or the constraints cannot be satisfied.
+     */
     [[nodiscard]] static std::shared_ptr<RVKImage> Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
+
+    /**
+     * @brief Imports an existing dma-buf as a Vulkan-backed image.
+     *
+     * Requires VK_EXT_image_drm_format_modifier and VK_EXT_external_memory_dma_buf. When
+     * @p ownership is CZOwn::Own the source fds are closed before returning (on success or failure).
+     */
     [[nodiscard]] static std::shared_ptr<RVKImage> FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints = nullptr) noexcept;
 
     // Wraps an externally-owned VkImage (e.g. a VkSwapchainKHR image). The image and its memory
@@ -40,13 +66,29 @@ public:
     // VK-specific accessors (used by RVKPass/RVKPainter). The device-less variants refer to the
     // allocator device (m_dev); the device-taking variants return the per-device shared image
     // (cross-device sampling), lazily importing it via dma-buf.
+    /** @brief The device that allocated this image (owner of the primary VkImage). */
     RVKDevice *allocatorVK() const noexcept { return m_dev; }
+
+    /** @brief The primary VkImage (on the allocator device). */
     VkImage vkImage() const noexcept { return m_image; }
+
+    /** @brief The primary VkImageView (on the allocator device). */
     VkImageView vkImageView() const noexcept { return m_view; }
+
+    /** @brief The VkImage for @p device: the primary image on the allocator, else the per-device
+     *         cross-device import (VK_NULL_HANDLE if not imported). */
     VkImage vkImage(RVKDevice *device) const noexcept;
+
+    /** @brief The VkImageView for @p device (see vkImage(RVKDevice*)). */
     VkImageView vkImageView(RVKDevice *device) const noexcept;
+
+    /** @brief The image's VkFormat. */
     VkFormat vkFormat() const noexcept { return m_vkFormat; }
+
+    /** @brief The image's VkImageUsageFlags. */
     VkImageUsageFlags vkUsage() const noexcept { return m_usage; }
+
+    /** @brief The image's VkImageTiling (OPTIMAL for native storage, DRM_FORMAT_MODIFIER for dma-buf). */
     VkImageTiling vkTiling() const noexcept { return m_tiling; }
 
     /**
@@ -78,7 +120,11 @@ public:
                           VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
                           VkAccessFlags srcAccess, VkAccessFlags dstAccess) const noexcept;
 
+    /** @brief The tracked VkImageLayout of the primary image. */
     VkImageLayout layout() const noexcept { return m_layout; }
+
+    /** @brief The tracked VkImageLayout for @p device (primary image on the allocator, else the
+     *         per-device cross-device import). */
     VkImageLayout layout(RVKDevice *device) const noexcept;
 
     /**

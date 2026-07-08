@@ -8,6 +8,13 @@
 
 namespace CZ
 {
+    /**
+     * @brief Maps a Ream RImageWrap addressing mode to its OpenGL ES equivalent.
+     *
+     * @param wrap The Ream wrapping mode. Values outside the valid range are clamped.
+     * @return The matching GL wrap constant (`GL_REPEAT`, `GL_MIRRORED_REPEAT`,
+     *         `GL_CLAMP_TO_EDGE`, or `GL_CLAMP_TO_BORDER_OES`).
+     */
     inline GLenum RImageWrapToGL(RImageWrap wrap) noexcept
     {
         static const GLenum RGLImageWrap[4]

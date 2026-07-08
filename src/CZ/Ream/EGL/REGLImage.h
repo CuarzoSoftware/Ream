@@ -8,20 +8,43 @@
 #include <GLES2/gl2.h>
 #include <memory>
 
+/**
+ * @brief Wraps an EGLImage imported from a dma-buf, exposing it to the OpenGL backend.
+ *
+ * Created from an RDMABufferInfo via eglCreateImageKHR (EGL_LINUX_DMA_BUF_EXT), it can be bound as
+ * a GL texture (GL_TEXTURE_2D or GL_TEXTURE_EXTERNAL_OES depending on the format's render support)
+ * or as a renderbuffer-backed framebuffer. The GL texture/framebuffer objects are created lazily
+ * and per-device (via the context-data manager).
+ */
 class CZ::REGLImage final : public RObject
 {
 public:
-    // dups the fds internally (does not take ownership)
+    /**
+     * @brief Imports @p info as an EGLImage on @p device (or the main device if null).
+     *
+     * The plane fds are dup'd internally, so ownership is not taken. Returns nullptr if the
+     * format/modifier is unsupported or eglCreateImageKHR fails.
+     */
     static std::shared_ptr<REGLImage> MakeFromDMA(const RDMABufferInfo &info, RGLDevice *device = nullptr) noexcept;
 
-    // id = 0 on failure
+    /**
+     * @brief Returns a GL texture bound to this EGLImage (created lazily).
+     * @return The texture, with id == 0 on failure.
+     */
     RGLTexture texture() const noexcept;
 
-    // 0 on failure
+    /**
+     * @brief Returns a GL framebuffer (renderbuffer-backed by this EGLImage), created lazily per device.
+     * @return The framebuffer id, or 0 on failure.
+     */
     GLuint fb() const noexcept;
 
+    /** @brief The underlying EGLImage handle. */
     EGLImage eglImage() const noexcept { return m_eglImage; }
+
+    /** @brief The device this EGLImage was created on. */
     RGLDevice *device() const noexcept { return m_device; }
+
     ~REGLImage() noexcept;
 private:
     REGLImage(std::shared_ptr<RGLCore> core, RGLDevice *device, EGLImage image, GLenum target) noexcept;

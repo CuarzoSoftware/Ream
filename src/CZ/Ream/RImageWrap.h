@@ -3,12 +3,15 @@
 
 namespace CZ
 {
+    /**
+     * @brief Addressing mode used when sampling outside an image's bounds.
+     */
     enum class RImageWrap
     {
-        Repeat,
-        MirroredRepeat,
-        ClampToEdge,
-        ClampToBorder
+        Repeat,         ///< Tiles the image, wrapping coordinates around.
+        MirroredRepeat, ///< Tiles the image, mirroring it on every repeat.
+        ClampToEdge,    ///< Clamps coordinates to the edge texels.
+        ClampToBorder   ///< Uses a border color outside the image bounds.
     };
 };
 

@@ -16,6 +16,11 @@
 class CZ::RGLContextData : public RObject
 {
 public:
+    /**
+     * @brief Constructs an empty context data object.
+     *
+     * Should only be invoked from the allocator function passed to RGLContextDataManager::Make().
+     */
     RGLContextData() noexcept;
 
     /* Populate it with your own OpenGL resources */
@@ -96,6 +101,13 @@ public:
      */
     void freeData(RGLDevice *device) noexcept;
 
+    /**
+     * @brief Destroys the manager and all RGLContextData instances it owns.
+     *
+     * Instances belonging to the current thread are destroyed immediately (with their context made
+     * current); those belonging to other threads are queued as garbage and released when those
+     * threads terminate or call RGLCore::clearGarbage().
+     */
     ~RGLContextDataManager() noexcept;
 private:
     static std::shared_ptr<RGLContextDataManager> MakeInternal(AllocFunc func) noexcept;

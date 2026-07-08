@@ -26,7 +26,7 @@ It is developed primarily as the rendering foundation for Wayland compositors, b
 
 - **Raster** (`RS`) — CPU software rendering
 - **OpenGL ES 2.0** (`GL`)
-- **Vulkan** (`VK`) — *work in progress*
+- **Vulkan** (`VK`)
 
 ## 🚀 Getting Started
 

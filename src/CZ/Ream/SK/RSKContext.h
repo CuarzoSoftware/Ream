@@ -5,8 +5,11 @@
 
 namespace CZ
 {
-    /* Skia GrContext options.
-     * Can be modified before creating an RCore */
+    /**
+     * @brief Returns the global Skia GrContext options used when creating Skia (Ganesh) contexts.
+     *
+     * The returned reference can be modified before creating an RCore to customize the options.
+     */
     GrContextOptions &GetSKContextOptions() noexcept;
 };
 

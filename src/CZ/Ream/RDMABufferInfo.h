@@ -9,16 +9,31 @@
 #include <xf86drm.h>
 #include <drm_fourcc.h>
 
+/**
+ * @brief Description of a DMA-BUF backed buffer.
+ *
+ * Holds the dimensions, DRM format/modifier and per-plane file descriptors, offsets
+ * and strides needed to import or share a buffer across APIs (e.g. GBM, EGL, DRM KMS).
+ * Supports up to 4 planes.
+ */
 struct CZ::RDMABufferInfo
 {
-    Int32 width, height;
-    RFormat format;
-    RModifier modifier;
-    int planeCount;
-    UInt32 offset[4] {};
-    UInt32 stride[4] {};
-    int fd[4] { -1, -1, -1, -1 };
+    Int32 width, height;         ///< Buffer dimensions in pixels.
+    RFormat format;              ///< DRM FourCC pixel format.
+    RModifier modifier;          ///< DRM format modifier describing the memory layout.
+    int planeCount;              ///< Number of valid planes (1 to 4).
+    UInt32 offset[4] {};         ///< Byte offset of each plane within its file descriptor.
+    UInt32 stride[4] {};         ///< Byte stride (pitch) of each plane.
+    int fd[4] { -1, -1, -1, -1 }; ///< File descriptor backing each plane (-1 if unused).
 
+    /**
+     * @brief Validates the buffer description.
+     *
+     * Checks the dimensions, format, plane count and per-plane file descriptors,
+     * logging an error describing the first problem found.
+     *
+     * @return `true` if the description is well-formed, `false` otherwise.
+     */
     bool isValid() const noexcept
     {
         if (width <= 0 || height <= 0)
@@ -82,6 +97,11 @@ struct CZ::RDMABufferInfo
         return dmaCopy;
     }
 
+    /**
+     * @brief Closes all plane file descriptors.
+     *
+     * @note Does not reset the descriptors to -1; do not reuse the struct afterwards without reinitializing.
+     */
     void closeFds() noexcept
     {
         for (auto i = 0; i < planeCount; i++)

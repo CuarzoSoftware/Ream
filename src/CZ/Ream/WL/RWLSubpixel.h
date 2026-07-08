@@ -6,8 +6,16 @@
 
 namespace CZ
 {
+    /**
+     * @brief Helper for converting between Ream (RSubpixel) and Wayland (@c wl_output_subpixel) subpixel layouts.
+     */
     struct RWLSubpixel
     {
+        /**
+         * @brief Converts an RSubpixel value to the equivalent @c wl_output_subpixel.
+         *
+         * Unrecognized values map to WL_OUTPUT_SUBPIXEL_UNKNOWN.
+         */
         static constexpr wl_output_subpixel FromReam(RSubpixel subpixel) noexcept
         {
             switch (subpixel) {
@@ -28,6 +36,11 @@ namespace CZ
             }
         };
 
+        /**
+         * @brief Converts a @c wl_output_subpixel value to the equivalent RSubpixel.
+         *
+         * Unrecognized values map to RSubpixel::Unknown.
+         */
         static constexpr RSubpixel ToReam(wl_output_subpixel subpixel) noexcept
         {
             switch (subpixel) {

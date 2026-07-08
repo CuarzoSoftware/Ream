@@ -119,29 +119,54 @@ public:
         ColorIsPremult = 1u << 1
     };
 
+    /**
+     * @brief Image effects available through drawImageEffect().
+     */
     enum ImageEffect : UInt32
     {
-        /* Sigma 6 horizontal blur pass */
-        VibrancyH = 1u,
-
-        /* Sigma 3 vertical blur pass + light tone saturation */
-        VibrancyLightV = 2u,
-
-        /* Sigma 3 vertical blur pass + dark tone saturation */
-        VibrancyDarkV = 3u,
+        VibrancyH = 1u,      ///< Sigma 6 horizontal blur pass.
+        VibrancyLightV = 2u, ///< Sigma 3 vertical blur pass + light tone saturation.
+        VibrancyDarkV = 3u,  ///< Sigma 3 vertical blur pass + dark tone saturation.
     };
 
+    /**
+     * @brief Snapshot of the painter's mutable rendering state.
+     *
+     * Captured and restored by save()/restore().
+     */
     struct State
     {
+        /// Enabled rendering options (see Option).
         CZBitset<Option> options { 0 };
+
+        /// Blend mode used by draw operations.
         RBlendMode blendMode { RBlendMode::SrcOver };
+
+        /// Global opacity in the range [0, 1].
         SkScalar opacity { 1.f };
+
+        /// Color used by drawColor() and, when ReplaceImageColor is set, by drawImage().
         SkColor color { SK_ColorBLACK };
+
+        /// Per-channel RGBA multiplication factors.
         SkColor4f factor { 1.f, 1.f, 1.f, 1.f };
+
+        /// Viewport -> (transform) -> dst mapping.
         RSurfaceGeometry geometry {};
     };
 
+    /**
+     * @brief Returns the current painter state.
+     */
     const State &state() const noexcept { return m_state; }
+
+    /**
+     * @brief Replaces the current painter state.
+     *
+     * The call is ignored if @p state has an invalid geometry.
+     *
+     * @param state The new state to apply.
+     */
     void setState(const State &state) noexcept
     {
         if (!state.geometry.isValid())
@@ -163,6 +188,9 @@ public:
      */
     void restore() noexcept;
 
+    /**
+     * @brief Clears the saved state history and resets the current state to its defaults.
+     */
     void clearHistory() noexcept;
 
     /**
@@ -284,9 +312,29 @@ public:
     virtual bool drawColor(const SkRegion& region) noexcept = 0;
 
     // Alpha, factor, blend mode, etc are ignored
+    /**
+     * @brief Draws an image applying a built-in image effect.
+     *
+     * @note The current opacity, factor, blend mode, and similar state are ignored.
+     *
+     * @param image  Information about the image to draw.
+     * @param effect The effect to apply (see ImageEffect).
+     * @param region Optional clipping region within the RSurface viewport.
+     * @return true if the image was successfully drawn, false otherwise.
+     */
     virtual bool drawImageEffect(const RDrawImageInfo& image, ImageEffect effect, const SkRegion *region = nullptr) noexcept = 0;
 
+    /**
+     * @brief Sets the viewport -> (transform) -> dst mapping used by draw operations.
+     *
+     * @param geometry The geometry to apply.
+     * @return true if the geometry was applied, false if it is invalid.
+     */
     virtual bool setGeometry(const RSurfaceGeometry &geometry) noexcept = 0;
+
+    /**
+     * @brief Returns the current geometry.
+     */
     const RSurfaceGeometry &geometry() const noexcept { return m_state.geometry; }
 
     /**
@@ -300,6 +348,10 @@ public:
      * @return Pointer to the associated RDevice.
      */
     RDevice *device() const noexcept { return m_device; }
+
+    /**
+     * @brief Returns the surface this painter draws into.
+     */
     std::shared_ptr<RSurface> surface() const noexcept { return m_surface; }
 protected:
     friend class RSurface;

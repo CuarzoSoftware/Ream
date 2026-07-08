@@ -6,6 +6,14 @@
 
 namespace CZ
 {
+    /**
+     * @brief Maps a Ream RImageWrap mode to the equivalent Skia SkTileMode.
+     *
+     * ClampToBorder maps to SkTileMode::kDecal. Falls back to SkTileMode::kClamp for unknown values.
+     *
+     * @param wrap The Ream wrap mode.
+     * @return The corresponding SkTileMode.
+     */
     inline constexpr SkTileMode RImageWrapToSK(RImageWrap wrap) noexcept
     {
         switch (wrap)

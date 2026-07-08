@@ -3,10 +3,13 @@
 
 namespace CZ
 {
+    /**
+     * @brief Sampling filter used when scaling an image.
+     */
     enum class RImageFilter
     {
-        Linear,
-        Nearest
+        Linear,  ///< Bilinear interpolation between texels.
+        Nearest  ///< Nearest-neighbour sampling (no interpolation).
     };
 };
 

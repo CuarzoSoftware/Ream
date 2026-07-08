@@ -5,12 +5,46 @@
 #include <wayland-egl-core.h>
 #include <EGL/egl.h>
 
+/**
+ * @brief OpenGL backend implementation of RWLSwapchain.
+ *
+ * Presents to a Wayland surface via EGL. It creates a `wl_egl_window` and an EGLSurface for the
+ * given `wl_surface`, wraps that surface as an RGLImage, and drives presentation with
+ * `eglSwapBuffers` (using `eglSwapBuffersWithDamageKHR` when damage and the extension are
+ * available). Created via RWLSwapchain::Make().
+ */
 class CZ::RGLSwapchainWL : public RWLSwapchain
 {
 public:
+    /**
+     * @brief Destroys the EGL surface and the `wl_egl_window`.
+     */
     ~RGLSwapchainWL() noexcept;
+
+    /**
+     * @brief Acquires the swapchain image to render the next frame into.
+     *
+     * @return The swapchain image (with its buffer age), or `std::nullopt` if an image is already
+     *         acquired and not yet presented.
+     */
     std::optional<const RSwapchainImage> acquire() noexcept override;
+
+    /**
+     * @brief Presents a previously acquired image to the Wayland surface.
+     *
+     * @param image  The image returned by acquire().
+     * @param damage Optional damage region (in image coordinates); enables damage-aware swapping when
+     *               supported, otherwise the whole surface is swapped.
+     * @return `true` on success, `false` if the image does not match or was not acquired.
+     */
     bool present(const RSwapchainImage &image, SkRegion *damage = nullptr) noexcept override;
+
+    /**
+     * @brief Resizes the swapchain (and the underlying `wl_egl_window`).
+     *
+     * @param size The new size in pixels. Must be non-empty.
+     * @return `true` on success (including when the size is unchanged), `false` if the size is invalid.
+     */
     bool resize(SkISize size) noexcept override;
 private:
     friend class RWLSwapchain;

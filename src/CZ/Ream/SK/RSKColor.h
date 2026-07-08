@@ -5,6 +5,12 @@
 
 namespace CZ
 {
+    /**
+     * @brief Converts a premultiplied-alpha SkColor to unpremultiplied (straight alpha).
+     *
+     * @param premul The premultiplied color.
+     * @return The unpremultiplied color, or fully transparent if alpha is 0.
+     */
     constexpr SkColor SKColorUnpremultiply(SkColor premul) noexcept
     {
         const auto a { SkColorGetA(premul) };
@@ -24,6 +30,12 @@ namespace CZ
         return SkColorSetARGB(a, rUn, gUn, bUn);
     }
 
+    /**
+     * @brief Converts a premultiplied-alpha SkColor4f to unpremultiplied (straight alpha).
+     *
+     * @param premul The premultiplied color.
+     * @return The unpremultiplied color, or fully transparent if alpha is 0.
+     */
     constexpr SkColor4f SKColor4fUnpremultiply(SkColor4f premul) noexcept
     {
         if (premul.fA == 0.0f)

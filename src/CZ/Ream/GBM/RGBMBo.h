@@ -23,6 +23,9 @@ class CZ::RGBMBo : public RObject
 {
 public:
 
+    /**
+     * @brief Destroys the underlying gbm_bo if this object owns it.
+     */
     ~RGBMBo() noexcept;
 
     /**
@@ -68,7 +71,15 @@ public:
      * @see hasModifier()
      */
     RModifier modifier() const noexcept;
+
+    /**
+     * @brief Returns the DRM pixel format of the buffer.
+     */
     RFormat format() const noexcept;
+
+    /**
+     * @brief Returns the width and height of the buffer in pixels.
+     */
     SkISize size() const noexcept;
 
     /**
@@ -88,8 +99,32 @@ public:
      * @return The GEM flink handle (DRM buffer object handle) for the specified plane.
      */
     union gbm_bo_handle planeHandle(int planeIndex) const noexcept;
+
+    /**
+     * @brief Returns the stride (bytes per row) for a specific plane.
+     *
+     * @param planeIndex Index of the plane (0-based).
+     * @return The stride in bytes for the specified plane.
+     */
     UInt32 planeStride(int planeIndex) const noexcept;
+
+    /**
+     * @brief Returns the byte offset of a specific plane within the buffer.
+     *
+     * @param planeIndex Index of the plane (0-based).
+     * @return The offset in bytes for the specified plane.
+     */
     UInt32 planeOffset(int planeIndex) const noexcept;
+
+    /**
+     * @brief Exports a DMA-BUF file descriptor for a specific plane.
+     *
+     * @note The returned file descriptor is owned by the caller (wrapped in a CZSpFd) and must
+     *       be closed when no longer needed. For a full export of all planes, use dmaExport().
+     *
+     * @param planeIndex Index of the plane (0-based).
+     * @return A CZSpFd wrapping the plane's DMA-BUF file descriptor.
+     */
     CZSpFd planeFd(int planeIndex) const noexcept;
 
     /**

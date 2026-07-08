@@ -56,6 +56,12 @@ namespace CZ
         None = 6,
     };
 
+    /**
+     * @brief Returns a human-readable string for the given subpixel layout.
+     *
+     * @param subpixel The subpixel layout to convert.
+     * @return A string view naming the layout (e.g. "HRGB"). Out-of-range values yield "Unknown".
+     */
     inline const std::string_view &RSubPixelString(RSubpixel subpixel) noexcept
     {
         static constexpr const std::array<std::string_view, 7> strings { "Unknown", "HRGB", "HBGR", "VRGB", "VBGR", "None", "Unknown" };

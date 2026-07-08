@@ -17,7 +17,19 @@
 class CZ::RVKSync final : public RSync
 {
 public:
+    /**
+     * @brief Captures all queue work submitted so far on @p device as a sync.
+     *
+     * Performs an empty submit that signals a SYNC_FD-exportable semaphore, then exports it as a
+     * sync_file fd. If SYNC_FD export is unavailable, returns an already-signaled (no-op) sync.
+     */
     static std::shared_ptr<RVKSync> Make(RVKDevice *device) noexcept;
+
+    /**
+     * @brief Wraps an existing sync_file fd as a sync on @p device.
+     *
+     * Takes ownership of @p fd even on failure (per the RSync contract).
+     */
     static std::shared_ptr<RVKSync> FromExternal(int fd, RVKDevice *device) noexcept;
 
     bool gpuWait(RDevice *waiter = nullptr) const noexcept override;

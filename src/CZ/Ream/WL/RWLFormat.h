@@ -7,8 +7,17 @@
 
 namespace CZ
 {
+    /**
+     * @brief Helper for converting between DRM pixel formats and Wayland @c wl_shm formats.
+     */
     struct RWLFormat
     {
+        /**
+         * @brief Converts a DRM (FourCC) format to the equivalent @c wl_shm_format.
+         *
+         * The XRGB8888 and ARGB8888 formats are mapped to their dedicated @c wl_shm enumerators;
+         * all other formats share the same numeric value and are cast through directly.
+         */
         static constexpr wl_shm_format FromDRM(RFormat format) noexcept
         {
             switch (format)
@@ -22,6 +31,12 @@ namespace CZ
             }
         }
 
+        /**
+         * @brief Converts a Wayland @c wl_shm_format to the equivalent DRM (FourCC) format.
+         *
+         * The XRGB8888 and ARGB8888 enumerators are mapped to their DRM FourCC counterparts;
+         * all other formats share the same numeric value and are cast through directly.
+         */
         static constexpr RFormat ToDRM(wl_shm_format format) noexcept
         {
             switch (format)

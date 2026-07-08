@@ -17,6 +17,12 @@
 
 namespace CZ
 {
+    /**
+     * @brief Checks whether an SkAlphaType is a valid, known value.
+     *
+     * @param alphaType The alpha type to test.
+     * @return true if @p alphaType is a valid enumerator (not kUnknown_SkAlphaType), false otherwise.
+     */
     static inline constexpr bool SkAlphaTypeIsValid(SkAlphaType alphaType) noexcept
     {
         return alphaType > kUnknown_SkAlphaType && alphaType <= kLastEnum_SkAlphaType;
@@ -49,6 +55,11 @@ namespace CZ
          */
         UInt8 *pixels;
 
+        /**
+         * @brief Alpha type of the pixel data.
+         *
+         * Defaults to kUnknown_SkAlphaType.
+         */
         SkAlphaType alphaType { kUnknown_SkAlphaType };
     };
 
@@ -97,17 +108,29 @@ namespace CZ
          */
         RFormat format;
 
+        /**
+         * @brief Computes the address of a pixel within a buffer.
+         *
+         * @param origin        Pointer to the top-left corner of the buffer.
+         * @param offset        Pixel offset from the origin.
+         * @param bytesPerPixel Number of bytes per pixel.
+         * @param stride        Number of bytes per row.
+         * @return Pointer to the pixel at @p offset.
+         */
         static constexpr UInt8 *AddressAt(UInt8 *origin, SkIPoint offset, UInt32 bytesPerPixel, UInt32 stride) noexcept
         {
             return origin + (offset.y() * stride) + (offset.x() * bytesPerPixel);
         }
     };
 
+    /**
+     * @brief Backing storage type for an RImage.
+     */
     enum class RStorageType
     {
-        Auto,
-        Native,
-        GBM
+        Auto,   ///< Let the backend choose the most suitable storage.
+        Native, ///< API-optimal native storage.
+        GBM     ///< GBM/DMA-buf storage, suitable for KMS scanout and cross-device sharing.
     };
 
     /// Device-specific caps
@@ -124,24 +147,34 @@ namespace CZ
 
         /// Can be used as a render destination in an RSKPass (has an SkSurface)
         RImageCap_SkSurface = 1u << 3,
+
+        /// Can provide a DRM framebuffer (drmFb()), usable for KMS scanout.
         RImageCap_DRMFb     = 1u << 4,
+
+        /// Backed by a GBM buffer object (gbmBo()).
         RImageCap_GBMBo     = 1u << 5,
 
+        /// All of the above caps combined.
         RImageCap_All       = 0x3F
     };
 
+    /**
+     * @brief Constraints applied when allocating an RImage.
+     *
+     * Used by the RImage factory functions to require specific capabilities and formats.
+     */
     struct RImageConstraints
     {
-        /* Required caps for each device. Leave empty to disable constraints. */
+        /// Required caps for each device. Leave empty to disable constraints.
         std::unordered_map<RDevice*, CZBitset<RImageCap>> caps;
 
-        /* Required read formats (the image must support at least one). Leave empty to disable constraints. */
+        /// Required read formats (the image must support at least one). Leave empty to disable constraints.
         std::unordered_set<RFormat> readFormats;
 
-        /* Required write formats (the image must support at least one). Leave empty to disable constraints. */
+        /// Required write formats (the image must support at least one). Leave empty to disable constraints.
         std::unordered_set<RFormat> writeFormats;
 
-        /* The allocator device, if nullptr, RCore::mainDevice() is used */
+        /// The allocator device; if nullptr, RCore::mainDevice() is used.
         RDevice *allocator { nullptr };
     };
 }
@@ -163,46 +196,216 @@ namespace CZ
 class CZ::RImage : public RObject
 {
 public:
+    /**
+     * @brief Allocates a new empty image.
+     *
+     * @param size        Image size in pixels.
+     * @param format      Requested DRM format (and modifiers).
+     * @param constraints Optional allocation constraints (caps, formats, allocator device).
+     * @return A shared pointer to the new image, or nullptr on failure.
+     */
     [[nodiscard]] static std::shared_ptr<RImage> Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
+
+    /**
+     * @brief Allocates a new image and uploads pixel data into it.
+     *
+     * The source format (@c info.format) is automatically added to the required write formats.
+     *
+     * @param info        Description of the source pixel buffer.
+     * @param format      Requested DRM format (and modifiers) for the new image.
+     * @param constraints Optional allocation constraints.
+     * @return A shared pointer to the new image, or nullptr on failure.
+     */
     [[nodiscard]] static std::shared_ptr<RImage> MakeFromPixels(const RPixelBufferInfo &info, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
+
+    /**
+     * @brief Loads an image from a file.
+     *
+     * Supports common raster formats and SVG. The decoded content is scaled/converted to
+     * @p format and, if given, @p size.
+     *
+     * @param size        Desired output size in pixels; {0, 0} keeps the source dimensions.
+     * @param format      Requested DRM format for the new image.
+     * @param path        Path to the image file.
+     * @param constraints Optional allocation constraints.
+     * @return A shared pointer to the new image, or nullptr on failure.
+     */
     [[nodiscard]] static std::shared_ptr<RImage> LoadFile(const std::filesystem::path &path, const RDRMFormat &format, SkISize size = {0, 0}, const RImageConstraints *constraints = nullptr) noexcept;
+
+    /**
+     * @brief Imports an image from a DMA-buf.
+     *
+     * @param info        Description of the DMA buffer (fds, offsets, strides, modifier).
+     * @param ownership   Whether the image takes ownership of the buffer's file descriptors.
+     *                    When CZOwn::Own, the fds are closed on failure.
+     * @param constraints Optional allocation constraints.
+     * @return A shared pointer to the imported image, or nullptr on failure.
+     */
     [[nodiscard]] static std::shared_ptr<RImage> FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints = nullptr) noexcept;
 
+    /**
+     * @brief Returns the GBM buffer object backing this image, if any.
+     *
+     * @param device Device to query. If nullptr, the main device is used.
+     * @return The GBM buffer object, or nullptr if unavailable.
+     */
     virtual std::shared_ptr<RGBMBo> gbmBo(RDevice *device = nullptr) const noexcept = 0;
+
+    /**
+     * @brief Returns a DRM framebuffer for this image, if supported.
+     *
+     * @param device Device to query. If nullptr, the main device is used.
+     * @return The DRM framebuffer, or nullptr if unavailable.
+     */
     virtual std::shared_ptr<RDRMFramebuffer> drmFb(RDevice *device = nullptr) const noexcept = 0;
+
+    /**
+     * @brief Returns an SkImage view of this image, if supported (RImageCap_SkImage).
+     *
+     * @param device Device to query. If nullptr, the main device is used.
+     * @return The SkImage, or nullptr if unavailable.
+     */
     virtual sk_sp<SkImage> skImage(RDevice *device = nullptr) const noexcept = 0;
+
+    /**
+     * @brief Returns an SkSurface targeting this image, if supported (RImageCap_SkSurface).
+     *
+     * @param device Device to query. If nullptr, the main device is used.
+     * @return The SkSurface, or nullptr if unavailable.
+     */
     virtual sk_sp<SkSurface> skSurface(RDevice *device = nullptr) const noexcept = 0;
 
     // If caps == ret then all tested caps are supported
+    /**
+     * @brief Checks which of the given capabilities are supported on a device.
+     *
+     * @param caps   The capabilities to test.
+     * @param device Device to query. If nullptr, the main device is used.
+     * @return The subset of @p caps that is supported; equals @p caps when all are supported.
+     */
     virtual CZBitset<RImageCap> checkDeviceCaps(CZBitset<RImageCap> caps, RDevice *device = nullptr) const noexcept = 0;
+
+    /**
+     * @brief Uploads pixel data into a region of the image.
+     *
+     * Increments writeSerial() on success.
+     *
+     * @param region Source buffer and set of rectangles to copy.
+     * @return true on success, false otherwise.
+     */
     virtual bool writePixels(const RPixelBufferRegion &region) noexcept = 0;
+
+    /**
+     * @brief Downloads pixel data from a region of the image.
+     *
+     * @param region Destination buffer and set of rectangles to copy.
+     * @return true on success, false otherwise.
+     */
     virtual bool readPixels(const RPixelBufferRegion &region) noexcept = 0;
 
+    /**
+     * @brief Returns the image size in pixels.
+     */
     SkISize size() const noexcept { return m_size; }
+
+    /**
+     * @brief Returns information about the image's pixel format.
+     */
     const RFormatInfo &formatInfo() const noexcept { return *m_formatInfo; }
+
+    /**
+     * @brief Returns the set of formats the image can be read/sampled as.
+     */
     const std::unordered_set<RFormat> &readFormats() const noexcept { return m_readFormats; };
+
+    /**
+     * @brief Returns the set of formats the image can be written to.
+     */
     const std::unordered_set<RFormat> &writeFormats() const noexcept { return m_writeFormats; }
+
+    /**
+     * @brief Returns the image's alpha type.
+     */
     SkAlphaType alphaType() const noexcept { return m_alphaType; }
+
+    /**
+     * @brief Returns the DRM format modifier of the image's storage.
+     */
     RModifier modifier() const noexcept { return m_modifier; }
+
+    /**
+     * @brief Returns the device that allocated this image.
+     */
     RDevice *allocator() const noexcept { return m_allocator; }
+
+    /**
+     * @brief Returns the RCore instance that owns this image.
+     */
     std::shared_ptr<RCore> core() const noexcept { return m_core; }
 
     // Signalled when no longer being read
+    /**
+     * @brief Returns the read sync fence.
+     *
+     * Signalled when the image is no longer being read.
+     */
     std::shared_ptr<RSync> readSync() noexcept { return m_readSync; }
+
+    /**
+     * @brief Sets the read sync fence.
+     *
+     * @param sync The fence signalled when reads on the image complete.
+     */
     void setReadSync(std::shared_ptr<RSync> sync) noexcept { m_readSync = sync;}
 
     // Signalled when pending write operations end
+    /**
+     * @brief Returns the write sync fence.
+     *
+     * Signalled when pending write operations on the image complete.
+     */
     std::shared_ptr<RSync> writeSync() noexcept { return m_writeSync; }
+
+    /**
+     * @brief Sets the write sync fence.
+     *
+     * @param sync The fence signalled when writes on the image complete.
+     */
     void setWriteSync(std::shared_ptr<RSync> sync) noexcept { m_writeSync = sync; }
 
     // Increased by successful writePixels calls, initially 0
+    /**
+     * @brief Returns the write serial.
+     *
+     * Starts at 0 and is incremented by each successful writePixels() call.
+     */
     UInt32 writeSerial() const noexcept { return m_writeSerial; }
 
+    /**
+     * @brief Attempts to cast this image to an RGLImage.
+     *
+     * @return A shared pointer to RGLImage if the active API is OpenGL, or nullptr otherwise.
+     */
     std::shared_ptr<RGLImage> asGL() const noexcept;
+
+    /**
+     * @brief Attempts to cast this image to an RRSImage.
+     *
+     * @return A shared pointer to RRSImage if the active API is Raster, or nullptr otherwise.
+     */
     std::shared_ptr<RRSImage> asRS() const noexcept;
+
+    /**
+     * @brief Attempts to cast this image to an RVKImage.
+     *
+     * @return A shared pointer to RVKImage if the active API is Vulkan, or nullptr otherwise.
+     */
     std::shared_ptr<RVKImage> asVK() const noexcept;
 
 
+    /**
+     * @brief Destructor.
+     */
     ~RImage() noexcept;
 
     // Reserved for Louvre

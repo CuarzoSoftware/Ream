@@ -6,6 +6,13 @@
 #include <CZ/Core/CZTransform.h>
 #include <CZ/skia/core/SkMatrix.h>
 
+/**
+ * @brief Helpers for building the coordinate-space transformation matrices used during rendering.
+ *
+ * Provides static factories that produce SkMatrix / SkRect values mapping between the
+ * various coordinate spaces involved in drawing (virtual/viewport, image, NDC, UV and
+ * framebuffer pixel spaces).
+ */
 class CZ::RMatrixUtils
 {
 public:

@@ -8,6 +8,9 @@
 
 namespace CZ
 {
+    /**
+     * @brief Availability flags for EGL client (display-independent) extensions.
+     */
     struct REGLClientExtensions
     {
         bool EXT_platform_base;
@@ -19,6 +22,9 @@ namespace CZ
         bool KHR_debug;
     };
 
+    /**
+     * @brief Availability flags for EGL extensions queried per EGLDisplay.
+     */
     struct REGLDisplayExtensions
     {
         bool KHR_image;
@@ -38,12 +44,18 @@ namespace CZ
         bool ANDROID_native_fence_sync;
     };
 
+    /**
+     * @brief Availability flags for EGL extensions queried per EGLDeviceEXT.
+     */
     struct REGLDeviceExtensions
     {
         bool EXT_device_drm;
         bool EXT_device_drm_render_node;
     };
 
+    /**
+     * @brief Client-level EGL function pointers resolved via eglGetProcAddress.
+     */
     struct REGLClientProcs
     {
         PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
@@ -52,6 +64,9 @@ namespace CZ
         PFNEGLDEBUGMESSAGECONTROLKHRPROC eglDebugMessageControlKHR;
     };
 
+    /**
+     * @brief Display-level EGL/GL function pointers resolved for a given EGLDisplay.
+     */
     struct REGLDisplayProcs
     {
         PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR;

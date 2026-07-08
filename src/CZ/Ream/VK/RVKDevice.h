@@ -13,6 +13,16 @@
 #include <thread>
 #include <mutex>
 
+/**
+ * @brief Vulkan backend implementation of RDevice.
+ *
+ * Wraps a single VkPhysicalDevice/VkDevice and its graphics queue, and owns the resources shared
+ * across the backend: the painter pipeline cache, per-thread Skia (Ganesh) contexts, a queue mutex
+ * serializing submissions, and a fence-tracked deferred-destruction queue enabling asynchronous,
+ * non-blocking command submission.
+ *
+ * Obtained by downcasting an RDevice via RDevice::asVK().
+ */
 class CZ::RVKDevice final : public RDevice
 {
 public:

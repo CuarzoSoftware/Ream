@@ -77,6 +77,10 @@ public:
      * @return true if geometry was successfully set, false if invalid.
      */
     bool setGeometry(const RSurfaceGeometry &geometry) noexcept;
+
+    /**
+     * @brief Returns the current viewport -> (transform) -> dst mapping.
+     */
     const RSurfaceGeometry &geometry() const noexcept { return m_geometry; }
 
     /**

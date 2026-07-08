@@ -20,23 +20,41 @@ namespace CZ
      */
     using RModifier = UInt64;
 
+    /**
+     * @brief Graphics backend used by Ream.
+     */
     enum class RGraphicsAPI
     {
-        Auto,
-        GL,
-        VK,
-        RS
+        Auto, ///< Let Ream choose the most suitable backend automatically.
+        GL,   ///< OpenGL ES 2.0 backend.
+        VK,   ///< Vulkan backend.
+        RS    ///< Raster (CPU) backend.
     };
 
+    /**
+     * @brief Returns a human-readable string for the given graphics API.
+     *
+     * @param api The graphics API to convert.
+     * @return A string view naming the API (e.g. "Vulkan"). Unknown values yield "Unknown".
+     */
     std::string_view RGraphicsAPIString(RGraphicsAPI api) noexcept;
 
+    /**
+     * @brief Windowing/display platform Ream runs on.
+     */
     enum class RPlatform
     {
-        DRM,
-        Wayland,
-        Offscreen
+        DRM,       ///< Direct Rendering Manager (bare KMS).
+        Wayland,   ///< Wayland compositor.
+        Offscreen  ///< Offscreen rendering (no display).
     };
 
+    /**
+     * @brief Returns a human-readable string for the given platform.
+     *
+     * @param platform The platform to convert.
+     * @return A string view naming the platform (e.g. "Wayland"). Unknown values yield "Unknown".
+     */
     std::string_view RPlatformString(RPlatform platform) noexcept;
 
     class RDRMFormat;

@@ -45,7 +45,7 @@ It is developed primarily as the rendering foundation for Wayland compositors, b
 
 - Raster
 - OpenGL ES 2.0
-- Vulkan (WIP)
+- Vulkan
 
 ## 🔩 Abstraction
 

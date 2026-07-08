@@ -19,6 +19,18 @@ public:
      * @param size The size of the gamma correction table. Defaults to 0.
      */
     static std::shared_ptr<RGammaLUT> Make(size_t size = 0) noexcept;
+
+    /**
+     * @brief Constructs an RGammaLUT of the given size and fills it.
+     *
+     * Equivalent to Make() followed by fill().
+     *
+     * @param size       The size of the gamma correction table.
+     * @param gamma      The gamma correction value.
+     * @param brightness The brightness adjustment value.
+     * @param contrast   The contrast adjustment value.
+     * @return A shared pointer to the new, filled RGammaLUT.
+     */
     static std::shared_ptr<RGammaLUT> MakeFilled(size_t size, Float64 gamma, Float64 brightness, Float64 contrast) noexcept;
 
     /**
@@ -95,17 +107,32 @@ public:
         return std::span<UInt16>(m_table.data() + s * 2, s);
     }
 
+    /**
+     * @brief Gets a read-only view of the red curve in the array.
+     *
+     * @return A span over the red curve; empty if the table size is 0.
+     */
     std::span<const UInt16> red() const noexcept
     {
         return std::span<const UInt16>(m_table.data(), size());
     }
 
+    /**
+     * @brief Gets a read-only view of the green curve in the array.
+     *
+     * @return A span over the green curve; empty if the table size is 0.
+     */
     std::span<const UInt16> green() const noexcept
     {
         const auto s  { size() };
         return std::span<const UInt16>(m_table.data() + s, s);
     }
 
+    /**
+     * @brief Gets a read-only view of the blue curve in the array.
+     *
+     * @return A span over the blue curve; empty if the table size is 0.
+     */
     std::span<const UInt16> blue() const noexcept
     {
         const auto s  { size() };

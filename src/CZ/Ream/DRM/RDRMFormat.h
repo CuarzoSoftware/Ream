@@ -18,6 +18,12 @@
 
 namespace CZ
 {
+    /**
+     * @brief Describes the memory layout properties of a DRM pixel format.
+     *
+     * Provides block dimensions, byte sizes and plane counts, along with helpers to compute
+     * strides and validate buffer layouts for a given image width.
+     */
     struct RFormatInfo
     {
         /**
@@ -134,6 +140,13 @@ namespace CZ
 
         /* Return the format name or "Unknown" if not found */
         static std::string_view FormatName(RFormat format) noexcept;
+
+        /**
+         * @brief Returns the human-readable name of a DRM modifier, or "Unknown" if not found.
+         *
+         * @param modifier The DRM modifier to query.
+         * @return The modifier name, or "Unknown" if it is not recognized.
+         */
         static std::string_view ModifierName(RModifier modifier) noexcept;
 
         // Ream supported formats
@@ -415,6 +428,9 @@ namespace CZ
          */
         bool addModifier(RModifier modifier) noexcept;
 
+        /**
+         * @brief Logs the contents of the format set (its formats and modifiers) for debugging.
+         */
         void log() const noexcept;
     private:
         REAM_FLAT_SET<RDRMFormat, RDRMFormat::Less> m_formats;

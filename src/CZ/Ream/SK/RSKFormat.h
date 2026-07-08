@@ -9,15 +9,27 @@
 
 namespace CZ
 {
+    /**
+     * @brief DRM FourCC <-> SkColorType mapping.
+     *
+     * Complements VK/RVKFormat (DRM <-> VkFormat) and GL/RGLFormat (DRM <-> GL). Only formats
+     * that Skia understands are mapped.
+     */
     namespace RSKFormat
     {
-        // kUnknown_SkColorType if no match
+        /**
+         * @brief Returns the SkColorType matching a DRM format, or kUnknown_SkColorType if unmapped.
+         */
         SkColorType FromDRM(RFormat format) noexcept;
 
-        // DRM_FORMAT_INVALID if no match
+        /**
+         * @brief Returns the DRM format matching an SkColorType, or DRM_FORMAT_INVALID if unmapped.
+         */
         RFormat ToDRM(SkColorType format) noexcept;
 
-        // Supported Skia formats
+        /**
+         * @brief Returns the set of DRM formats supported by the Skia mapping.
+         */
         const std::unordered_set<RFormat> &SupportedFormats() noexcept;
     }
 };

@@ -8,11 +8,26 @@
 
 namespace CZ
 {
+    /**
+     * @brief An image acquired from an RSwapchain.
+     */
     struct RSwapchainImage
     {
+        /// The acquired image to render into.
         std::shared_ptr<RImage> image;
+
+        /**
+         * @brief Buffer age.
+         *
+         * Number of frames since this buffer was last presented (useful for damage tracking).
+         * A value of 0 indicates a freshly created buffer whose contents are undefined.
+         */
         UInt32 age;
+
+        /// Frame counter at the time this image was acquired.
         UInt32 frame;
+
+        /// Index of this image within the swapchain.
         UInt32 index;
     };
 };
