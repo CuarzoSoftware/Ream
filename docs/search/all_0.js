@@ -1,0 +1,26 @@
+var searchData=
+[
+  ['a_20backend_0',['Selecting a backend',['../abstraction_page.html#selecting-a-backend',1,'']]],
+  ['abstraction_1',['🧩 Abstraction',['../abstraction_page.html',1,'']]],
+  ['access_2',['API-specific access',['../abstraction_page.html#api-specific-access',1,'']]],
+  ['acquire_3',['acquire',['../class_c_z_1_1_r_g_l_swapchain_w_l.html#af4509e612044a9a6205beafa33d81c01',1,'CZ::RGLSwapchainWL::acquire()'],['../class_c_z_1_1_r_swapchain.html#a06688e20b0e594efa0dafb780e89d792',1,'CZ::RSwapchain::acquire()'],['../class_c_z_1_1_r_v_k_swapchain_w_l.html#af4509e612044a9a6205beafa33d81c01',1,'CZ::RVKSwapchainWL::acquire()'],['../class_c_z_1_1_r_r_s_swapchain_w_l.html#af4509e612044a9a6205beafa33d81c01',1,'CZ::RRSSwapchainWL::acquire()']]],
+  ['add_4',['add',['../class_c_z_1_1_r_d_r_m_format_set.html#a11022206d1c048c390e2ebf4ad3747cb',1,'CZ::RDRMFormatSet']]],
+  ['addfb2modifiers_5',['AddFb2Modifiers',['../class_c_z_1_1_r_device.html#aae1c66564d78f5e6970a9cae671b0984',1,'CZ::RDevice::Caps']]],
+  ['addmodifier_6',['addmodifier',['../class_c_z_1_1_r_d_r_m_format.html#afc6f581f330724864f212d7145cd884f',1,'CZ::RDRMFormat::addModifier()'],['../class_c_z_1_1_r_d_r_m_format_set.html#afc6f581f330724864f212d7145cd884f',1,'CZ::RDRMFormatSet::addModifier()']]],
+  ['addressat_7',['AddressAt',['../struct_c_z_1_1_r_pixel_buffer_region.html#ab2ef222e6938b9ef14549da559e43954',1,'CZ::RPixelBufferRegion']]],
+  ['age_8',['age',['../struct_c_z_1_1_r_swapchain_image.html#a8bd14cb38e13c1e241476e709a5d2541',1,'CZ::RSwapchainImage']]],
+  ['allocator_9',['allocator',['../struct_c_z_1_1_r_image_constraints.html#a544ca354c11e7bea09f46f9063f90957',1,'CZ::RImageConstraints::allocator'],['../class_c_z_1_1_r_r_s_image.html#a1c0caf644300d2f07efbd0d5e17bea6e',1,'CZ::RRSImage::allocator()'],['../class_c_z_1_1_r_g_l_image.html#a37faee3db17f30e477c97a9a6c25618a',1,'CZ::RGLImage::allocator()'],['../class_c_z_1_1_r_image.html#acb726fc5eb2679b1cd71644e0b543506',1,'CZ::RImage::allocator()'],['../class_c_z_1_1_r_dumb_buffer.html#acb726fc5eb2679b1cd71644e0b543506',1,'CZ::RDumbBuffer::allocator()'],['../class_c_z_1_1_r_g_b_m_bo.html#acb726fc5eb2679b1cd71644e0b543506',1,'CZ::RGBMBo::allocator()']]],
+  ['allocatorvk_10',['allocatorVK',['../class_c_z_1_1_r_v_k_image.html#aafd2e9b3a3a6c73ec973f72b447f2ec4',1,'CZ::RVKImage']]],
+  ['allocfunc_11',['AllocFunc',['../class_c_z_1_1_r_g_l_context_data_manager.html#ad006e9a7a5fc9a9c1eb4232852fe2aa4',1,'CZ::RGLContextDataManager']]],
+  ['alpha_12',['alpha',['../struct_c_z_1_1_r_format_info.html#ac21340af16e85116cc30733582577c3b',1,'CZ::RFormatInfo']]],
+  ['alphatype_13',['alphatype',['../struct_c_z_1_1_r_e_g_l_surface_info.html#a13948b09dc6429f86a0413ebcabfffd5',1,'CZ::REGLSurfaceInfo::alphaType'],['../struct_c_z_1_1_r_pixel_buffer_info.html#a13948b09dc6429f86a0413ebcabfffd5',1,'CZ::RPixelBufferInfo::alphaType'],['../struct_c_z_1_1_r_g_l_framebuffer_info.html#a13948b09dc6429f86a0413ebcabfffd5',1,'CZ::RGLFramebufferInfo::alphaType'],['../class_c_z_1_1_r_image.html#a2aafeb58d9e1a51844fd28bec7be10e1',1,'CZ::RImage::alphaType()']]],
+  ['and_20new_20ideas_14',['Suggestions and New Ideas',['../contact_page.html#suggestions-and-new-ideas',1,'']]],
+  ['api_15',['Generic API',['../abstraction_page.html#generic-api',1,'']]],
+  ['api_20specific_20access_16',['API-specific access',['../abstraction_page.html#api-specific-access',1,'']]],
+  ['apis_17',['💻 Supported Graphics APIs',['../index.html#autotoc_md-supported-graphics-apis',1,'']]],
+  ['asdrm_18',['asDRM',['../class_c_z_1_1_r_platform_handle.html#a3760b7d2fe801efcd0a6e45aea14e4cc',1,'CZ::RPlatformHandle']]],
+  ['asgl_19',['asgl',['../class_c_z_1_1_r_device.html#a71569b79728bf5a11c55a69141b3ce27',1,'CZ::RDevice::asGL()'],['../class_c_z_1_1_r_image.html#a674f43d348f99eac61282a795908c155',1,'CZ::RImage::asGL()'],['../class_c_z_1_1_r_core.html#a0ffe7bd39916f5e47c24c5a31f2fd426',1,'CZ::RCore::asGL()']]],
+  ['asrs_20',['asrs',['../class_c_z_1_1_r_image.html#a1ad5658335c8dd2587a762493a56361e',1,'CZ::RImage::asRS()'],['../class_c_z_1_1_r_device.html#a3b53b4a930ac88a862a091ae41d0d91d',1,'CZ::RDevice::asRS()'],['../class_c_z_1_1_r_core.html#ae258f7719ab88996384d840b174b717c',1,'CZ::RCore::asRS()']]],
+  ['asvk_21',['asvk',['../class_c_z_1_1_r_image.html#a61f9f87147edd205a082a0d35b45084a',1,'CZ::RImage::asVK()'],['../class_c_z_1_1_r_device.html#a27c3887f75e1dd4bad8489afc2ca965b',1,'CZ::RDevice::asVK()'],['../class_c_z_1_1_r_core.html#a8021246d054655195f9c800b4ea013f5',1,'CZ::RCore::asVK()']]],
+  ['aswl_22',['asWL',['../class_c_z_1_1_r_platform_handle.html#aae9a2f86c066824749af8f1a6a92a4d2',1,'CZ::RPlatformHandle']]]
+];
