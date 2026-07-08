@@ -90,6 +90,9 @@ namespace CZ
     class RVKImage;
     class RVKPainter;
     class RVKSync;
+    class RVKPass;
+    class RVKPipeline;
+    class RVKSwapchainWL;
 
     class RVKExtensions;
 

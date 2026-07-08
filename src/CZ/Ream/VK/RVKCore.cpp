@@ -9,6 +9,9 @@ using namespace CZ;
 
 RVKCore::~RVKCore() noexcept
 {
+    // Devices (and their VkDevice + Skia contexts) must be destroyed before the instance.
+    CZVectorUtils::DeleteAndPopBackAll(m_devices);
+
     if (m_debugMsg != VK_NULL_HANDLE && m_instanceProcs.destroyDebugUtilsMessengerEXT)
     {
         m_instanceProcs.destroyDebugUtilsMessengerEXT(m_instance, m_debugMsg, nullptr);
@@ -22,6 +25,14 @@ RVKCore::~RVKCore() noexcept
         m_instance = VK_NULL_HANDLE;
         RLog(CZTrace, CZLN, "VkInstance destroyed");
     }
+}
+
+void RVKCore::clearGarbage() noexcept
+{
+    // No-op under the current synchronous submission model (see RVKDevice::clearGarbage).
+    for (auto *device : m_devices)
+        if (auto *vk { static_cast<RVKDevice*>(device) })
+            vk->clearGarbage();
 }
 
 bool RVKCore::hasInstanceExtension(std::string_view extension) const noexcept
@@ -246,13 +257,14 @@ bool RVKCore::initDebugger() noexcept
 
 bool RVKCore::initInstance() noexcept
 {
-    if (vkLog.level() <= CZSilent || m_requiredValidationLayers.empty() || !hasInstanceExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
-        m_requiredInstanceExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    // The VK_EXT_debug_utils instance extension (when available and logging is enabled) is
+    // already appended by initInstanceExtensions(). Re-adding it here duplicates the entry
+    // and, when the extension is unavailable, would request a non-existent extension.
 
     VkApplicationInfo appInfo {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = CZ_REAM_VERSION;
+    appInfo.pEngineName = "Ream";
+    appInfo.engineVersion = VK_MAKE_API_VERSION(0, CZ_REAM_VERSION_MAJOR, CZ_REAM_VERSION_MINOR, CZ_REAM_VERSION_PATCH);
     appInfo.apiVersion = VK_API_VERSION_1_1;
 
     VkInstanceCreateInfo createInfo {};

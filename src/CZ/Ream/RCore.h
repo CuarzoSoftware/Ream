@@ -6,6 +6,17 @@
 #include <memory>
 #include <thread>
 
+/**
+ * @brief Library entry point and global context.
+ *
+ * RCore initializes Ream, selecting the platform (DRM, Wayland, Offscreen) and graphics API
+ * (Raster, OpenGL, Vulkan). It owns and exposes the available rendering devices (RDevice) and
+ * reports information about the active platform and GAPI.
+ *
+ * A single instance exists per process; create it with RCore::Make() and access it globally via
+ * RCore::Get(). The graphics API can be forced with the @c CZ_REAM_GAPI environment variable when
+ * RGraphicsAPI::Auto is requested.
+ */
 class CZ::RCore : public RObject
 {
 public:
@@ -55,6 +66,7 @@ public:
      */
     std::shared_ptr<RGLCore> asGL() noexcept;
     std::shared_ptr<RRSCore> asRS() noexcept;
+    std::shared_ptr<RVKCore> asVK() noexcept;
 
     ~RCore() noexcept;
 

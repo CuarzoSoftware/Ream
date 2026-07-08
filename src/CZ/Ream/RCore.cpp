@@ -105,9 +105,6 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
 
     if (gAPI == RGraphicsAPI::VK)
     {
-        RLog(CZWarning, CZLN, "The Vulkan GAPI is still incomplete. Falling back to OpenGL...");
-
-        /*
         auto core { std::shared_ptr<RCore>(new RVKCore(options)) };
         s_core = core;
 
@@ -117,8 +114,8 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
             return core;
         }
 
-        if (gAPI != RGraphicsAPI::Auto)
-            goto fail;*/
+        // An explicitly requested GAPI must not silently fall back.
+        goto fail;
     }
 
     {
@@ -148,6 +145,13 @@ std::shared_ptr<RRSCore> RCore::asRS() noexcept
 {
     if (graphicsAPI() == RGraphicsAPI::RS)
         return std::static_pointer_cast<RRSCore>(s_core.lock());
+    return {};
+}
+
+std::shared_ptr<RVKCore> RCore::asVK() noexcept
+{
+    if (graphicsAPI() == RGraphicsAPI::VK)
+        return std::static_pointer_cast<RVKCore>(s_core.lock());
     return {};
 }
 

@@ -11,9 +11,15 @@ class CZ::RVKCore final : public RCore
 public:
     ~RVKCore() noexcept;
     RVKDevice *mainDevice() const noexcept { return (RVKDevice*)m_mainDevice; }
-    virtual void clearGarbage() noexcept override {};
+    virtual void clearGarbage() noexcept override;
     bool hasInstanceExtension(std::string_view extension) const noexcept;
     bool hasValidationLayer(std::string_view layer) const noexcept;
+
+    VkInstance instance() const noexcept { return m_instance; }
+
+    // Enabled instance extensions/layers (kept alive for skgpu::VulkanExtensions::init).
+    const std::vector<const char *> &enabledInstanceExtensions() const noexcept { return m_requiredInstanceExtensions; }
+
     CZLogger vkLog { "Ream", "CZ_REAM_VK_LOG_LEVEL" };
 private:
     friend class RCore;

@@ -7,6 +7,7 @@
 
 #include <CZ/Ream/GL/RGLPass.h>
 #include <CZ/Ream/RS/RRSPass.h>
+#include <CZ/Ream/VK/RVKPass.h>
 
 using namespace CZ;
 
@@ -98,6 +99,8 @@ std::shared_ptr<RPass> RPass::Make(CZBitset<RPassCap> caps, std::shared_ptr<RSur
         return std::shared_ptr<RGLPass>(new RGLPass(surface, surface->image(), painter, skSurface, device, caps));
     else if (device->asRS())
         return std::shared_ptr<RRSPass>(new RRSPass(surface, surface->image(), painter, skSurface, device, caps));
+    else if (device->asVK())
+        return std::shared_ptr<RVKPass>(new RVKPass(surface, surface->image(), painter, skSurface, device, caps));
 
-    return nullptr; // TODO: RVKPass
+    return nullptr;
 }

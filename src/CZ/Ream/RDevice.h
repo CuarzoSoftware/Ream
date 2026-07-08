@@ -25,6 +25,17 @@ namespace CZ
 
 struct gbm_device;
 
+/**
+ * @brief A rendering device.
+ *
+ * An RDevice represents a single GPU (or software renderer) usable for allocation and rendering.
+ * There is typically one device per DRM node; systems with multiple GPUs expose several, enabling
+ * hybrid-GPU (Prime) setups where buffers are allocated on one device and sampled on another via
+ * DMA-buf sharing.
+ *
+ * Devices are enumerated and owned by RCore. Each exposes its capabilities (RDevice::Caps) and the
+ * texture/render/DMA formats it supports. Use RCore::mainDevice() for the primary device.
+ */
 class CZ::RDevice : public RObject
 {
 public:
@@ -78,6 +89,7 @@ public:
     RCore &core() const noexcept { return m_core; }
     RGLDevice *asGL() noexcept;
     RRSDevice *asRS() noexcept;
+    RVKDevice *asVK() noexcept;
 
     const Caps &caps() const noexcept { return m_caps; }
 

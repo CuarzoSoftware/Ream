@@ -6,6 +6,7 @@
 #include <CZ/Ream/RLog.h>
 
 #include <CZ/Ream/RS/RRSImage.h>
+#include <CZ/Ream/VK/RVKImage.h>
 
 #include <CZ/skia/core/SkPixelRef.h>
 #include <CZ/skia/core/SkCanvas.h>
@@ -33,6 +34,8 @@ std::shared_ptr<RImage> RImage::Make(SkISize size, const RDRMFormat &format, con
         return RGLImage::Make(size, format, constraints);
     else if (core->graphicsAPI() == RGraphicsAPI::RS)
         return RRSImage::Make(size, format, constraints);
+    else if (core->graphicsAPI() == RGraphicsAPI::VK)
+        return RVKImage::Make(size, format, constraints);
 
     return {};
 }
@@ -261,6 +264,8 @@ std::shared_ptr<RImage> RImage::FromDMA(const RDMABufferInfo &info, CZOwn owners
 
     if (core->graphicsAPI() == RGraphicsAPI::GL)
         return RGLImage::FromDMA(info, ownership, constraints);
+    else if (core->graphicsAPI() == RGraphicsAPI::VK)
+        return RVKImage::FromDMA(info, ownership, constraints);
 
 fail:
     if (ownership == CZOwn::Own)
@@ -280,6 +285,11 @@ std::shared_ptr<RGLImage> RImage::asGL() const noexcept
 std::shared_ptr<RRSImage> RImage::asRS() const noexcept
 {
     return std::dynamic_pointer_cast<RRSImage>(m_self.lock());
+}
+
+std::shared_ptr<RVKImage> RImage::asVK() const noexcept
+{
+    return std::dynamic_pointer_cast<RVKImage>(m_self.lock());
 }
 
 RImage::~RImage() noexcept

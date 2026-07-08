@@ -146,6 +146,20 @@ namespace CZ
     };
 }
 
+/**
+ * @brief A GPU-accessible image buffer.
+ *
+ * RImage is the fundamental buffer type: a 2D image that can be used as a sampling source, a
+ * render target (via RSurface), or shared with other devices and processes.
+ *
+ * Images may be backed by different storage depending on the requested capabilities: native
+ * (API-optimal) storage, GBM/DMA-buf storage suitable for KMS scanout and cross-device sharing, or
+ * dumb buffers. An image can be created with RImage::Make(), imported from a DMA-buf with
+ * RImage::FromDMA(), or wrapped around an existing backend handle.
+ *
+ * Pixel data can be uploaded/downloaded with writePixels()/readPixels(), and access is coordinated
+ * across threads and devices through per-image read/write RSync fences.
+ */
 class CZ::RImage : public RObject
 {
 public:
@@ -186,6 +200,7 @@ public:
 
     std::shared_ptr<RGLImage> asGL() const noexcept;
     std::shared_ptr<RRSImage> asRS() const noexcept;
+    std::shared_ptr<RVKImage> asVK() const noexcept;
 
 
     ~RImage() noexcept;

@@ -2,6 +2,8 @@
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RDevice.h>
 #include <CZ/Ream/GL/RGLSync.h>
+#include <CZ/Ream/VK/RVKSync.h>
+#include <CZ/Ream/VK/RVKDevice.h>
 #include <CZ/Ream/RResourceTracker.h>
 #include <fcntl.h>
 
@@ -21,6 +23,12 @@ std::shared_ptr<RSync> RSync::FromExternal(int fd, RDevice *device) noexcept
     if (core->asGL())
         return RGLSync::FromExternal(fence.release(), (RGLDevice*)device);
 
+    if (core->asVK())
+    {
+        RVKDevice *vk { device ? device->asVK() : core->mainDevice()->asVK() };
+        return RVKSync::FromExternal(fence.release(), vk);
+    }
+
     return {};
 }
 
@@ -36,6 +44,12 @@ std::shared_ptr<RSync> RSync::Make(RDevice *device) noexcept
 
     if (core->asGL())
         return RGLSync::Make((RGLDevice*)device);
+
+    if (core->asVK())
+    {
+        RVKDevice *vk { device ? device->asVK() : core->mainDevice()->asVK() };
+        return RVKSync::Make(vk);
+    }
 
     return {};
 }

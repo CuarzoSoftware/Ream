@@ -85,6 +85,16 @@ namespace CZ
     };
 };
 
+/**
+ * @brief High-performance built-in renderer.
+ *
+ * RPainter is Ream's native drawing API, providing operations such as drawColor(), drawImage(),
+ * and drawImageEffect() with configurable blend modes, filtering, and geometry. It is implemented
+ * directly on each graphics backend (a native SPIR-V pipeline on Vulkan, GLSL on OpenGL, a
+ * software rasterizer on Raster), so it avoids the overhead of routing through Skia.
+ *
+ * A painter is obtained from an RPass (RPass::getPainter()) and draws into the pass's surface.
+ */
 class CZ::RPainter : public RObject
 {
 public:

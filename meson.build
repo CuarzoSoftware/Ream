@@ -41,6 +41,7 @@ gbm_dep         = dependency('gbm', version: '>= 23.2.1')
 boost_dep       = dependency('boost', modules : ['container'])
 drm_dep         = dependency('libdrm', version: '>= 2.4.113')
 drm_headers_dep = drm_dep.partial_dependency(compile_args: true, includes: true)
+vulkan_dep      = dependency('vulkan', version: '>= 1.1')
 
 deps = [
     cz_core_dep,
@@ -51,7 +52,8 @@ deps = [
     gbm_dep,
     boost_dep,
     drm_dep,
-    drm_headers_dep
+    drm_headers_dep,
+    vulkan_dep
 ]
 
 # -------------- HEADERS --------------
@@ -61,6 +63,7 @@ header_dirs = [
     ['src/CZ/Ream/DRM', 'DRM'],
     ['src/CZ/Ream/RS',  'RS'],
     ['src/CZ/Ream/GL',  'GL'],
+    ['src/CZ/Ream/VK',  'VK'],
     ['src/CZ/Ream/WL',  'WL'],
     ['src/CZ/Ream/GBM', 'GBM'],
     ['src/CZ/Ream/EGL', 'EGL'],
@@ -73,11 +76,25 @@ foreach header_dir : header_dirs
     install_headers(header_files, install_dir : join_paths(HEADERS_INSTALL_PATH, header_dir[1]))
 endforeach
 
+# -------------- SHADERS (GLSL -> embedded SPIR-V) --------------
+
+glslc = find_program('glslc')
+shader_names = ['painter.vert', 'color.frag', 'image.frag', 'effect.frag']
+shader_headers = []
+
+foreach s : shader_names
+    shader_headers += custom_target(
+        s + '.spv.h',
+        input  : join_paths('src/CZ/Ream/VK/shaders', s),
+        output : s.replace('.', '_') + '.spv.h',
+        command: [glslc, '-O', '--target-env=vulkan1.1', '-mfmt=num', '@INPUT@', '-o', '@OUTPUT@'])
+endforeach
+
 # -------------- LIBRARY --------------
 
 cz_ream = library(
     'cz-ream',
-    sources : run_command('find', './src/CZ', '-type', 'f', '-name', '*[.cpp,.c]', check : false).stdout().strip().split('\n'),
+    sources : run_command('find', './src/CZ', '-type', 'f', '-name', '*[.cpp,.c]', check : false).stdout().strip().split('\n') + shader_headers,
     include_directories : ['src'],
     dependencies : deps,
     soversion: VERSION_MAJOR,

@@ -1,6 +1,7 @@
 #include <CZ/Ream/WL/RWLSwapchain.h>
 #include <CZ/Ream/GL/RGLSwapchainWL.h>
 #include <CZ/Ream/RS/RRSSwapchainWL.h>
+#include <CZ/Ream/VK/RVKSwapchainWL.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
 
@@ -34,6 +35,8 @@ std::shared_ptr<RWLSwapchain> RWLSwapchain::Make(wl_surface *surface, SkISize si
         ss = RGLSwapchainWL::Make(surface, size);
     else if (core->asRS())
         ss = RRSSwapchainWL::Make(surface, size);
+    else if (core->asVK())
+        ss = RVKSwapchainWL::Make(surface, size);
 
     if (!ss)
         RLog(CZError, CZLN, "Failed to create RWLSwapchain");

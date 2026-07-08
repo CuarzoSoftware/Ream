@@ -47,6 +47,13 @@ RRSDevice *RDevice::asRS() noexcept
     return nullptr;
 }
 
+RVKDevice *RDevice::asVK() noexcept
+{
+    if (core().graphicsAPI() == RGraphicsAPI::VK)
+        return (RVKDevice*)this;
+    return nullptr;
+}
+
 RDevice::RDevice(RCore &core) noexcept :
     m_core(core)
 {
