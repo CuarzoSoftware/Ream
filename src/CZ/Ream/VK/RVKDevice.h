@@ -116,6 +116,17 @@ public:
      */
     bool submitSignal(VkSemaphore semaphore, VkFence fence) const noexcept;
 
+    /**
+     * @brief Empty queue submission that signals timeline @p semaphore to @p value (and optional
+     *        @p fence) after all prior queue work.
+     *
+     * Backs RVKSync's drm_syncobj-timeline path: the timeline semaphore aliases a drm_syncobj
+     * (imported via OPAQUE_FD), so signalling it materializes the syncobj timeline point that a
+     * sync_file is later exported from. Does not consume pending waits (they belong to the next
+     * real submission).
+     */
+    bool submitSignalTimeline(VkSemaphore semaphore, UInt64 value, VkFence fence) const noexcept;
+
     // Drains this device's fence-tracked deferred-destruction queue (Phase 6).
     void clearGarbage() noexcept;
 
@@ -176,9 +187,19 @@ private:
     mutable std::vector<std::pair<VkSemaphore, bool>> m_pendingWaits;
 
     // Fence-tracked deferred destruction: cleanup runs once its fence signals (drained by
-    // clearGarbage()). Lets submissions be async without freeing in-flight resources.
+    // clearGarbage()). Lets submissions be async without freeing in-flight resources. Each entry
+    // records the thread that created the resources; cleanup MUST run on that same thread because
+    // Vulkan command pools require external synchronization (NVIDIA crashes on cross-thread
+    // destruction that Mesa tolerates). clearGarbage() therefore only drains the caller thread's
+    // entries.
+    struct Garbage
+    {
+        VkFence fence;
+        std::function<void()> cleanup;
+        std::thread::id owner;
+    };
     mutable std::mutex m_garbageMutex;
-    mutable std::vector<std::pair<VkFence, std::function<void()>>> m_garbage;
+    mutable std::vector<Garbage> m_garbage;
 
     std::unique_ptr<RVKPipeline> m_pipelines;
     std::mutex m_pipelinesMutex;

@@ -34,6 +34,7 @@ cpp             = meson.get_compiler('cpp')
 pkg             = import('pkgconfig')
 cz_core_dep     = dependency('cz-core', fallback:['cz-core', 'cz_core_dep'])
 cz_skia_dep     = dependency('cz-skia')
+wayland_client_dep = dependency('wayland-client')
 wayland_egl_dep = dependency('wayland-egl')
 egl_dep         = dependency('egl', version: '>= 1.5')
 gles2_dep       = dependency('glesv2', version: '>= 3.2')
@@ -46,6 +47,7 @@ vulkan_dep      = dependency('vulkan', version: '>= 1.1')
 deps = [
     cz_core_dep,
     cz_skia_dep,
+    wayland_client_dep,
     wayland_egl_dep,
     egl_dep,
     gles2_dep,
@@ -90,11 +92,33 @@ foreach s : shader_names
         command: [glslc, '-O', '--target-env=vulkan1.1', '-mfmt=num', '@INPUT@', '-o', '@OUTPUT@'])
 endforeach
 
+# -------------- WAYLAND PROTOCOLS (client) --------------
+# Generate the linux-dmabuf-v1 client glue so the Wayland platform can query the
+# compositor's advertised main_device (used to pick a matching Vulkan physical device).
+
+wl_scanner       = find_program('wayland-scanner')
+wl_protocols_dep = dependency('wayland-protocols', version: '>= 1.24')
+wl_protocols_dir = wl_protocols_dep.get_variable(pkgconfig: 'pkgdatadir')
+
+dmabuf_xml = join_paths(wl_protocols_dir, 'stable', 'linux-dmabuf', 'linux-dmabuf-v1.xml')
+
+dmabuf_client_header = custom_target('linux-dmabuf-v1-client-protocol.h',
+    input  : dmabuf_xml,
+    output : 'linux-dmabuf-v1-client-protocol.h',
+    command: [wl_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
+
+dmabuf_client_code = custom_target('linux-dmabuf-v1-protocol.c',
+    input  : dmabuf_xml,
+    output : 'linux-dmabuf-v1-protocol.c',
+    command: [wl_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
+
+wl_protocols = [dmabuf_client_header, dmabuf_client_code]
+
 # -------------- LIBRARY --------------
 
 cz_ream = library(
     'cz-ream',
-    sources : run_command('find', './src/CZ', '-type', 'f', '-name', '*[.cpp,.c]', check : false).stdout().strip().split('\n') + shader_headers,
+    sources : run_command('find', './src/CZ', '-type', 'f', '-name', '*[.cpp,.c]', check : false).stdout().strip().split('\n') + shader_headers + wl_protocols,
     include_directories : ['src'],
     dependencies : deps,
     soversion: VERSION_MAJOR,

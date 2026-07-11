@@ -69,11 +69,13 @@ RVKDevice::~RVKDevice() noexcept
 
         // All fences are signalled after idle: run every pending deferred cleanup, then destroy.
         {
+            // Device teardown: render threads are stopped, so draining every thread's entries from
+            // here is safe (no concurrent pool access).
             std::lock_guard<std::mutex> lock { m_garbageMutex };
-            for (auto &[fence, cleanup] : m_garbage)
+            for (auto &g : m_garbage)
             {
-                cleanup();
-                vkDestroyFence(m_device, fence, nullptr);
+                g.cleanup();
+                vkDestroyFence(m_device, g.fence, nullptr);
             }
             m_garbage.clear();
         }
@@ -129,14 +131,16 @@ void RVKDevice::clearGarbage() noexcept
     if (m_device == VK_NULL_HANDLE)
         return;
 
+    const auto self { std::this_thread::get_id() };
     std::lock_guard<std::mutex> lock { m_garbageMutex };
     for (size_t i = 0; i < m_garbage.size();)
     {
-        auto &[fence, cleanup] = m_garbage[i];
-        if (vkGetFenceStatus(m_device, fence) == VK_SUCCESS)
+        auto &g { m_garbage[i] };
+        // Only free resources on the thread that created them (command-pool external-sync rule).
+        if (g.owner == self && vkGetFenceStatus(m_device, g.fence) == VK_SUCCESS)
         {
-            cleanup();
-            vkDestroyFence(m_device, fence, nullptr);
+            g.cleanup();
+            vkDestroyFence(m_device, g.fence, nullptr);
             m_garbage[i] = std::move(m_garbage.back());
             m_garbage.pop_back();
         }
@@ -300,7 +304,7 @@ bool RVKDevice::submitCommandAsync(VkCommandBuffer cmd, VkFence fence, std::vect
 void RVKDevice::deferDestroy(VkFence fence, std::function<void()> cleanup) const noexcept
 {
     std::lock_guard<std::mutex> lock { m_garbageMutex };
-    m_garbage.emplace_back(fence, std::move(cleanup));
+    m_garbage.push_back({ fence, std::move(cleanup), std::this_thread::get_id() });
 }
 
 void RVKDevice::queueWait(VkSemaphore semaphore, bool owned) const noexcept
@@ -317,6 +321,25 @@ bool RVKDevice::submitSignal(VkSemaphore semaphore, VkFence fence) const noexcep
 
     VkSubmitInfo submit {};
     submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    // A null semaphore yields a fence-only signal (CPU-side completion tracking).
+    submit.signalSemaphoreCount = semaphore != VK_NULL_HANDLE ? 1 : 0;
+    submit.pSignalSemaphores = semaphore != VK_NULL_HANDLE ? &semaphore : nullptr;
+
+    return vkQueueSubmit(m_graphicsQueue, 1, &submit, fence) == VK_SUCCESS;
+}
+
+bool RVKDevice::submitSignalTimeline(VkSemaphore semaphore, UInt64 value, VkFence fence) const noexcept
+{
+    std::lock_guard<std::mutex> lock { m_queueMutex };
+
+    VkTimelineSemaphoreSubmitInfo tsi {};
+    tsi.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+    tsi.signalSemaphoreValueCount = 1;
+    tsi.pSignalSemaphoreValues = &value;
+
+    VkSubmitInfo submit {};
+    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.pNext = &tsi;
     submit.signalSemaphoreCount = 1;
     submit.pSignalSemaphores = &semaphore;
 
@@ -647,8 +670,6 @@ bool RVKDevice::initDevice() noexcept
     m_caps.Rendering = true;
     m_caps.SyncCPU = true;
     m_caps.SyncGPU = true;
-    m_caps.SyncImport = m_ext.KHR_external_semaphore_fd;
-    m_caps.SyncExport = m_ext.KHR_external_semaphore_fd;
 
     if (m_ext.KHR_timeline_semaphore && drmFd() >= 0)
     {
@@ -659,6 +680,28 @@ bool RVKDevice::initDevice() noexcept
     }
     else
         m_caps.Timeline = m_ext.KHR_timeline_semaphore;
+
+    // Query ACTUAL sync_file (SYNC_FD) support rather than assuming the extension implies it: NVIDIA
+    // advertises VK_KHR_external_semaphore_fd (OPAQUE_FD) but does NOT support SYNC_FD. Getting this
+    // wrong is what silently broke synchronization on NVIDIA.
+    bool syncFdExport { false }, syncFdImport { false };
+    if (m_ext.KHR_external_semaphore_fd)
+    {
+        VkPhysicalDeviceExternalSemaphoreInfo info {};
+        info.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO;
+        info.handleType = VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
+        VkExternalSemaphoreProperties props {};
+        props.sType = VK_STRUCTURE_TYPE_EXTERNAL_SEMAPHORE_PROPERTIES;
+        vkGetPhysicalDeviceExternalSemaphoreProperties(m_physicalDevice, &info, &props);
+        syncFdExport = props.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT;
+        syncFdImport = props.externalSemaphoreFeatures & VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
+    }
+
+    // Export: producing a sync_file works either via SYNC_FD or via a drm_syncobj timeline point.
+    m_caps.SyncExport = syncFdExport || m_caps.Timeline;
+    // Import: a GPU-side wait on an external sync_file needs SYNC_FD import (importing a drm_syncobj
+    // into a VK semaphore is rejected by NVIDIA). Without it, cross-device waits fall back to CPU.
+    m_caps.SyncImport = syncFdImport;
 
     RLog(CZTrace, CZLN, "{}: VkDevice created", m_properties.deviceName);
     return true;

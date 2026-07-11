@@ -105,7 +105,11 @@ bool RVKSwapchainWL::createSwapchain(SkISize size, VkSwapchainKHR oldSwapchain) 
         ? caps.currentExtent.height
         : std::clamp((UInt32)size.height(), caps.minImageExtent.height, caps.maxImageExtent.height);
 
-    UInt32 minCount { std::max(caps.minImageCount, 2u) };
+    // Triple-buffer: with only 2 images under FIFO, the single free image stays held by the
+    // compositor until the next vblank, so the per-frame blocking acquire (vkWaitForFences below)
+    // stalls the client's event loop every frame. A third image means acquire almost always finds
+    // a free image and returns immediately, keeping the loop responsive.
+    UInt32 minCount { std::max(caps.minImageCount, 3u) };
     if (caps.maxImageCount > 0)
         minCount = std::min(minCount, caps.maxImageCount);
 

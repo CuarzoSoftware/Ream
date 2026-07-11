@@ -3,9 +3,36 @@
 #include <CZ/Ream/VK/RVKCore.h>
 #include <CZ/Ream/VK/RVKDevice.h>
 #include <CZ/Ream/VK/RVKExtensions.h>
+#include <CZ/Ream/WL/RWLPlatformHandle.h>
 #include <CZ/Core/Utils/CZVectorUtils.h>
+#include <xf86drm.h>
+#include <sys/sysmacros.h>
 
 using namespace CZ;
+
+// True if two DRM dev_t values refer to the same physical device (robust across
+// render/primary/card node differences by comparing bus info).
+static bool SameDrmDevice(dev_t a, dev_t b) noexcept
+{
+    if (a == 0 || b == 0)
+        return false;
+    if (a == b)
+        return true;
+
+    bool eq { false };
+    drmDevicePtr da { nullptr };
+    if (drmGetDeviceFromDevId(a, 0, &da) == 0)
+    {
+        drmDevicePtr db { nullptr };
+        if (drmGetDeviceFromDevId(b, 0, &db) == 0)
+        {
+            eq = drmDevicesEqual(da, db) != 0;
+            drmFreeDevice(&db);
+        }
+        drmFreeDevice(&da);
+    }
+    return eq;
+}
 
 RVKCore::~RVKCore() noexcept
 {
@@ -306,17 +333,34 @@ bool RVKCore::initDevices() noexcept
     m_devices.reserve(count);
     UInt32 maxScore { 0 };
 
+    // On Wayland, the compositor tells us (via linux-dmabuf feedback) which GPU it uses to import
+    // and composite client buffers. Prefer the matching physical device so buffers and explicit-sync
+    // timelines stay on a single GPU; sharing them across GPUs deadlocks the WSI/syncobj handshake.
+    dev_t preferredDev { 0 };
+    if (auto *wl { options().platformHandle ? options().platformHandle->asWL() : nullptr })
+        preferredDev = wl->mainDevice();
+
+    RVKDevice *preferred { nullptr };
+
     for (auto &physicalDevice : physicalDevices)
     {
         auto *device { RVKDevice::Make(*this, physicalDevice) };
 
         if (device)
         {
-            if (device->m_score > maxScore)
+            // Prefer a device that can GPU-wait on external sync_files (SyncImport). As the main
+            // device it keeps cross-device compositing sync on the GPU; a device without it (NVIDIA)
+            // forces CPU waits that, held under the compositor's lock, stall input. The dmabuf
+            // preferredDev (below) still overrides this for Wayland clients.
+            const UInt32 eff { device->m_score + (device->caps().SyncImport ? 10000u : 0u) };
+            if (eff > maxScore)
             {
-                maxScore = device->m_score;
+                maxScore = eff;
                 m_mainDevice = device;
             }
+
+            if (preferredDev != 0 && !preferred && SameDrmDevice(device->id(), preferredDev))
+                preferred = device;
 
             m_devices.emplace_back(device);
         }
@@ -327,6 +371,18 @@ bool RVKCore::initDevices() noexcept
         RLog(CZError, CZLN, "Failed to initialize at least one device");
         return false;
     }
+
+    // The compositor's device wins over the score-based pick when available.
+    if (preferred)
+    {
+        m_mainDevice = preferred;
+        RLog(CZInfo, CZLN, "Selected Vulkan device matching the compositor's main device ({}:{})",
+             major(preferredDev), minor(preferredDev));
+    }
+    else if (preferredDev != 0)
+        RLog(CZWarning, CZLN, "No Vulkan device matches the compositor's main device ({}:{}); "
+             "falling back to best-scored device (cross-GPU: explicit sync may be unstable)",
+             major(preferredDev), minor(preferredDev));
 
     return true;
 }
