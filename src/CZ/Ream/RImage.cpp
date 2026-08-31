@@ -230,7 +230,7 @@ std::shared_ptr<RImage> RImage::LoadFile(const std::filesystem::path &path, cons
 
     if (skFormat == kUnknown_SkColorType)
     {
-        RLog(CZError, CZLN, "Could not find DRM -> SkColorType mapping");
+        RLog(CZError, CZLN, "Could not find DRM -> SkColorType mapping for format {}", RDRMFormat::FormatName(format.format()));
         return {};
     }
 

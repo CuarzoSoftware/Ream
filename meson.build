@@ -33,7 +33,7 @@ install_data(
 cpp             = meson.get_compiler('cpp')
 pkg             = import('pkgconfig')
 cz_core_dep     = dependency('cz-core', fallback:['cz-core', 'cz_core_dep'])
-cz_skia_dep     = dependency('cz-skia')
+cz_skia_dep     = dependency('cz-skia', fallback:['cz-skia', 'cz_skia_dep'])
 wayland_client_dep = dependency('wayland-client')
 wayland_egl_dep = dependency('wayland-egl')
 egl_dep         = dependency('egl', version: '>= 1.5')
