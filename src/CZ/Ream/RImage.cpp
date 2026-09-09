@@ -179,17 +179,40 @@ static std::shared_ptr<RImage> LoadSVG(SkColorType skFormat, const std::filesyst
         return {};
     }
 
+    // Intrinsic size of the root <svg>, from its absolute width/height attributes. This is (0,0)
+    // when width/height are missing or given in relative units (e.g. "100%"), which is the case for
+    // the many icons that only declare a viewBox. Capture it BEFORE setContainerSize() changes it.
+    const SkSize intrinsicSize { dom->containerSize() };
+
     SkSize finalSize
     {
-        size.fWidth > 0 ? SkIntToScalar(size.width()) : dom->containerSize().width(),
-        size.fHeight > 0 ? SkIntToScalar(size.height()) : dom->containerSize().height()
+        size.fWidth > 0 ? SkIntToScalar(size.width()) : intrinsicSize.width(),
+        size.fHeight > 0 ? SkIntToScalar(size.height()) : intrinsicSize.height()
     };
+
+    // With no explicit size and no absolute intrinsic size, fall back to the viewBox extents.
+    if ((finalSize.fWidth <= 0 || finalSize.fHeight <= 0) && dom->getRoot())
+    {
+        const SkTLazy<SkRect> &viewBox { dom->getRoot()->getViewBox() };
+
+        if (viewBox.isValid())
+        {
+            if (finalSize.fWidth <= 0)  finalSize.fWidth  = viewBox->width();
+            if (finalSize.fHeight <= 0) finalSize.fHeight = viewBox->height();
+        }
+    }
 
     if (finalSize.fWidth <= 0 || finalSize.fHeight <= 0)
     {
         RLog(CZDebug, CZLN, "The image has invalid dimensions: {}", path.c_str());
         return {};
     }
+
+    // Resolve the initial viewport to the target size. This is what was missing: for roots with
+    // relative units or only a viewBox, render() would otherwise use a 0x0 viewport and draw
+    // nothing. For roots with absolute dimensions this has no effect (the viewport is fixed) and we
+    // scale the canvas below instead.
+    dom->setContainerSize(finalSize);
 
     SkImageInfo info
     {
@@ -208,9 +231,15 @@ static std::shared_ptr<RImage> LoadSVG(SkColorType skFormat, const std::filesyst
 
     SkCanvas canvas { bitmap };
     canvas.clear(SK_ColorTRANSPARENT);
-    canvas.scale(
-        finalSize.fWidth / dom->containerSize().width(),
-        finalSize.fHeight / dom->containerSize().height());
+
+    // Roots with absolute dimensions ignore setContainerSize() and render() draws at their intrinsic
+    // size, so scale up/down to reach finalSize (this is the only path that worked before). Roots
+    // with relative/viewBox-only sizes were already mapped into finalSize by setContainerSize(), so
+    // no extra scaling is applied.
+    if (intrinsicSize.width() > 0 && intrinsicSize.height() > 0)
+        canvas.scale(finalSize.fWidth / intrinsicSize.width(),
+                     finalSize.fHeight / intrinsicSize.height());
+
     dom->render(&canvas);
 
     const SkISize pixelSize { bitmap.pixelRef()->width(), bitmap.pixelRef()->height() };
