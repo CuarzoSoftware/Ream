@@ -484,8 +484,20 @@ bool RVKPainter::drawImage(const RDrawImageInfo &imageInfo, const SkRegion *clip
     if (replaceColor)
     {
         const SkColor4f rc { SkColor4f::FromColor(color()) };
-        colorF.fA *= opacity();
-        colorF.fR *= rc.fR; colorF.fG *= rc.fG; colorF.fB *= rc.fB;
+
+        // The replacement color's alpha modulates the image's alpha (the image acts as a mask).
+        colorF.fA *= opacity() * rc.fA;
+
+        // The shader outputs straight (unpremultiplied) RGB and the blend premultiplies by the final
+        // alpha, so a premultiplied replacement color must be unpremultiplied first.
+        if (m_state.options.has(ColorIsPremult) && rc.fA > 0.f)
+        {
+            colorF.fR *= rc.fR / rc.fA; colorF.fG *= rc.fG / rc.fA; colorF.fB *= rc.fB / rc.fA;
+        }
+        else
+        {
+            colorF.fR *= rc.fR; colorF.fG *= rc.fG; colorF.fB *= rc.fB;
+        }
     }
     else
         colorF.fA *= opacity();
@@ -506,11 +518,8 @@ bool RVKPainter::drawImage(const RDrawImageInfo &imageInfo, const SkRegion *clip
         }
         else if (replaceColor)
         {
-            save();
-            setColor(SkColorSetA(color(), 255)); setOptions(ColorIsPremult);
-            const bool r { drawColor(region) };
-            restore();
-            return r;
+            // Tinting an opaque image == drawing the tint (with its own alpha) as a solid color.
+            return drawColor(region);
         }
     }
 

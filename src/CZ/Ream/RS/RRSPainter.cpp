@@ -121,10 +121,11 @@ bool RRSPainter::drawImage(const RDrawImageInfo &image, const SkRegion *region, 
     // Color factor
     sk_sp<SkColorFilter> colorFilter { ColorFactor(state().factor) };
 
-    // Replace color
+    // Replace color: tint the image with color(). kSrcIn keeps the tint's RGB and sets the alpha to
+    // tint.a * image.a, so the replacement color's alpha is combined with the image's alpha.
     if (state().options.has(Option::ReplaceImageColor))
     {
-        SkColor tint { state().options.has(Option::ColorIsPremult) ? SKColorUnpremultiply(color()) : color() };
+        const SkColor tint { state().options.has(Option::ColorIsPremult) ? SKColorUnpremultiply(color()) : color() };
 
         if (colorFilter)
             colorFilter = colorFilter->makeComposed(SkColorFilters::Blend(tint, SkBlendMode::kSrcIn));

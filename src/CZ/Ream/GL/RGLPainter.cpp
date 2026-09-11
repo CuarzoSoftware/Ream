@@ -187,11 +187,25 @@ skipMask:
 
     if (blendMode() != RBlendMode::DstIn && features.has(RGLShader::ReplaceImageColor))
     {
-        const SkColor4f replaceColorF { SkColor4f::FromColor(color()) };        
-        colorF.fA *= m_state.opacity;
-        colorF.fR *= replaceColorF.fR;
-        colorF.fG *= replaceColorF.fG;
-        colorF.fB *= replaceColorF.fB;
+        const SkColor4f replaceColorF { SkColor4f::FromColor(color()) };
+
+        // The replacement color's alpha modulates the image's alpha (the image acts as a mask).
+        colorF.fA *= m_state.opacity * replaceColorF.fA;
+
+        // The shader outputs straight (unpremultiplied) RGB and the blend premultiplies by the
+        // final alpha, so a premultiplied replacement color must be unpremultiplied first.
+        if (m_state.options.has(ColorIsPremult) && replaceColorF.fA > 0.f)
+        {
+            colorF.fR *= replaceColorF.fR / replaceColorF.fA;
+            colorF.fG *= replaceColorF.fG / replaceColorF.fA;
+            colorF.fB *= replaceColorF.fB / replaceColorF.fA;
+        }
+        else
+        {
+            colorF.fR *= replaceColorF.fR;
+            colorF.fG *= replaceColorF.fG;
+            colorF.fB *= replaceColorF.fB;
+        }
     }
     else
     {
@@ -221,15 +235,10 @@ skipMask:
                 restore();
                 return ret;
             }
-        } /* Replacing the color of an opaque image is the same as drawing a solid color */
+        } /* Tinting an opaque image is the same as drawing the tint (with its own alpha) as a solid color */
         else if (features.has(RGLShader::ReplaceImageColor))
         {
-            save(); // Keep everything except color.a
-            setColor(SkColorSetA(color(), 255));
-            setOptions(ColorIsPremult);
-            const bool ret { drawColor(region) };
-            restore();
-            return ret;
+            return drawColor(region);
         }
     }
 
@@ -610,7 +619,11 @@ CZBitset<RGLShader::Features> RGLPainter::calcDrawImageFeatures(std::shared_ptr<
         features.setFlag(RGLShader::MaskExternal, maskTex->target == GL_TEXTURE_EXTERNAL_OES);
     }
 
-    features.setFlag(RGLShader::HasFactorA, m_state.factor.fA * m_state.opacity != 1.f);
+    // In ReplaceImageColor mode the replacement color's alpha also folds into the final alpha.
+    SkScalar factorA { m_state.factor.fA * m_state.opacity };
+    if (blendMode() != RBlendMode::DstIn && m_state.options.has(ReplaceImageColor))
+        factorA *= SkColor4f::FromColor(color()).fA;
+    features.setFlag(RGLShader::HasFactorA, factorA != 1.f);
 
     switch (blendMode())
     {

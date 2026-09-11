@@ -34,7 +34,7 @@ public:
         ImageExternal       = 1u << 3,  ///< The source texture is an external (GL_TEXTURE_EXTERNAL_OES) sampler.
         HasMask             = 1u << 4,  ///< Samples a mask texture.
         MaskExternal        = 1u << 5,  ///< The mask texture is an external sampler.
-        ReplaceImageColor   = 1u << 6,  ///< Replaces the image RGB with a solid color, keeping its alpha.
+        ReplaceImageColor   = 1u << 6,  ///< Tints the image: replaces its RGB with a solid color and multiplies its alpha by the color's alpha.
         HasFactorR          = 1u << 7,  ///< Applies the red-channel multiplier.
         HasFactorG          = 1u << 8,  ///< Applies the green-channel multiplier.
         HasFactorB          = 1u << 9,  ///< Applies the blue-channel multiplier.

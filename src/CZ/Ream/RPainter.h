@@ -105,15 +105,22 @@ public:
     enum Option : UInt32
     {
         /**
-         * @brief Replaces the image's RGB values with the value from color(), while preserving the image's alpha.
+         * @brief Tints an image with color() in drawImage().
          *
-         * This effectively tints the image with a solid color. Disabled by default.
+         * The image's RGB is replaced with color()'s RGB, and the image's alpha is multiplied by
+         * color()'s alpha. The image therefore acts as an alpha mask that is tinted — and, when
+         * color() is not opaque, faded — by color(). When color() is fully opaque this reduces to a
+         * plain solid-color tint that keeps the image's alpha unchanged.
+         *
+         * Use Option::ColorIsPremult to indicate whether color() is premultiplied. Disabled by
+         * default.
          */
         ReplaceImageColor = 1u << 0,
 
         /**
          * @brief Indicates that color() is premultiplied alpha.
          *
+         * Affects both drawColor() and, together with Option::ReplaceImageColor, drawImage().
          * Disabled by default.
          */
         ColorIsPremult = 1u << 1
@@ -250,8 +257,8 @@ public:
      *
      * The default color is black.
      *
-     * When Option::ReplaceImageColor is enabled, this color replaces the RGB components
-     * of the RImage in drawImage().
+     * When Option::ReplaceImageColor is enabled, this color tints the RImage in drawImage(): its
+     * RGB replaces the image's RGB and its alpha is multiplied with the image's alpha.
      *
      * Use Option::ColorIsPremult to indicate if this color uses premultiplied alpha.
      *
