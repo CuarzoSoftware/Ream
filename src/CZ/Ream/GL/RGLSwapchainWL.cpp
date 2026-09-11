@@ -132,8 +132,11 @@ bool RGLSwapchainWL::present(const RSwapchainImage &image, SkRegion *damage) noe
 
 bool RGLSwapchainWL::resize(SkISize size) noexcept
 {
-    if (size == m_size)
-        return true;
+    // NOTE: wl_egl_window_resize was used before, however it doesn't always apply the size immediately
+    // which can lead to viewporter / buffer size protocol errors
+
+    auto core { RCore::Get() };
+    auto *device { core->mainDevice()->asGL() };
 
     if (size.isEmpty())
     {
@@ -141,17 +144,70 @@ bool RGLSwapchainWL::resize(SkISize size) noexcept
         return false;
     }
 
-    m_size = size;
-    wl_egl_window_resize(m_window, size.width(), size.height(), 0, 0);
+    if (size == m_size)
+        return true;
+
+    auto *prevWindow { m_window };
+    auto prevSurface { m_eglSurface };
+
+    EGLint n;
+    EGLConfig eglConfig;
+
+    if (!eglChooseConfig(device->eglDisplay(), eglConfigAttribs, &eglConfig, 1, &n) || n != 1)
+    {
+        device->log(CZError, CZLN, "Failed to get EGL config");
+        return false;
+    }
+
+    auto window { wl_egl_window_create(surface(), size.width(), size.height()) };
+
+    if (!window)
+    {
+        device->log(CZError, CZLN, "Failed to create wl_egl_window");
+        return false;
+    }
+
+    auto eglSurface { eglCreateWindowSurface(device->eglDisplay(), eglConfig,(EGLNativeWindowType) window, NULL) };
+
+    if (eglSurface == EGL_NO_SURFACE)
+    {
+        device->log(CZError, CZLN, "Failed to create EGLSurface from wl_egl_window");
+        wl_egl_window_destroy(window);
+        return false;
+    }
+
+    auto current { RGLMakeCurrent(device->eglDisplay(), eglSurface, eglSurface, device->eglContext()) };
+
     REGLSurfaceInfo info {};
     info.size = size;
-    info.surface = m_eglSurface;
+    info.surface = eglSurface;
     info.alphaType = kUnpremul_SkAlphaType;
     info.format = DRM_FORMAT_ABGR8888;
-    m_image = RGLImage::FromEGLSurface(info, CZOwn::Borrow, m_device);
+
+    auto image { RGLImage::FromEGLSurface(info, CZOwn::Borrow, device) };
+
+    if (!image)
+    {
+        device->log(CZError, CZLN, "Failed to create RImage from EGLSurface");
+        eglDestroySurface(device->eglDisplay(), eglSurface);
+        wl_egl_window_destroy(window);
+        return false;
+    }
+
+    if (prevSurface != EGL_NO_SURFACE)
+        eglDestroySurface(m_device->eglDisplay(), prevSurface);
+
+    if (prevWindow)
+        wl_egl_window_destroy(prevWindow);
+
+    m_image = image;
+    m_size = size;
+    m_window = window;
+    m_eglSurface = eglSurface;
     return true;
 }
 
 RGLSwapchainWL::RGLSwapchainWL(std::shared_ptr<RGLCore> core, RGLDevice *device, std::shared_ptr<RGLImage> image, wl_egl_window *window, wl_surface *surface, EGLSurface eglSurface, SkISize size) noexcept :
     RWLSwapchain(size, surface), m_core(core), m_device(device), m_image(image), m_eglSurface(eglSurface), m_window(window)
 {}
+
