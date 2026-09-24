@@ -133,6 +133,27 @@ bool RRSPainter::drawImage(const RDrawImageInfo &image, const SkRegion *region, 
             colorFilter = SkColorFilters::Blend(tint, SkBlendMode::kSrcIn);
     }
 
+    if (!mask && !colorFilter && opacity() >= 1.f && image.srcTransform == CZTransform::Normal &&
+        (blendMode() == RBlendMode::Src || blendMode() == RBlendMode::SrcOver))
+    {
+        const SkMatrix &m { c->getTotalMatrix() };
+        const SkRect srcRect { RMatrixUtils::SkImageSrcRect(image) };
+        const SkRect devDst { m.mapRect(SkRect::Make(image.dst)) };
+        const auto isInt { [](SkScalar v) { return v == SkScalarRoundToScalar(v); } };
+
+        if (m.isTranslate() && isInt(devDst.x()) && isInt(devDst.y()) && isInt(srcRect.x()) && isInt(srcRect.y()) &&
+            srcRect.width() == devDst.width() && srcRect.height() == devDst.height())
+        {
+            SkPaint p;
+            p.setBlendMode(static_cast<SkBlendMode>(blendMode()));
+            c->resetMatrix();
+            c->clipRect(devDst);
+            c->drawImage(image.image->skImage(), devDst.x() - srcRect.x(), devDst.y() - srcRect.y(), SkSamplingOptions(), &p);
+            c->restore();
+            return true;
+        }
+    }
+
     auto shader { MakeImageShader(image) };
 
     if (mask)
