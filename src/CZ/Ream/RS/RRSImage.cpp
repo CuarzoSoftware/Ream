@@ -1,9 +1,13 @@
 #include <CZ/Ream/SK/RSKFormat.h>
 #include <CZ/Ream/RS/RRSImage.h>
 #include <CZ/Ream/RS/RRSDevice.h>
+#include <CZ/Ream/RDMABufferInfo.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/skia/core/SkImage.h>
+#include <CZ/skia/core/SkPixmap.h>
 #include <CZ/skia/core/SkSurface.h>
+#include <cstring>
+#include <sys/mman.h>
 
 using namespace CZ;
 
@@ -131,7 +135,10 @@ bool RRSImage::writePixels(const RPixelBufferRegion &region) noexcept
     if (region.region.isEmpty())
         return true;
 
-    auto *dst { (UInt8*)m_shm->map() };
+    if (!m_shm)
+        return false;
+
+    auto *dst { pixels() };
     const auto bpb { formatInfo().bytesPerBlock };
     SkRegion::Iterator iter(region.region);
 
@@ -169,7 +176,7 @@ bool RRSImage::readPixels(const RPixelBufferRegion &region) noexcept
         return false;
 
     const auto bpb { formatInfo().bytesPerBlock };
-    auto *src { (UInt8*)m_shm->map() };
+    auto *src { pixels() };
 
     SkRegion::Iterator iter (region.region);
     while (!iter.done())
@@ -202,6 +209,9 @@ bool RRSImage::readPixels(const RPixelBufferRegion &region) noexcept
 
 int RRSImage::resize(SkISize size) noexcept
 {
+    if (!m_shm)
+        return -1;
+
     if (size.isEmpty())
     {
         RLog(CZError, CZLN, "Invalid size {}x{}", size.width(), size.height());
@@ -250,3 +260,66 @@ RRSImage::RRSImage(std::shared_ptr<RCore> core, std::shared_ptr<CZSharedMemory> 
     m_readFormats.emplace(formatInfo->format);
 }
 
+RRSImage::~RRSImage() noexcept
+{
+    if (m_dmaMap)
+        munmap(m_dmaMap, m_dmaMapSize);
+}
+
+std::shared_ptr<RRSImage> RRSImage::FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints) noexcept
+{
+    auto closeFds = [&]() {
+        if (ownership == CZOwn::Own)
+        {
+            auto copy { info };
+            copy.closeFds();
+        }
+    };
+
+    auto core { RCore::Get() };
+    RDevice *device { (constraints && constraints->allocator) ? constraints->allocator : (core ? core->mainDevice() : nullptr) };
+    const auto *formatInfo { RDRMFormat::GetInfo(info.format) };
+    const auto skFormat { RSKFormat::FromDRM(info.format) };
+
+    if (!core || !device || !info.isValid() || info.planeCount != 1 || !formatInfo || skFormat == kUnknown_SkColorType ||
+        (info.modifier != DRM_FORMAT_MOD_LINEAR && info.modifier != DRM_FORMAT_MOD_INVALID) ||
+        info.stride[0] < (UInt32)info.width * formatInfo->bytesPerBlock)
+    {
+        RLog(CZDebug, CZLN, "RRSImage::FromDMA: unsupported buffer ({} {}x{}, modifier {:#x}, {} planes)",
+             drmGetFormatName(info.format), info.width, info.height, info.modifier, info.planeCount);
+        closeFds();
+        return {};
+    }
+
+    const size_t pageSize { (size_t)getpagesize() };
+    const size_t used { (size_t)info.offset[0] + (size_t)info.stride[0] * info.height };
+    const size_t mapSize { (used + pageSize - 1) & ~(pageSize - 1) };
+    void *map { mmap(nullptr, mapSize, PROT_READ, MAP_SHARED, info.fd[0], 0) };
+    closeFds();
+
+    if (map == MAP_FAILED)
+    {
+        RLog(CZError, CZLN, "RRSImage::FromDMA: mmap failed: {}", strerror(errno));
+        return {};
+    }
+
+    const SkAlphaType alphaType { formatInfo->alpha ? kPremul_SkAlphaType : kOpaque_SkAlphaType };
+    UInt8 *first { (UInt8*)map + info.offset[0] };
+    const SkPixmap pixmap { SkImageInfo::Make(info.width, info.height, skFormat, alphaType), first, info.stride[0] };
+    auto skImage { SkImages::RasterFromPixmap(pixmap, nullptr, nullptr) };
+
+    if (!skImage)
+    {
+        munmap(map, mapSize);
+        return {};
+    }
+
+    auto image { std::shared_ptr<RRSImage>(new RRSImage(core, nullptr, skImage, nullptr, device,
+        SkISize(info.width, info.height), info.stride[0], formatInfo, alphaType, info.modifier)) };
+    image->m_self = image;
+    image->m_dmaMap = map;
+    image->m_dmaMapSize = mapSize;
+    image->m_dmaPixels = first;
+    image->m_writeFormats.clear();
+    return image;
+}
