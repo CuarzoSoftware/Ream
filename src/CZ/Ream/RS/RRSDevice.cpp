@@ -138,6 +138,15 @@ bool RRSDevice::initFormats() noexcept
     }
 
     m_renderFormats = m_textureFormats;
+
+    if (core().platform() == RPlatform::DRM)
+        for (auto fmt : { DRM_FORMAT_XRGB8888, DRM_FORMAT_ARGB8888 })
+            if (m_textureFormats.has(fmt, DRM_FORMAT_MOD_LINEAR))
+            {
+                m_dmaTextureFormats.add(fmt, DRM_FORMAT_MOD_LINEAR);
+                m_dmaTextureFormats.add(fmt, DRM_FORMAT_MOD_INVALID);
+            }
+
     return true;
 }
 

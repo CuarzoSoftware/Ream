@@ -295,6 +295,8 @@ std::shared_ptr<RImage> RImage::FromDMA(const RDMABufferInfo &info, CZOwn owners
         return RGLImage::FromDMA(info, ownership, constraints);
     else if (core->graphicsAPI() == RGraphicsAPI::VK)
         return RVKImage::FromDMA(info, ownership, constraints);
+    else if (core->graphicsAPI() == RGraphicsAPI::RS)
+        return RRSImage::FromDMA(info, ownership, constraints);
 
 fail:
     if (ownership == CZOwn::Own)
