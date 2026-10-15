@@ -165,12 +165,13 @@ std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
     if (!device)
         device = core()->asGL()->mainDevice();
 
-    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device)) };
+    /* Already has one. Peeked with findData(): getData() would allocate the ContextData
+     * eagerly, and each allocated instance must later be destroyed with this device's
+     * context made current — expensive for devices that never actually host the fb
+     * (e.g. waking a suspended dGPU). It is only created below once the fb exists. */
 
-    /* Already has one */
-
-    if (contextData->glFb.has_value())
-        return contextData->glFb;
+    if (auto *existing { static_cast<ContextData*>(m_contextDataManager->findData(device)) }; existing && existing->glFb.has_value())
+        return existing->glFb;
 
     auto &deviceData { m_devicesMap[device] };
 
@@ -183,6 +184,7 @@ std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
 
     if (deviceData.eglSurface != EGL_NO_SURFACE)
     {
+        auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device)) };
         contextData->glFb = 0;
         contextData->fbOwnership = CZOwn::Borrow;
         return contextData->glFb;
@@ -213,6 +215,7 @@ std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device)) };
         contextData->glFb = fb;
         contextData->fbOwnership = CZOwn::Own;
         return fb;
@@ -227,15 +230,16 @@ std::optional<GLuint> RGLImage::glFb(RGLDevice *device) const noexcept
             return {};
         }
 
-        contextData->glFb = image->fb();
+        const GLuint fb { image->fb() };
 
-        if (contextData->glFb.value() == 0)
+        if (fb == 0)
         {
             deviceData.unsupportedCaps.add(NoGLFramebufer);
-            contextData->glFb.reset();
-            return contextData->glFb;
+            return {};
         }
 
+        auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device)) };
+        contextData->glFb = fb;
         contextData->fbOwnership = CZOwn::Borrow;
         return contextData->glFb;
     }
@@ -375,12 +379,20 @@ std::shared_ptr<RGLImage> RGLImage::FromDMA(const RDMABufferInfo &info, CZOwn ow
         return {};
     }
 
-    std::shared_ptr<RGBMBo> bo;
+    /* Try the allocator first: importing into the other devices is both usually unnecessary
+     * (the buffer is used where it is composited) and expensive (it can wake a suspended GPU) */
+    std::shared_ptr<RGBMBo> bo { RGBMBo::MakeFromDMA(infoCopy, allocator) };
 
-    for (auto *dev : core->devices())
+    if (!bo)
     {
-        bo = RGBMBo::MakeFromDMA(infoCopy, dev);
-        if (bo) break;
+        for (auto *dev : core->devices())
+        {
+            if (dev == allocator)
+                continue;
+
+            bo = RGBMBo::MakeFromDMA(infoCopy, dev);
+            if (bo) break;
+        }
     }
 
     if (ownership == CZOwn::Own)
@@ -458,12 +470,10 @@ sk_sp<SkImage> RGLImage::skImage(RDevice *device) const noexcept
     if (!device)
         device = core()->mainDevice();
 
-    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device->asGL())) };
+    /* Already has one (peeked: see glFb(), the ContextData is only created on success) */
 
-    /* Already has one */
-
-    if (contextData->skImage)
-        return contextData->skImage;
+    if (auto *existing { static_cast<ContextData*>(m_contextDataManager->findData(device->asGL())) }; existing && existing->skImage)
+        return existing->skImage;
 
     auto &deviceData { m_devicesMap[device->asGL()] };
 
@@ -507,7 +517,7 @@ sk_sp<SkImage> RGLImage::skImage(RDevice *device) const noexcept
         skgpu::Mipmapped::kNo,
         skTextureInfo);
 
-    contextData->skImage = SkImages::BorrowTextureFrom(
+    auto skImage { SkImages::BorrowTextureFrom(
         skContext.get(),
         skTexture,
         GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
@@ -515,11 +525,16 @@ sk_sp<SkImage> RGLImage::skImage(RDevice *device) const noexcept
         alphaType(),
         skSRGB,
         nullptr,
-        nullptr);
+        nullptr) };
 
-    if (!contextData->skImage)
+    if (!skImage)
+    {
         deviceData.unsupportedCaps.add(NoSkImage);
+        return {};
+    }
 
+    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(device->asGL())) };
+    contextData->skImage = skImage;
     return contextData->skImage;
 }
 
@@ -530,13 +545,12 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
     if (!device)
         device = core()->mainDevice();
 
-    /* Already has one */
+    /* Already has one (peeked: see glFb(), the ContextData is only created on success) */
 
     auto *glDevice { device->asGL() };
-    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(glDevice)) };
 
-    if (contextData->skSurface)
-        return contextData->skSurface;
+    if (auto *existing { static_cast<ContextData*>(m_contextDataManager->findData(glDevice)) }; existing && existing->skSurface)
+        return existing->skSurface;
 
     auto &deviceData { m_devicesMap[glDevice] };
 
@@ -587,17 +601,22 @@ sk_sp<SkSurface> RGLImage::skSurface(RDevice *device) const noexcept
     // TODO: Add pixel geometry to constructor
     static SkSurfaceProps skSurfaceProps(0, kUnknown_SkPixelGeometry);
 
-    contextData->skSurface = SkSurfaces::WrapBackendRenderTarget(
+    auto skSurface { SkSurfaces::WrapBackendRenderTarget(
         skContext.get(),
         backendTarget,
         fbInfo.fFBOID == 0 ? GrSurfaceOrigin::kBottomLeft_GrSurfaceOrigin : GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin,
         skFormat,
         skSRGB,
-        &skSurfaceProps);
+        &skSurfaceProps) };
 
-    if (!contextData->skSurface)
+    if (!skSurface)
+    {
         deviceData.unsupportedCaps.add(NoSkSurface);
+        return {};
+    }
 
+    auto *contextData { static_cast<ContextData*>(m_contextDataManager->getData(glDevice)) };
+    contextData->skSurface = skSurface;
     return contextData->skSurface;
 }
 
@@ -644,7 +663,12 @@ bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
         return true;
 
     if (!writeFormats().contains(region.format))
-        return false;
+    {
+        expandReadWriteFormats();
+
+        if (!writeFormats().contains(region.format))
+            return false;
+    }
 
     if (writePixelsNative(region))
     {
@@ -669,8 +693,13 @@ bool RGLImage::readPixels(const RPixelBufferRegion &region) noexcept
 
     if (!readFormats().contains(region.format))
     {
-        RLog(CZError, CZLN, "Unsupported read format: {}", RDRMFormat::FormatName(region.format));
-        return false;
+        expandReadWriteFormats();
+
+        if (!readFormats().contains(region.format))
+        {
+            RLog(CZError, CZLN, "Unsupported read format: {}", RDRMFormat::FormatName(region.format));
+            return false;
+        }
     }
 
     const auto bounds { region.region.getBounds().makeOffset(region.offset) };
@@ -1039,17 +1068,32 @@ bool RGLImage::readPixelsNative(const RPixelBufferRegion &region) noexcept
     if (region.format == DRM_FORMAT_XRGB8888 || region.format == DRM_FORMAT_ARGB8888)
         glFormat = GL_BGRA_EXT;
 
-    for (RDevice *dev : m_core->devices())
+    /* Prefer the allocator; falling back to another device may import the image into it */
+    if (glFormat != GL_BGRA_EXT || allocator()->glExtensions().EXT_read_format_bgra)
     {
-        if (glFormat == GL_BGRA_EXT && !dev->asGL()->glExtensions().EXT_read_format_bgra)
-            continue;
-
-        fb = glFb(dev->asGL());
+        fb = glFb(allocator());
 
         if (fb.has_value())
+            device = allocator();
+    }
+
+    if (!device)
+    {
+        for (RDevice *dev : m_core->devices())
         {
-            device = dev->asGL();
-            break;
+            if (dev == allocator())
+                continue;
+
+            if (glFormat == GL_BGRA_EXT && !dev->asGL()->glExtensions().EXT_read_format_bgra)
+                continue;
+
+            fb = glFb(dev->asGL());
+
+            if (fb.has_value())
+            {
+                device = dev->asGL();
+                break;
+            }
         }
     }
 
@@ -1146,33 +1190,52 @@ void RGLImage::assignReadWriteFormats() noexcept
         }
     }
 
-    for (auto *dev : m_core->devices())
+    /* Only the allocator is probed at creation time. Probing every device would import the
+     * image and create GL resources on GPUs that may never use it — on a multi-GPU setup that
+     * even wakes a runtime-suspended dGPU for every image created/destroyed. If a readPixels()
+     * or writePixels() call ever requests a format only another device can handle,
+     * expandReadWriteFormats() probes the remaining devices lazily. */
+    probeDeviceReadWriteFormats(allocator());
+}
+
+void RGLImage::probeDeviceReadWriteFormats(RGLDevice *glDev) noexcept
+{
+    if (glFb(glDev).has_value())
     {
-        auto *glDev { static_cast<RGLDevice*>(dev) };
+        m_readFormats.emplace(DRM_FORMAT_ABGR8888);
+        m_readFormats.emplace(DRM_FORMAT_XBGR8888);
 
-        if (glFb(glDev).has_value())
+        if (glDev->glExtensions().EXT_read_format_bgra)
         {
-            m_readFormats.emplace(DRM_FORMAT_ABGR8888);
-            m_readFormats.emplace(DRM_FORMAT_XBGR8888);
-
-            if (glDev->glExtensions().EXT_read_format_bgra)
-            {
-                m_readFormats.emplace(DRM_FORMAT_ARGB8888);
-                m_readFormats.emplace(DRM_FORMAT_XRGB8888);
-            }
-        }
-
-        auto bo { gbmBo(glDev) };
-
-        if (bo)
-        {
-            if (bo->supportsMapRead())
-                m_readFormats.emplace(formatInfo().format);
-
-            if (bo->supportsMapWrite())
-                m_writeFormats.emplace(formatInfo().format);
+            m_readFormats.emplace(DRM_FORMAT_ARGB8888);
+            m_readFormats.emplace(DRM_FORMAT_XRGB8888);
         }
     }
+
+    auto bo { gbmBo(glDev) };
+
+    if (bo)
+    {
+        if (bo->supportsMapRead())
+            m_readFormats.emplace(formatInfo().format);
+
+        if (bo->supportsMapWrite())
+            m_writeFormats.emplace(formatInfo().format);
+    }
+}
+
+void RGLImage::expandReadWriteFormats() noexcept
+{
+    /* Last resort for readPixels()/writePixels() with a format the allocator can't handle:
+     * probe the remaining devices once (may import the image into them). */
+    if (m_allDevicesProbed)
+        return;
+
+    m_allDevicesProbed = true;
+
+    for (auto *dev : m_core->devices())
+        if (dev != allocator())
+            probeDeviceReadWriteFormats(static_cast<RGLDevice*>(dev));
 }
 
 RGLImage::RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept

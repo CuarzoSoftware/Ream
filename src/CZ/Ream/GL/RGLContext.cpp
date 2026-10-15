@@ -346,6 +346,22 @@ RGLContextData *RGLContextDataManager::getData(RGLDevice *device) noexcept
     return data;
 }
 
+RGLContextData *RGLContextDataManager::findData(RGLDevice *device) const noexcept
+{
+    RLockGuard lock {};
+
+    if (!device)
+        return nullptr;
+
+    const auto threadIt { m_data.find(pthread_self()) };
+
+    if (threadIt == m_data.end())
+        return nullptr;
+
+    const auto it { threadIt->second.find(device) };
+    return it == threadIt->second.end() ? nullptr : it->second;
+}
+
 void RGLContextDataManager::freeData(RGLDevice *device) noexcept
 {
     RLockGuard lock {};

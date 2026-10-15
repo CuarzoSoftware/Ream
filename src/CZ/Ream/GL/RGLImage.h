@@ -165,7 +165,15 @@ private:
     bool readPixelsGBMmapRead(const RPixelBufferRegion &region) noexcept;
     bool readPixelsNative(const RPixelBufferRegion &region) noexcept;
 
+    /* Assigns read/write formats probing only the allocator (see expandReadWriteFormats) */
     void assignReadWriteFormats() noexcept;
+
+    /* Adds the read/write formats @p device can handle for this image */
+    void probeDeviceReadWriteFormats(RGLDevice *device) noexcept;
+
+    /* One-shot probe of the non-allocator devices, used as a last resort by readPixels/writePixels */
+    void expandReadWriteFormats() noexcept;
+    bool m_allDevicesProbed { false };
 
     /* If set, re-checks can be omitted */
     enum UnsupportedDeviceCap

@@ -88,6 +88,18 @@ public:
     RGLContextData *getData(RGLDevice *device) noexcept;
 
     /**
+     * @brief Retrieves context-specific data for the given device on the current thread, without creating it.
+     *
+     * Unlike getData(), no data is allocated if none exists. Use it to query cached resources
+     * for a device the image may never use: each allocated instance must later be destroyed with
+     * that device's EGL context made current, which can be expensive (e.g. waking a suspended GPU).
+     *
+     * @param device Pointer to the target device.
+     * @return Pointer to the user data, or `nullptr` if none exists for the current thread/device pair.
+     */
+    RGLContextData *findData(RGLDevice *device) const noexcept;
+
+    /**
      * @brief Frees all RGLContextData instances associated with the specified device across all threads.
      *
      * This method releases the context-specific data allocated for the given device in every thread
