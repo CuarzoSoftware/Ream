@@ -15,6 +15,54 @@
 
 using namespace CZ;
 
+static thread_local bool s_skiaGLStateDirty { false };
+
+void RGLPainter::MarkSkiaGLStateDirty() noexcept
+{
+    s_skiaGLStateDirty = true;
+}
+
+void RGLPainter::SyncSkiaGLState() noexcept
+{
+    if (!s_skiaGLStateDirty)
+        return;
+
+    s_skiaGLStateDirty = false;
+    ResetGLState();
+}
+
+void RGLPainter::ResetGLState() noexcept
+{
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1.0f);
+    glEnable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_SCISSOR_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DITHER);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    glDisable(GL_SAMPLE_COVERAGE);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glCullFace(GL_BACK);
+    glLineWidth(1);
+    glHint(GL_GENERATE_MIPMAP_HINT, GL_FASTEST);
+    glPolygonOffset(0, 0);
+    glDepthFunc(GL_LESS);
+    glDepthRangef(0, 1);
+    glStencilMask(1);
+    glDepthMask(GL_FALSE);
+    glFrontFace(GL_CCW);
+    glBlendColor(0, 0, 0, 0);
+    glBlendEquation(GL_FUNC_ADD);
+}
+
 void RGLPainter::calcPosProj(RSurface *surface, bool flipY, SkScalar *outMat) const noexcept
 {
     SkMatrix mat { RMatrixUtils::VirtualToNDC(
@@ -173,6 +221,9 @@ skipMask:
         RGLMakeCurrent::FromDevice(device(), true) :
         RGLMakeCurrent(device()->eglDisplay(), eglSurface, eglSurface, device()->eglContext())
     };
+
+    SyncSkiaGLState();
+
     const auto features { calcDrawImageFeatures(image, &tex, mask ? &maskTex : nullptr) };
     const auto prog { RGLProgram::GetOrMake(device(), features) };
 
@@ -413,6 +464,8 @@ bool RGLPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect ef
             RGLMakeCurrent(device()->eglDisplay(), eglSurface, eglSurface, device()->eglContext())
     };
 
+    SyncSkiaGLState();
+
     UInt32 features { RGLShader::HasImage  | RGLShader::HasPixelSize | (effect << 28) };
 
     if (tex.target == GL_TEXTURE_EXTERNAL_OES)
@@ -549,6 +602,8 @@ bool RGLPainter::drawColor(const SkRegion &userRegion) noexcept
             RGLMakeCurrent::FromDevice(device(), true) :
             RGLMakeCurrent(device()->eglDisplay(), eglSurface, eglSurface, device()->eglContext())
     };
+
+    SyncSkiaGLState();
 
     // Always converted to premultiplied alpha
     const SkColor4f colorF { calcDrawColorColor() };

@@ -13,7 +13,15 @@ RGLPass::~RGLPass() noexcept
         return; // Was not used at all
 
     if (m_lastUsage == RPassCap_SkCanvas)
+    {
         m_skSurface->recordingContext()->asDirectContext()->flush(m_skSurface.get());
+
+        /* Skia left the shared context's GL state in an undefined configuration for RGLPainter.
+         * This pass ends here, but another pass (e.g. the one this was nested into, baking an
+         * asset mid-render) may keep using its painter without a usage switch: its next draw
+         * must re-sync or it can be silently discarded (stencil, color mask, etc). */
+        RGLPainter::MarkSkiaGLStateDirty();
+    }
 }
 
 SkCanvas *RGLPass::getCanvas(bool sync) const noexcept
@@ -74,6 +82,9 @@ void RGLPass::updateCurrent(RPassCap cap) const noexcept
 
         // Reset GL state modified by RGLPainter
         m_skSurface->recordingContext()->asDirectContext()->resetContext();
+
+        // Skia is about to alter GL state RGLPainter relies on (see ~RGLPass)
+        RGLPainter::MarkSkiaGLStateDirty();
     }
     else // RGLPainter
     {
@@ -81,33 +92,7 @@ void RGLPass::updateCurrent(RPassCap cap) const noexcept
         if (m_skSurface)
             m_skSurface->recordingContext()->asDirectContext()->flush(m_skSurface.get());
 
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1.0f);
-        glEnable(GL_BLEND);
-        glEnable(GL_TEXTURE_2D);
-        glEnable(GL_SCISSOR_TEST);
-        glDisable(GL_STENCIL_TEST);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
-        glDisable(GL_DITHER);
-        glDisable(GL_POLYGON_OFFSET_FILL);
-        glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
-        glDisable(GL_SAMPLE_COVERAGE);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-        glCullFace(GL_BACK);
-        glLineWidth(1);
-        glHint(GL_GENERATE_MIPMAP_HINT, GL_FASTEST);
-        glPolygonOffset(0, 0);
-        glDepthFunc(GL_LESS);
-        glDepthRangef(0, 1);
-        glStencilMask(1);
-        glDepthMask(GL_FALSE);
-        glFrontFace(GL_CCW);
-        glBlendColor(0, 0, 0, 0);
-        glBlendEquation(GL_FUNC_ADD);
+        // Reset GL state modified by Skia
+        RGLPainter::ResetGLState();
     }
 }

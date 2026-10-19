@@ -26,7 +26,28 @@ public:
     RGLDevice *device() const noexcept { return (RGLDevice*)m_device; }
     bool setGeometry(const RSurfaceGeometry &geometry) noexcept override;
 
+    /**
+     * @brief Marks the current thread's GL state as dirtied by Skia.
+     *
+     * Skia (SkCanvas) draws leave GL state the painter doesn't rebind on every draw (stencil,
+     * color mask, etc.) in an undefined configuration. Passes call this whenever a canvas is
+     * used so the next painter draw on this thread re-syncs the state first — including draws
+     * from a DIFFERENT pass (e.g. an asset baked with Skia in the middle of another pass's
+     * painter rendering, which would otherwise silently discard the following draws).
+     */
+    static void MarkSkiaGLStateDirty() noexcept;
+
+    /**
+     * @brief Unconditionally resets the GL state Skia may have altered to what RGLPainter expects.
+     *
+     * Must be called with the target EGL context current.
+     */
+    static void ResetGLState() noexcept;
+
 private:
+    /// Calls ResetGLState() if MarkSkiaGLStateDirty() was called since the last sync (per thread)
+    static void SyncSkiaGLState() noexcept;
+
     CZBitset<RGLShader::Features> calcDrawImageFeatures(std::shared_ptr<RImage> image, RGLTexture *imageTex, RGLTexture *maskTex) const noexcept;
     CZBitset<RGLShader::Features> calcDrawColorFeatures(SkScalar finalAlpha) const noexcept;
     SkColor4f calcDrawColorColor() const noexcept;
