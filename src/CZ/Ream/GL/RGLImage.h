@@ -233,7 +233,6 @@ private:
     RGLImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept;
 
     CZBitset<PF> m_pf {};
-    RGLFormat m_glFormat;
     mutable GlobalDeviceDataMap m_devicesMap;
     std::shared_ptr<RGLContextDataManager> m_contextDataManager;
 };

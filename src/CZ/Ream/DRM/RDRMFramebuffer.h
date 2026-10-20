@@ -92,6 +92,11 @@ public:
     RFormat format() const noexcept { return m_format; }
 
     /**
+     * @brief Returns the size of the framebuffer in pixels.
+     */
+    SkISize size() const noexcept { return m_size; }
+
+    /**
      * @brief Returns the DRM framebuffer id, as used by KMS APIs.
      */
     UInt32 id() const noexcept { return m_id; }
