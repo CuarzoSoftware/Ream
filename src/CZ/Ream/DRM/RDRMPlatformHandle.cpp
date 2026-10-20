@@ -1,6 +1,7 @@
 #include <CZ/Ream/DRM/RDRMPlatformHandle.h>
 #include <CZ/Ream/RLog.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 using namespace CZ;
 

@@ -6,6 +6,7 @@
 
 #include <cstring>
 #include <fcntl.h>
+#include <unistd.h>
 #include <xf86drm.h>
 #include <drm_fourcc.h>
 
