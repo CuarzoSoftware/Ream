@@ -36,6 +36,15 @@ public:
     [[nodiscard]] static std::shared_ptr<RRSImage> Make(SkISize size, const RDRMFormat &format, const RImageConstraints *constraints = nullptr) noexcept;
 
     /**
+     * @brief Wraps a linear, single-plane DMA buffer by mapping it (no copy).
+     *
+     * The image reads the buffer's current contents whenever it's drawn, e.g. a client rendering
+     * on a GPU that shares memory with the CPU (virtual GPUs, integrated GPUs). Read-only.
+     */
+    [[nodiscard]] static std::shared_ptr<RRSImage> FromDMA(const RDMABufferInfo &info, CZOwn ownership, const RImageConstraints *constraints = nullptr) noexcept;
+    ~RRSImage() noexcept;
+
+    /**
      * @brief Always returns an empty pointer.
      *
      * Raster images are CPU buffers and have no GBM backing.
@@ -131,8 +140,12 @@ public:
 private:
     RRSImage(std::shared_ptr<RCore> core, std::shared_ptr<CZSharedMemory> shm, sk_sp<SkImage> skImage, sk_sp<SkSurface> skSurface,
              RDevice *device, SkISize size, size_t stride, const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept;
+    UInt8 *pixels() const noexcept { return m_shm ? (UInt8*)m_shm->map() : m_dmaPixels; }
     size_t m_stride;
     std::shared_ptr<CZSharedMemory> m_shm;
+    void *m_dmaMap { nullptr };
+    size_t m_dmaMapSize { 0 };
+    UInt8 *m_dmaPixels { nullptr };
     sk_sp<SkImage> m_skImage;
     sk_sp<SkSurface> m_skSurface;
 };
