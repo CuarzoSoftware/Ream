@@ -86,7 +86,8 @@ std::shared_ptr<RRSImage> RRSImage::Make(SkISize size, const RDRMFormat &format,
         return {};
     }
 
-    auto info { SkImageInfo::Make(size, skFormat, kPremul_SkAlphaType) };
+    const SkAlphaType alphaType { formatInfo->alpha ? kPremul_SkAlphaType : kOpaque_SkAlphaType };
+    auto info { SkImageInfo::Make(size, skFormat, alphaType) };
     auto data { SkData::MakeWithoutCopy(shm->map(), shm->size()) };
 
     if (!data)
@@ -111,7 +112,7 @@ std::shared_ptr<RRSImage> RRSImage::Make(SkISize size, const RDRMFormat &format,
         return {};
     }
 
-    auto image { std::shared_ptr<RRSImage>(new RRSImage(core, shm, skImage, skSurface, device, size, stride, formatInfo, kPremul_SkAlphaType, DRM_FORMAT_MOD_LINEAR)) };
+    auto image { std::shared_ptr<RRSImage>(new RRSImage(core, shm, skImage, skSurface, device, size, stride, formatInfo, alphaType, DRM_FORMAT_MOD_LINEAR)) };
     image->m_self = image;
     return image;
 }
@@ -231,7 +232,7 @@ int RRSImage::resize(SkISize size) noexcept
     assert(data);
 
     const auto skFormat { RSKFormat::FromDRM(formatInfo().format) };
-    auto info { SkImageInfo::Make(size, skFormat, kPremul_SkAlphaType) };
+    auto info { SkImageInfo::Make(size, skFormat, formatInfo().alpha ? kPremul_SkAlphaType : kOpaque_SkAlphaType) };
 
     m_skImage = SkImages::RasterFromData(info, data, newStride);
     assert(m_skImage);
