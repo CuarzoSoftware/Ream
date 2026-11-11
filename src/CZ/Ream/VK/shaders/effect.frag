@@ -62,7 +62,7 @@ void main()
     if (FX == 2) // light
         c = (0.1 / 6.0) * min(c, vec3(7.0)) + 0.78;
     else         // dark
-        c = (0.2 / 6.0) * min(c, vec3(3.0)) + 0.1;
+        c = mix((0.2 / 6.0) * min(c, vec3(3.0)) + 0.1, vec3(0.1), 0.65); // Mixed 65 % with a dark gray (same as GL)
 
     outColor = vec4(c, 1.0);
 }

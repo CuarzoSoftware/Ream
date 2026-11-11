@@ -131,9 +131,9 @@ public:
      */
     enum ImageEffect : UInt32
     {
-        VibrancyH = 1u,      ///< Sigma 6 horizontal blur pass.
-        VibrancyLightV = 2u, ///< Sigma 3 vertical blur pass + light tone saturation.
-        VibrancyDarkV = 3u,  ///< Sigma 3 vertical blur pass + dark tone saturation.
+        VibrancyH = 1u,      ///< Sigma 6 horizontal blur pass (in texels of the image, whatever src and scales).
+        VibrancyLightV = 2u, ///< Sigma 3 vertical blur pass (texels) + light tone saturation.
+        VibrancyDarkV = 3u,  ///< Sigma 3 vertical blur pass (texels) + dark tone saturation, mixed 65 % with gray 0.1.
     };
 
     /**

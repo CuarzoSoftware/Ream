@@ -240,6 +240,7 @@ void main()
     gl_FragColor.x *= 12.0;
     gl_FragColor.xyz = gl_FragColor.xyz * yuvToRgbMatrix;
     gl_FragColor.xyz = ((0.2/6.0) * min(gl_FragColor.xyz, vec3(3.0))) + 0.1;
+    gl_FragColor.xyz = mix(gl_FragColor.xyz, vec3(0.1), 0.65); // Mixed 65 % with a dark gray
     gl_FragColor.w = 1.0;
 
 #endif

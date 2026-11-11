@@ -492,10 +492,12 @@ bool RGLPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect ef
     calcImageProj(imageInfo, mat);
     glUniformMatrix3fv(prog->loc().imageProj, 1, GL_FALSE, mat);
 
+    // Tap step: one texel. The UVs span the whole texture (not just src), so it's relative to the
+    // image size: the same blur whatever the src rect, its scale or the output's scale.
     if (effect == VibrancyH)
-        glUniform1f(prog->loc().pixelSize, imageInfo.srcScale/SkScalar(imageInfo.src.width()));
+        glUniform1f(prog->loc().pixelSize, 1.f/SkScalar(image->size().width()));
     else
-        glUniform1f(prog->loc().pixelSize, imageInfo.srcScale/SkScalar(imageInfo.src.height()));
+        glUniform1f(prog->loc().pixelSize, 1.f/SkScalar(image->size().height()));
 
     glDisable(GL_BLEND);
 

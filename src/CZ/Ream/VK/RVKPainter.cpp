@@ -760,9 +760,10 @@ bool RVKPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect ef
     vkCmdSetScissor(m_cmd, 0, 1, &scissor);
 
     RVKPushConstants pc {};
+    // pixelSize: one texel, relative to the whole texture the UVs span (same as GL)
     pc.factor[0] = (effect == VibrancyH)
-        ? imageInfo.srcScale / (float)imageInfo.src.width()
-        : imageInfo.srcScale / (float)imageInfo.src.height(); // pixelSize
+        ? 1.f / (float)image->size().width()
+        : 1.f / (float)image->size().height();
     vkCmdPushConstants(m_cmd, pm->imageLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
 
     vkCmdDraw(m_cmd, quadCount * 6, 1, firstVertex, 0);
