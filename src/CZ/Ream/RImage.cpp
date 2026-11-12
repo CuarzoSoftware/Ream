@@ -138,12 +138,16 @@ static std::shared_ptr<RImage> LoadImage(SkColorType skFormat, const std::filesy
     SkCanvas canvas{ bitmap };
     canvas.clear(SK_ColorTRANSPARENT);
 
-    // Draw the source image (full) into the target rect with filtering.
+    // Draw the source image (full) into the target rect with filtering: smaller through mipmaps
+    // (antialiased, not aliased like plain sampling), larger with bilinear interpolation.
     SkRect srcRect = SkRect::MakeIWH(srcSize.width(), srcSize.height());
     SkRect dstRect = SkRect::MakeIWH(finalPixelSize.width(), finalPixelSize.height());
     SkPaint paint;
     paint.setAntiAlias(true);
-    canvas.drawImageRect(srcImage, srcRect, dstRect, SkSamplingOptions(), &paint, SkCanvas::kFast_SrcRectConstraint);
+    const bool smaller { finalPixelSize.width() < srcSize.width() || finalPixelSize.height() < srcSize.height() };
+    const SkSamplingOptions sampling { smaller ? SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kLinear)
+                                               : SkSamplingOptions(SkFilterMode::kLinear) };
+    canvas.drawImageRect(srcImage, srcRect, dstRect, sampling, &paint, SkCanvas::kFast_SrcRectConstraint);
 
     // At this point bitmap has the rendered image (SVG or raster), in desired format/size.
     if (!bitmap.pixelRef() || !bitmap.readyToDraw()) {
