@@ -29,7 +29,8 @@ public:
      * @note The Raster backend does not implement the actual effects; it currently fills the
      *       affected region with a fixed translucent color as a placeholder.
      */
-    bool drawImageEffect(const RDrawImageInfo& image, ImageEffect effect, const SkRegion *region = nullptr) noexcept override;
+    bool drawImageEffect(const RDrawImageInfo &image, ImageEffect effect, const SkRegion *region = nullptr,
+                         const RImageEffectParams &params = {}) noexcept override;
 
     /**
      * @brief Fills the given region with the current color. Implements RPainter::drawColor().

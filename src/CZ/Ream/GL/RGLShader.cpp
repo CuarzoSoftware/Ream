@@ -74,6 +74,20 @@ const char *f = R"(
     uniform float pixelSize;
 #endif
 
+#if FX == 2
+    uniform vec4 colorMatrix[3];
+#endif
+
+#if FX != 0
+    uniform vec4 uvClamp; // Valid area (min UV, max UV): taps beyond it are mirrored back
+
+    vec3 tap(vec2 uv)
+    {
+        uv = uvClamp.zw - abs(uvClamp.zw - (uvClamp.xy + abs(uv - uvClamp.xy))); // Mirror at both edges
+        return texture2D(image, clamp(uv, uvClamp.xy, uvClamp.zw)).xyz;          // Reach > area: clamp
+    }
+#endif
+
 void main()
 {
 
@@ -194,54 +208,13 @@ void main()
 
     gl_FragColor.w = 1.0;
 
-#elif FX == 2 // VibrancyVLight
+#else // VibrancyV
 
-    #define VBLUR_LIGHT
+    #define VBLUR
 
-    const mat3 rgbToYuvMatrix = mat3(
-        0.299,   0.587,   0.114,   // Y: Higher weight on green
-       -0.14713, -0.28886, 0.436,  // U: Blue chroma adjusted
-        0.615,  -0.51498, -0.10001 // V: Red-green chroma adjusted
-    );
-
-    const mat3 yuvToRgbMatrix = mat3(
-        1.0,   0.0,      1.13983,  // R: Red channel
-        1.0,  -0.39465, -0.58060,  // G: Green channel balance improved
-        1.0,   2.03211,  0.0       // B: Blue channel balance
-    );
-
-    gl_FragColor.xyz = gl_FragColor.xyz  * rgbToYuvMatrix;
-    gl_FragColor.y *= 24.0;
-    gl_FragColor.z *= 24.0;
-    gl_FragColor.x *= 12.0;
-    gl_FragColor.xyz = gl_FragColor.xyz * yuvToRgbMatrix;
-    gl_FragColor.xyz = ((0.1/6.0) * min(gl_FragColor.xyz, vec3(7.0))) + 0.78;
-    gl_FragColor.w = 1.0;
-
-#else // VibrancyVDark
-
-    #define VBLUR_DARK
-
-    const mat3 rgbToYuvMatrix = mat3(
-        0.299,   0.587,   0.114,   // Y: Higher weight on green
-       -0.14713, -0.28886, 0.436,  // U: Blue chroma adjusted
-        0.615,  -0.51498, -0.10001 // V: Red-green chroma adjusted
-    );
-
-    const mat3 yuvToRgbMatrix = mat3(
-        1.0,   0.0,      1.13983,  // R: Red channel
-        1.0,  -0.39465, -0.58060,  // G: Green channel balance improved
-        1.0,   2.03211,  0.0       // B: Blue channel balance
-    );
-
-    gl_FragColor.xyz = gl_FragColor.xyz  * rgbToYuvMatrix;
-    gl_FragColor.y *= 24.0;
-    gl_FragColor.z *= 24.0;
-    gl_FragColor.x *= 12.0;
-    gl_FragColor.xyz = gl_FragColor.xyz * yuvToRgbMatrix;
-    gl_FragColor.xyz = ((0.2/6.0) * min(gl_FragColor.xyz, vec3(3.0))) + 0.1;
-    gl_FragColor.xyz = mix(gl_FragColor.xyz, vec3(0.1), 0.65); // Mixed 65 % with a dark gray
-    gl_FragColor.w = 1.0;
+    // Saturation, tint and brightness folded into one affine matrix (row-major 3x4)
+    vec4 c = vec4(gl_FragColor.xyz, 1.0);
+    gl_FragColor = vec4(clamp(vec3(dot(colorMatrix[0], c), dot(colorMatrix[1], c), dot(colorMatrix[2], c)), 0.0, 1.0), 1.0);
 
 #endif
 }
@@ -253,15 +226,15 @@ static std::string GenHBlur(const std::vector<float> &kernel)
     oss << std::fixed << std::setprecision(4); // Set precision for floats
 
     // Start with the initial gl_FragColor assignment
-    oss << "gl_FragColor.xyz = " << kernel[0] << " * texture2D(image, imageCord).xyz;\n";
+    oss << "gl_FragColor.xyz = " << kernel[0] << " * tap(imageCord);\n";
 
     // Loop over the remaining kernel elements
     for (size_t i = 1; i < kernel.size(); ++i) {
         float offset = static_cast<float>(i); // Offset for texSize.x
-        oss << "gl_FragColor.xyz += " << kernel[i] << " * texture2D(image, imageCord + vec2("
-            << offset << " * pixelSize, 0)).xyz;\n";
-        oss << "gl_FragColor.xyz += " << kernel[i] << " * texture2D(image, imageCord - vec2("
-            << offset << " * pixelSize, 0)).xyz;\n";
+        oss << "gl_FragColor.xyz += " << kernel[i] << " * tap(imageCord + vec2("
+            << offset << " * pixelSize, 0.0));\n";
+        oss << "gl_FragColor.xyz += " << kernel[i] << " * tap(imageCord - vec2("
+            << offset << " * pixelSize, 0.0));\n";
     }
 
     return oss.str();
@@ -273,15 +246,15 @@ static std::string GenVBlur(const std::vector<float> &kernel)
     oss << std::fixed << std::setprecision(4); // Set precision for floats
 
     // Start with the initial gl_FragColor assignment
-    oss << "gl_FragColor.xyz = " << kernel[0] << " * texture2D(image, imageCord).xyz;\n";
+    oss << "gl_FragColor.xyz = " << kernel[0] << " * tap(imageCord);\n";
 
     // Loop over the remaining kernel elements
     for (size_t i = 1; i < kernel.size(); ++i) {
         float offset = static_cast<float>(i); // Offset for texSize.y
-        oss << "gl_FragColor.xyz += " << kernel[i] << " * texture2D(image, imageCord + vec2(0.0, "
-            << offset << " * pixelSize)).xyz;\n";
-        oss << "gl_FragColor.xyz += " << kernel[i] << " * texture2D(image, imageCord - vec2(0.0, "
-            << offset << " * pixelSize)).xyz;\n";
+        oss << "gl_FragColor.xyz += " << kernel[i] << " * tap(imageCord + vec2(0.0, "
+            << offset << " * pixelSize));\n";
+        oss << "gl_FragColor.xyz += " << kernel[i] << " * tap(imageCord - vec2(0.0, "
+            << offset << " * pixelSize));\n";
     }
 
     return oss.str();
@@ -341,18 +314,11 @@ static GLuint CompileShader(RGLDevice *device, GLenum type, const std::string &f
             const std::string placeholderH { "#define HBLUR" };
             source.replace(source.find(placeholderH), placeholderH.length(), GenHBlur(kernelH));
         }
-        else if (fx == RGLShader::VibrancyLightV >> 28)
+        else if (fx == RGLShader::VibrancyV >> 28)
         {
             // Sigma 3
             const std::vector<float> kernelV { 0.0797,	0.0781,	0.0736,	0.0666,	0.0579,	0.0484,	0.0389,	0.0300,	0.0223,	0.0159,	0.0109,	0.0071,	0.0045,	0.0027 };
-            const std::string placeholderV { "#define VBLUR_LIGHT" };
-            source.replace(source.find(placeholderV), placeholderV.length(), GenVBlur(kernelV));
-        }
-        else if (fx == RGLShader::VibrancyDarkV >> 28)
-        {
-            // Sigma 3
-            const std::vector<float> kernelV { 0.0797,	0.0781,	0.0736,	0.0666,	0.0579,	0.0484,	0.0389,	0.0300,	0.0223,	0.0159,	0.0109,	0.0071,	0.0045,	0.0027 };
-            const std::string placeholderV { "#define VBLUR_DARK" };
+            const std::string placeholderV { "#define VBLUR" };
             source.replace(source.find(placeholderV), placeholderV.length(), GenVBlur(kernelV));
         }
     }

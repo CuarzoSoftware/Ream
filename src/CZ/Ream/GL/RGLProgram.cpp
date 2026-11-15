@@ -100,6 +100,12 @@ bool RGLProgram::link() noexcept
         if (features().has(RGLShader::HasPixelSize))
             m_loc.pixelSize = glGetUniformLocation(m_id, "pixelSize");
 
+        if ((features().get() & 0xF0000000) == RGLShader::VibrancyV)
+            m_loc.colorMatrix = glGetUniformLocation(m_id, "colorMatrix");
+
+        if ((features().get() & 0xF0000000) != 0)
+            m_loc.uvClamp = glGetUniformLocation(m_id, "uvClamp");
+
         m_loc.imageProj = glGetUniformLocation(m_id, "imageProj");
         m_loc.image = glGetUniformLocation(m_id, "image");
 

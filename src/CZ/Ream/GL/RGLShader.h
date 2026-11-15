@@ -44,8 +44,7 @@ public:
 
         /* The upper 4 bits represent effects */
         VibrancyH           = 1u << 28, ///< Horizontal vibrancy blur pass.
-        VibrancyLightV      = 2u << 28, ///< Vertical vibrancy blur pass with light-tone saturation.
-        VibrancyDarkV       = 3u << 28, ///< Vertical vibrancy blur pass with dark-tone saturation.
+        VibrancyV           = 2u << 28, ///< Vertical vibrancy blur pass followed by a color matrix.
     };
 
     /// Subset of Features that affect the vertex shader (the rest only affect the fragment shader).

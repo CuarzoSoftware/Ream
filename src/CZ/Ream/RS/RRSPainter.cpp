@@ -148,13 +148,24 @@ bool RRSPainter::drawImage(const RDrawImageInfo &image, const SkRegion *region, 
     return true;
 }
 
-bool RRSPainter::drawImageEffect(const RDrawImageInfo &image, ImageEffect effect, const SkRegion *region) noexcept
+bool RRSPainter::drawImageEffect(const RDrawImageInfo &image, ImageEffect effect, const SkRegion *region, const RImageEffectParams &params) noexcept
 {
     save();
     reset();
 
-    CZ_UNUSED(effect) // TODO: Handle dark mode
-    setColor(0xCCEEEEEE);
+    // No blur in software: a flat fill, the color matrix applied to a mid gray backdrop.
+    SkColor4f color { 0.5f, 0.5f, 0.5f, 1.f };
+
+    if (effect == VibrancyV)
+    {
+        const auto &m { params.colorMatrix };
+        Float32 *out[3] { &color.fR, &color.fG, &color.fB };
+
+        for (int i = 0; i < 3; i++)
+            *out[i] = std::clamp(m[i*4] * 0.5f + m[i*4+1] * 0.5f + m[i*4+2] * 0.5f + m[i*4+3], 0.f, 1.f);
+    }
+
+    setColor(color.toSkColor());
 
     SkRegion clip { image.dst };
 

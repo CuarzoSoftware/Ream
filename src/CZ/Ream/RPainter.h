@@ -3,6 +3,7 @@
 
 #include <CZ/skia/core/SkRRect.h>
 #include <CZ/skia/core/SkColor.h>
+#include <CZ/skia/core/SkMatrix.h>
 #include <CZ/skia/core/SkCanvas.h>
 #include <CZ/Ream/RSurfaceGeometry.h>
 #include <CZ/Ream/RObject.h>
@@ -12,9 +13,13 @@
 #include <CZ/Core/CZTransform.h>
 #include <CZ/Core/CZBitset.h>
 #include <memory>
+#include <array>
+#include <optional>
+#include <algorithm>
 
 namespace CZ
 {
+    struct RImageEffectParams;
     /**
      * @brief Describes how to draw an image (or a portion of it) onto an RSurface's viewport.
      *
@@ -86,6 +91,89 @@ namespace CZ
 };
 
 /**
+ * @brief Parameters of RPainter::drawImageEffect().
+ */
+struct CZ::RImageEffectParams
+{
+    /// Distance between blur taps, in texels of the image (whatever src and scales). Scales the
+    /// blur sigma at no cost; keep it within ~[0.75, 1.5] to avoid visible banding.
+    Float32 tapStep { 1.f };
+
+    /**
+     * VibrancyV only: affine color transform applied after the blur, row-major 3x4:
+     * `r' = m[0]r + m[1]g + m[2]b + m[3]` (and so on for g and b), clamped to [0, 1].
+     * Saturation, tint and brightness all fold into it (see MakeVibrancyMatrix()).
+     */
+    std::array<Float32, 12> colorMatrix { 1, 0, 0, 0,
+                                          0, 1, 0, 0,
+                                          0, 0, 1, 0 };
+
+    /**
+     * Area holding valid image content, in the same coordinates as RDrawImageInfo::dst (it maps
+     * to src the same way), or `std::nullopt` for the whole dst.
+     *
+     * Taps falling outside it are mirrored back into it (each axis independently, so corners are
+     * mirrored both ways), so the blur never reads invalid texels: e.g. the part of src beyond a
+     * screen edge (never captured), or outside src.
+     */
+    std::optional<SkRect> validRect;
+
+    /**
+     * @brief UV bounds the effect taps are mirrored at: @p validRect (or @p dst) intersected with
+     *        @p dst, mapped by @p uvMatrix (see RMatrixUtils::VirtualToUV()) and inset by 1.5 texels.
+     *
+     * In a downscaled image the edges may fall mid-texel, leaving the outermost texel partially
+     * invalid. A bilinear fetch at the bound reads the texels whose centers surround it, so the
+     * bound must be at least 1.5 texels inside for both to be fully valid (1 isn't enough when the
+     * edge is less than half a texel into the outermost one).
+     */
+    static std::array<Float32, 4> CalcUVBounds(const SkMatrix &uvMatrix, const SkIRect &dst,
+                                               const std::optional<SkRect> &validRect, SkISize imageSize) noexcept
+    {
+        SkRect area { SkRect::Make(dst) };
+
+        if (validRect)
+        {
+            SkRect valid { *validRect };
+
+            if (valid.intersect(area))
+                area = valid;
+        }
+
+        SkRect uv;
+        uvMatrix.mapRect(&uv, area);
+        uv.sort();
+        const Float32 hx { 1.5f / Float32(std::max(1, imageSize.width())) };
+        const Float32 hy { 1.5f / Float32(std::max(1, imageSize.height())) };
+        uv.inset(std::min(hx, uv.width() * 0.5f), std::min(hy, uv.height() * 0.5f));
+        return { uv.left(), uv.top(), uv.right(), uv.bottom() };
+    }
+
+    /**
+     * @brief Color matrix of a vibrancy material: the backdrop saturated by @p saturation
+     *        (Rec. 709 luma, like CSS `saturate()`) under @p tint (unpremultiplied, its alpha
+     *        being the tint opacity).
+     */
+    static std::array<Float32, 12> MakeVibrancyMatrix(Float32 saturation, const SkColor4f &tint) noexcept
+    {
+        constexpr Float32 w[3] { 0.2126f, 0.7152f, 0.0722f };
+        const Float32 a { std::clamp(tint.fA, 0.f, 1.f) };
+        const Float32 t[3] { tint.fR, tint.fG, tint.fB };
+        std::array<Float32, 12> m {};
+
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+                m[i * 4 + j] = (1.f - a) * ((1.f - saturation) * w[j] + (i == j ? saturation : 0.f));
+
+            m[i * 4 + 3] = a * t[i];
+        }
+
+        return m;
+    }
+};
+
+/**
  * @brief High-performance built-in renderer.
  *
  * RPainter is Ream's native drawing API, providing operations such as drawColor(), drawImage(),
@@ -131,10 +219,10 @@ public:
      */
     enum ImageEffect : UInt32
     {
-        VibrancyH = 1u,      ///< Sigma 6 horizontal blur pass (in texels of the image, whatever src and scales).
-        VibrancyLightV = 2u, ///< Sigma 3 vertical blur pass (texels) + light tone saturation.
-        VibrancyDarkV = 3u,  ///< Sigma 3 vertical blur pass (texels) + dark tone saturation, mixed 65 % with gray 0.1.
+        VibrancyH = 1u, ///< Sigma 6 horizontal blur pass (in taps, see RImageEffectParams::tapStep).
+        VibrancyV = 2u, ///< Sigma 3 vertical blur pass (in taps), then RImageEffectParams::colorMatrix.
     };
+
 
     /**
      * @brief Snapshot of the painter's mutable rendering state.
@@ -327,9 +415,11 @@ public:
      * @param image  Information about the image to draw.
      * @param effect The effect to apply (see ImageEffect).
      * @param region Optional clipping region within the RSurface viewport.
+     * @param params Tap step and color matrix (see RImageEffectParams).
      * @return true if the image was successfully drawn, false otherwise.
      */
-    virtual bool drawImageEffect(const RDrawImageInfo& image, ImageEffect effect, const SkRegion *region = nullptr) noexcept = 0;
+    virtual bool drawImageEffect(const RDrawImageInfo& image, ImageEffect effect, const SkRegion *region = nullptr,
+                                 const RImageEffectParams &params = {}) noexcept = 0;
 
     /**
      * @brief Sets the viewport -> (transform) -> dst mapping used by draw operations.

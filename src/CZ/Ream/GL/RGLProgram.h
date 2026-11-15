@@ -37,6 +37,8 @@ public:
         GLint factorA;      ///< `factorA` uniform (alpha channel multiplier).
 
         GLint pixelSize;    ///< `pixelSize` uniform (texel size, used by effect shaders).
+        GLint colorMatrix;  ///< `colorMatrix` uniform (vec4[3], RGLShader::VibrancyV only).
+        GLint uvClamp;      ///< `uvClamp` uniform (vec4, effect shaders only).
     };
 
     /**

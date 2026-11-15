@@ -415,7 +415,7 @@ skipMask:
     return true;
 }
 
-bool RGLPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect effect, const SkRegion *clip) noexcept
+bool RGLPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect effect, const SkRegion *clip, const RImageEffectParams &params) noexcept
 {
     auto surface { m_surface };
 
@@ -492,12 +492,21 @@ bool RGLPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect ef
     calcImageProj(imageInfo, mat);
     glUniformMatrix3fv(prog->loc().imageProj, 1, GL_FALSE, mat);
 
+    // Taps mirrored into the valid area (the rest of the image may hold anything, e.g. not captured)
+    SkMatrix uvMatrix;
+    uvMatrix.set9(mat);
+    const auto uvClamp { RImageEffectParams::CalcUVBounds(uvMatrix, imageInfo.dst, params.validRect, image->size()) };
+    glUniform4fv(prog->loc().uvClamp, 1, uvClamp.data());
+
     // Tap step: one texel. The UVs span the whole texture (not just src), so it's relative to the
     // image size: the same blur whatever the src rect, its scale or the output's scale.
     if (effect == VibrancyH)
-        glUniform1f(prog->loc().pixelSize, 1.f/SkScalar(image->size().width()));
+        glUniform1f(prog->loc().pixelSize, params.tapStep/SkScalar(image->size().width()));
     else
-        glUniform1f(prog->loc().pixelSize, 1.f/SkScalar(image->size().height()));
+    {
+        glUniform1f(prog->loc().pixelSize, params.tapStep/SkScalar(image->size().height()));
+        glUniform4fv(prog->loc().colorMatrix, 3, params.colorMatrix.data());
+    }
 
     glDisable(GL_BLEND);
 

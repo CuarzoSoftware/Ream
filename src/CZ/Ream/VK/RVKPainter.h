@@ -18,7 +18,8 @@ class CZ::RVKPainter final : public RPainter
 public:
     bool drawImage(const RDrawImageInfo &image, const SkRegion *region = nullptr, const RDrawImageInfo *mask = nullptr) noexcept override;
     bool drawColor(const SkRegion &region) noexcept override;
-    bool drawImageEffect(const RDrawImageInfo &image, ImageEffect effect, const SkRegion *region = nullptr) noexcept override;
+    bool drawImageEffect(const RDrawImageInfo &image, ImageEffect effect, const SkRegion *region = nullptr,
+                         const RImageEffectParams &params = {}) noexcept override;
     bool setGeometry(const RSurfaceGeometry &geometry) noexcept override;
 
     // Ends the render pass and submits recorded work (blocking). Called by ~RVKPass.

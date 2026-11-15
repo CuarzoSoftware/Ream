@@ -15,6 +15,8 @@ namespace CZ
     {
         float color[4];  // premultiplied (drawColor)
         float factor[4]; // rgb: per-channel factor, a: final alpha (drawImage)
+        float colorMatrix[12]; // drawImageEffect (VibrancyV): row-major 3x4 color transform
+        float uvClamp[4];      // drawImageEffect: taps clamped to the src rect (min UV, max UV)
     };
 
     // Fixed-function blend configuration (matches the GL painter's glBlendFunc choices).

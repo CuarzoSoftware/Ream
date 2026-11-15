@@ -651,7 +651,7 @@ bool RVKPainter::drawImage(const RDrawImageInfo &imageInfo, const SkRegion *clip
     return true;
 }
 
-bool RVKPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect effect, const SkRegion *clip) noexcept
+bool RVKPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect effect, const SkRegion *clip, const RImageEffectParams &params) noexcept
 {
     if (!m_target)
         return false;
@@ -762,8 +762,11 @@ bool RVKPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect ef
     RVKPushConstants pc {};
     // pixelSize: one texel, relative to the whole texture the UVs span (same as GL)
     pc.factor[0] = (effect == VibrancyH)
-        ? 1.f / (float)image->size().width()
-        : 1.f / (float)image->size().height();
+        ? params.tapStep / (float)image->size().width()
+        : params.tapStep / (float)image->size().height();
+    std::copy(params.colorMatrix.begin(), params.colorMatrix.end(), pc.colorMatrix);
+    const auto uvClamp { RImageEffectParams::CalcUVBounds(imageProj, imageInfo.dst, params.validRect, image->size()) };
+    std::copy(uvClamp.begin(), uvClamp.end(), pc.uvClamp);
     vkCmdPushConstants(m_cmd, pm->imageLayout(), VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(pc), &pc);
 
     vkCmdDraw(m_cmd, quadCount * 6, 1, firstVertex, 0);

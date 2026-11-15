@@ -1,8 +1,8 @@
 #version 450
 
-// drawImageEffect: Gaussian blur passes with optional YUV saturation, ported from the GL
-// uber-shader's vibrancy effects. FX selects the pass (1=horizontal, 2=vertical light,
-// 3=vertical dark). pixelSize (push constant factor.x) is the per-tap texel step.
+// drawImageEffect: Gaussian blur passes, ported from the GL uber-shader's vibrancy effects. FX
+// selects the pass (1=horizontal, 2=vertical + color matrix). pixelSize (push constant factor.x)
+// is the per-tap step in UV units.
 layout(location = 0) in vec2 vImageUV;
 layout(location = 1) in vec2 vMaskUV;
 
@@ -16,7 +16,17 @@ layout(set = 0, binding = 1) uniform sampler2D maskTex; // unused
 layout(push_constant) uniform PushConstants {
     vec4 color;
     vec4 factor; // factor.x = pixelSize
+    vec4 colorMatrix[3]; // FX 2: row-major 3x4 (saturation, tint and brightness folded in)
+    vec4 uvClamp;        // Valid area (min UV, max UV): taps beyond it are mirrored back
 } pc;
+
+vec3 tap(vec2 uv)
+{
+    const vec2 lo = pc.uvClamp.xy;
+    const vec2 hi = pc.uvClamp.zw;
+    uv = hi - abs(hi - (lo + abs(uv - lo)));             // Mirror at both edges
+    return texture(imageTex, clamp(uv, lo, hi)).xyz;    // Reach > area: clamp
+}
 
 const float kH[17] = float[](0.0399, 0.0397, 0.0391, 0.0382, 0.0368, 0.0352, 0.0333, 0.0312,
                              0.0290, 0.0266, 0.0242, 0.0218, 0.0194, 0.0172, 0.0150, 0.0130, 0.0111);
@@ -29,40 +39,25 @@ void main()
 
     if (FX == 1) // horizontal blur
     {
-        vec3 c = kH[0] * texture(imageTex, vImageUV).xyz;
+        vec3 c = kH[0] * tap(vImageUV);
         for (int i = 1; i < 17; i++)
         {
-            c += kH[i] * texture(imageTex, vImageUV + vec2(float(i) * ps, 0.0)).xyz;
-            c += kH[i] * texture(imageTex, vImageUV - vec2(float(i) * ps, 0.0)).xyz;
+            c += kH[i] * tap(vImageUV + vec2(float(i) * ps, 0.0));
+            c += kH[i] * tap(vImageUV - vec2(float(i) * ps, 0.0));
         }
         outColor = vec4(c, 1.0);
         return;
     }
 
     // vertical blur
-    vec3 c = kV[0] * texture(imageTex, vImageUV).xyz;
+    vec3 c = kV[0] * tap(vImageUV);
     for (int i = 1; i < 14; i++)
     {
-        c += kV[i] * texture(imageTex, vImageUV + vec2(0.0, float(i) * ps)).xyz;
-        c += kV[i] * texture(imageTex, vImageUV - vec2(0.0, float(i) * ps)).xyz;
+        c += kV[i] * tap(vImageUV + vec2(0.0, float(i) * ps));
+        c += kV[i] * tap(vImageUV - vec2(0.0, float(i) * ps));
     }
 
-    // YUV saturation (matrices are column-major literals matching the GL shader; c * M is a
-    // row-vector multiply in GLSL, identical to the GL uber-shader).
-    const mat3 rgbToYuv = mat3(0.299, 0.587, 0.114,
-                              -0.14713, -0.28886, 0.436,
-                               0.615, -0.51498, -0.10001);
-    const mat3 yuvToRgb = mat3(1.0, 0.0, 1.13983,
-                               1.0, -0.39465, -0.58060,
-                               1.0, 2.03211, 0.0);
-    c = c * rgbToYuv;
-    c.y *= 24.0; c.z *= 24.0; c.x *= 12.0;
-    c = c * yuvToRgb;
-
-    if (FX == 2) // light
-        c = (0.1 / 6.0) * min(c, vec3(7.0)) + 0.78;
-    else         // dark
-        c = mix((0.2 / 6.0) * min(c, vec3(3.0)) + 0.1, vec3(0.1), 0.65); // Mixed 65 % with a dark gray (same as GL)
-
-    outColor = vec4(c, 1.0);
+    const vec4 c4 = vec4(c, 1.0);
+    c = vec3(dot(pc.colorMatrix[0], c4), dot(pc.colorMatrix[1], c4), dot(pc.colorMatrix[2], c4));
+    outColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
