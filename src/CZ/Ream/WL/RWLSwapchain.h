@@ -25,7 +25,16 @@ public:
      *
      * @return A valid swapchain on success, nullptr on failure.
      */
-    static std::shared_ptr<RWLSwapchain> Make(wl_surface *surface, SkISize size) noexcept;
+    /**
+     * @param paced The caller paces its frames itself (e.g. with frame callbacks, like Louvre's
+     *              Wayland backend): presenting never waits for the compositor (Vulkan: mailbox or
+     *              immediate where supported, not FIFO) and acquire() gives up after
+     *              PacedAcquireTimeoutMs (std::nullopt) instead of waiting forever (e.g. while the
+     *              window is hidden and the compositor holds the buffers). GL never waits anyway.
+     */
+    static std::shared_ptr<RWLSwapchain> Make(wl_surface *surface, SkISize size, bool paced = false) noexcept;
+
+    static constexpr UInt32 PacedAcquireTimeoutMs { 50 };
 
     /**
      * @brief Returns the Wayland surface this swapchain presents to.

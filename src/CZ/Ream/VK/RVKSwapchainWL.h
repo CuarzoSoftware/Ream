@@ -9,6 +9,8 @@
 /**
  * @brief Wayland-client Vulkan swapchain (VK_KHR_wayland_surface + VkSwapchainKHR).
  *
+ * FIFO by default; mailbox (or immediate) and a bounded acquire if paced (see RWLSwapchain::Make()).
+ *
  * Acquire blocks on a fence (the image must be ready before either the painter or Skia renders
  * into it, and it doubles as frame pacing). Present is asynchronous: the PRESENT_SRC transition
  * is submitted without a CPU wait, signalling a per-image semaphore that vkQueuePresentKHR waits
@@ -23,7 +25,7 @@ public:
     bool resize(SkISize size) noexcept override;
 private:
     friend class RWLSwapchain;
-    static std::shared_ptr<RVKSwapchainWL> Make(wl_surface *surface, SkISize size) noexcept;
+    static std::shared_ptr<RVKSwapchainWL> Make(wl_surface *surface, SkISize size, bool paced) noexcept;
     RVKSwapchainWL(std::shared_ptr<RVKCore> core, RVKDevice *device, wl_surface *surface, SkISize size) noexcept;
 
     bool createSwapchain(SkISize size, VkSwapchainKHR oldSwapchain) noexcept;
@@ -50,6 +52,7 @@ private:
     std::vector<Buffer> m_buffers;
 
     bool m_acquired { false };
+    bool m_paced { false }; // See RWLSwapchain::Make()
     UInt32 m_currentIndex { 0 };
 };
 

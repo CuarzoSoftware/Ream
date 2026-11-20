@@ -20,7 +20,7 @@ RVKSwapchainWL::RVKSwapchainWL(std::shared_ptr<RVKCore> core, RVKDevice *device,
     m_device(device)
 {}
 
-std::shared_ptr<RVKSwapchainWL> RVKSwapchainWL::Make(wl_surface *surface, SkISize size) noexcept
+std::shared_ptr<RVKSwapchainWL> RVKSwapchainWL::Make(wl_surface *surface, SkISize size, bool paced) noexcept
 {
     auto core { RCore::Get() };
     auto vkCore { core ? core->asVK() : nullptr };
@@ -42,6 +42,7 @@ std::shared_ptr<RVKSwapchainWL> RVKSwapchainWL::Make(wl_surface *surface, SkISiz
 
     RVKDevice *device { vkCore->mainDevice() };
     auto sc { std::shared_ptr<RVKSwapchainWL>(new RVKSwapchainWL(vkCore, device, surface, size)) };
+    sc->m_paced = paced;
 
     VkWaylandSurfaceCreateInfoKHR si {};
     si.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
@@ -141,6 +142,24 @@ bool RVKSwapchainWL::createSwapchain(SkISize size, VkSwapchainKHR oldSwapchain) 
     RLog(CZDebug, CZLN, "RVKSwapchainWL: compositeAlpha=0x{:x} (supported=0x{:x})",
          (unsigned)ci.compositeAlpha, (unsigned)caps.supportedCompositeAlpha);
     ci.presentMode = VK_PRESENT_MODE_FIFO_KHR; // always supported
+
+    // Paced by the caller: on Wayland FIFO waits for frame callbacks too (twice the pacing, and a
+    // hidden window would block presenting forever)
+    if (m_paced)
+    {
+        UInt32 modeCount { 0 };
+        vkGetPhysicalDeviceSurfacePresentModesKHR(m_device->physicalDevice(), m_vkSurface, &modeCount, nullptr);
+        std::vector<VkPresentModeKHR> modes { modeCount };
+        vkGetPhysicalDeviceSurfacePresentModesKHR(m_device->physicalDevice(), m_vkSurface, &modeCount, modes.data());
+
+        for (VkPresentModeKHR preferred : { VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR })
+            if (std::find(modes.begin(), modes.end(), preferred) != modes.end())
+            {
+                ci.presentMode = preferred;
+                break;
+            }
+    }
+
     ci.clipped = VK_TRUE;
     ci.oldSwapchain = oldSwapchain;
 
@@ -222,14 +241,17 @@ std::optional<const RSwapchainImage> RVKSwapchainWL::acquire() noexcept
     }
 
     UInt32 index { 0 };
-    VkResult r { vkAcquireNextImageKHR(m_device->device(), m_swapchain, UINT64_MAX, VK_NULL_HANDLE, m_acquireFence, &index) };
+
+    // Paced: never forever (the caller tries again, see RWLSwapchain::Make())
+    const UInt64 timeout { m_paced ? UInt64(PacedAcquireTimeoutMs) * 1000000 : UINT64_MAX };
+    VkResult r { vkAcquireNextImageKHR(m_device->device(), m_swapchain, timeout, VK_NULL_HANDLE, m_acquireFence, &index) };
 
     if (r == VK_ERROR_OUT_OF_DATE_KHR)
     {
         // Recreate at the current size and retry once.
         if (!resize(m_size))
             return std::nullopt;
-        r = vkAcquireNextImageKHR(m_device->device(), m_swapchain, UINT64_MAX, VK_NULL_HANDLE, m_acquireFence, &index);
+        r = vkAcquireNextImageKHR(m_device->device(), m_swapchain, timeout, VK_NULL_HANDLE, m_acquireFence, &index);
     }
 
     if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR)

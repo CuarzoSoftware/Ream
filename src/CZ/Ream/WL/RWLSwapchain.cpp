@@ -7,7 +7,7 @@
 
 using namespace CZ;
 
-std::shared_ptr<RWLSwapchain> RWLSwapchain::Make(wl_surface *surface, SkISize size) noexcept
+std::shared_ptr<RWLSwapchain> RWLSwapchain::Make(wl_surface *surface, SkISize size, bool paced) noexcept
 {
     if (!surface)
     {
@@ -36,7 +36,7 @@ std::shared_ptr<RWLSwapchain> RWLSwapchain::Make(wl_surface *surface, SkISize si
     else if (core->asRS())
         ss = RRSSwapchainWL::Make(surface, size);
     else if (core->asVK())
-        ss = RVKSwapchainWL::Make(surface, size);
+        ss = RVKSwapchainWL::Make(surface, size, paced);
 
     if (!ss)
         RLog(CZError, CZLN, "Failed to create RWLSwapchain");
