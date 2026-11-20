@@ -9,6 +9,8 @@
   </a>
 </p>
 
+> This project is part of the [Cuarzo Framework](https://github.com/CuarzoSoftware/Cuarzo). Follow the instructions there to build and install it.
+
 **Ream** is a C++ graphics library for Linux. It provides generic buffer allocation and rendering utilities, abstracting the underlying platform and graphics API while still allowing direct access to API-specific features when needed.
 
 It is developed primarily as the rendering foundation for Wayland compositors, but is useful for any Linux application that needs to allocate GPU buffers, share them across devices via DMA-buf, and draw into them with a portable API.
