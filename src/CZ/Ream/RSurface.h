@@ -71,9 +71,8 @@ public:
      *
      * Unlike resize(), it never allocates a new image, even if the destination exceeds image bounds.
      *
-     * @param viewport Portion of the world to capture.
-     * @param dst Pixel area within the image to render into.
-     * @param transform Optional transform to apply (defaults to CZTransform::Normal).
+     * @param geometry The viewport (portion of the world to capture), the destination rect within
+     *                 the image to render into, and the transform to apply. See RSurfaceGeometry.
      * @return true if geometry was successfully set, false if invalid.
      */
     bool setGeometry(const RSurfaceGeometry &geometry) noexcept;
