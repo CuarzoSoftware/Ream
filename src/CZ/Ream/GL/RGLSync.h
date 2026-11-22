@@ -55,7 +55,6 @@ public:
 private:
     RGLSync(std::shared_ptr<RCore> core, RGLDevice *device, EGLSyncKHR sync, bool isExternal) noexcept;
     EGLSyncKHR m_eglSync;
-    std::thread::id m_threadId;
 };
 
 #endif // RGLSYNC_H

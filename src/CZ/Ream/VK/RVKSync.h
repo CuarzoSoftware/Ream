@@ -61,10 +61,6 @@ private:
     // submit completes (tracked by m_fence so no full device wait is needed).
     VkSemaphore m_semaphore { VK_NULL_HANDLE };
     VkFence m_fence { VK_NULL_HANDLE };
-
-    // Thread that submitted this sync's work (Make only). A same-device waiter on this same thread
-    // is already queue-ordered after it, so no explicit wait is needed (cf. RGLSync).
-    std::thread::id m_threadId;
 };
 
 #endif // CZ_RVKSYNC_H

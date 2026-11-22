@@ -6,6 +6,9 @@
 #include <CZ/Ream/VK/RVKDevice.h>
 #include <CZ/Ream/RResourceTracker.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
+#include <linux/sync_file.h>
+#include <cstring>
 
 using namespace CZ;
 
@@ -52,6 +55,27 @@ std::shared_ptr<RSync> RSync::Make(RDevice *device) noexcept
     }
 
     return {};
+}
+
+std::shared_ptr<RSync> RSync::Merge(const RSync &a, const RSync &b, RDevice *device) noexcept
+{
+    const auto fdA { a.fd() };
+    const auto fdB { b.fd() };
+
+    if (fdA.get() < 0 || fdB.get() < 0)
+        return {};
+
+    sync_merge_data data {};
+    std::strncpy(data.name, "RSync::Merge", sizeof(data.name) - 1);
+    data.fd2 = fdB.get();
+
+    if (ioctl(fdA.get(), SYNC_IOC_MERGE, &data) < 0)
+    {
+        RLog(CZError, CZLN, "SYNC_IOC_MERGE failed: {}", strerror(errno));
+        return {};
+    }
+
+    return FromExternal(data.fence, device);
 }
 
 RSync::RSync(std::shared_ptr<RCore> core, RDevice *device, bool isExternal) noexcept :

@@ -4,6 +4,8 @@
 #include <CZ/Ream/RResourceTracker.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
+#include <CZ/Ream/RSync.h>
+#include <CZ/Ream/RLockGuard.h>
 
 #include <CZ/Ream/RS/RRSImage.h>
 #include <CZ/Ream/VK/RVKImage.h>
@@ -344,4 +346,37 @@ RImage::RImage(std::shared_ptr<RCore> core, RDevice *device, SkISize size, const
     assert(device);
     assert(core);
     RResourceTrackerAdd(RResourceType::RImageRes);
+}
+
+std::shared_ptr<RSync> RImage::readSync() noexcept
+{
+    RLockGuard lock {};
+    return m_readSync;
+}
+
+void RImage::setReadSync(std::shared_ptr<RSync> sync) noexcept
+{
+    RLockGuard lock {};
+    auto prev { std::move(m_readSync) };
+    m_readSync = sync;
+
+    // Nothing else pending, or it's earlier in the same command stream (sync implies it)
+    if (!prev || !sync || prev == sync || sync->follows(*prev))
+        return;
+
+    /* Read by another thread or device (e.g. two outputs showing the same client buffer, each one
+     * rendered by its own thread): don't forget it, or a writer waiting for readSync() (e.g. the
+     * client, once its buffer is released) could overwrite the image while it's still read. */
+    if (prev->cpuWait(0) == 1)
+        return; // Done already
+
+    if (auto merged { RSync::Merge(*prev, *sync, sync->device()) })
+    {
+        m_readSync = merged;
+        return;
+    }
+
+    // Can't be merged (not exportable): wait here instead (bounded, in case it was never flushed)
+    if (prev->cpuWait(100) != 1)
+        RLog(CZWarning, CZLN, "A pending read of the image may not have ended");
 }

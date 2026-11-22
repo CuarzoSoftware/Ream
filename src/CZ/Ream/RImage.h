@@ -349,14 +349,17 @@ public:
      *
      * Signalled when the image is no longer being read.
      */
-    std::shared_ptr<RSync> readSync() noexcept { return m_readSync; }
+    std::shared_ptr<RSync> readSync() noexcept;
 
     /**
-     * @brief Sets the read sync fence.
+     * @brief Sets the read sync fence: the image was just read by the work @p sync waits for.
+     *
+     * Reads still pending in other command streams (e.g. another thread rendering another output
+     * with the same image) are kept: readSync() then waits for all of them (see RSync::Merge()).
      *
      * @param sync The fence signalled when reads on the image complete.
      */
-    void setReadSync(std::shared_ptr<RSync> sync) noexcept { m_readSync = sync;}
+    void setReadSync(std::shared_ptr<RSync> sync) noexcept;
 
     // Signalled when pending write operations end
     /**

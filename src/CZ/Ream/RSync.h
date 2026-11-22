@@ -4,6 +4,7 @@
 #include <CZ/Ream/RObject.h>
 #include <CZ/Core/CZSpFd.h>
 #include <memory>
+#include <thread>
 
 /**
  * @brief GPU/CPU synchronization fence.
@@ -74,11 +75,39 @@ public:
      */
     RDevice *device() const noexcept { return m_device; }
 
+    /**
+     * @brief The thread that created this sync.
+     *
+     * Unless external, it marks a point in that thread's command stream on device(): later work
+     * submitted by the same thread to the same device already runs after it.
+     */
+    std::thread::id threadId() const noexcept { return m_threadId; }
+
+    /**
+     * @brief Whether this sync being signaled implies @p other is too, without waiting for it.
+     *
+     * Assumes @p other was created first. That is when both are points in the same command stream
+     * (same device and thread, neither external).
+     */
+    bool follows(const RSync &other) const noexcept
+    {
+        return !m_isExternal && !other.m_isExternal && m_device == other.m_device && m_threadId == other.m_threadId;
+    }
+
+    /**
+     * @brief Creates a sync signaled once both @p a and @p b are (their `sync_file` fences merged).
+     *
+     * @param device Device to associate the result with. If nullptr, the main device is used.
+     * @return The merged sync, or nullptr if either can't be exported or the result imported.
+     */
+    static std::shared_ptr<RSync> Merge(const RSync &a, const RSync &b, RDevice *device = nullptr) noexcept;
+
 protected:
     RSync(std::shared_ptr<RCore> core, RDevice *device, bool isExternal) noexcept;
     ~RSync() noexcept;
     bool m_isExternal;
     RDevice *m_device;
+    std::thread::id m_threadId { std::this_thread::get_id() };
     std::shared_ptr<RCore> m_core;
 };
 

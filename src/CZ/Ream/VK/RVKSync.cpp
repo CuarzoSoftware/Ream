@@ -95,7 +95,6 @@ std::shared_ptr<RVKSync> RVKSync::Make(RVKDevice *device) noexcept
     }
 
     auto sync { std::shared_ptr<RVKSync>(new RVKSync(core, device, false)) };
-    sync->m_threadId = std::this_thread::get_id();
 
     // Preferred (NVIDIA-safe) path: a drm_syncobj timeline point signalled by the GPU via a
     // timeline semaphore imported from the syncobj (OPAQUE_FD). The sync_file is later exported

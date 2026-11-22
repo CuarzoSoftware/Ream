@@ -115,8 +115,7 @@ std::shared_ptr<RGLSync> RGLSync::FromExternal(int fd, RGLDevice *device) noexce
 
 RGLSync::RGLSync(std::shared_ptr<RCore> core, RGLDevice *device, EGLSyncKHR sync, bool isExternal) noexcept :
     RSync(core, device, isExternal),
-    m_eglSync(sync),
-    m_threadId(std::this_thread::get_id())
+    m_eglSync(sync)
 {
     assert(sync != EGL_NO_SYNC_KHR);
 }
