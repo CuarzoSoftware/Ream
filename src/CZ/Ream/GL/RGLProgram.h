@@ -23,6 +23,7 @@ public:
     struct Locations
     {
         GLint pos;          ///< `pos` vertex attribute (vertex position).
+        GLint uv;           ///< `uv` vertex attribute (texture coordinates, RGLShader::VertexUV only).
         GLint posProj;      ///< `posProj` uniform (position projection matrix).
 
         GLint image;        ///< `image` sampler uniform (source texture).

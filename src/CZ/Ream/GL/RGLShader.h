@@ -41,6 +41,7 @@ public:
         HasFactorA          = 1u << 10, ///< Applies the alpha-channel multiplier.
         PremultSrc          = 1u << 11, ///< The source color is premultiplied alpha.
         HasPixelSize        = 1u << 12, ///< Provides the `pixelSize` uniform (texel size for effects).
+        VertexUV            = 1u << 13, ///< The image's texture coordinates come per vertex (`uv` attribute) instead of from `imageProj` (see RPainter::drawImageRects()).
 
         /* The upper 4 bits represent effects */
         VibrancyH           = 1u << 28, ///< Horizontal vibrancy blur pass.
@@ -48,7 +49,7 @@ public:
     };
 
     /// Subset of Features that affect the vertex shader (the rest only affect the fragment shader).
-    static constexpr CZBitset<Features> VertFeatures { HasImage | HasMask };
+    static constexpr CZBitset<Features> VertFeatures { HasImage | HasMask | VertexUV };
 
     /**
      * @brief Returns the cached shader for the given device, feature set, and type, compiling it if needed.

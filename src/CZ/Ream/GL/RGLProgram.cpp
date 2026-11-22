@@ -81,6 +81,9 @@ bool RGLProgram::link() noexcept
     glUseProgram(m_id);
 
     m_loc.pos = glGetAttribLocation(m_id, "pos");
+
+    if (features().has(RGLShader::VertexUV))
+        m_loc.uv = glGetAttribLocation(m_id, "uv");
     m_loc.posProj = glGetUniformLocation(m_id, "posProj");
 
     if (features().has(RGLShader::HasFactorR))

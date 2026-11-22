@@ -47,3 +47,19 @@ void RPainter::clear() noexcept
     drawColor(SkRegion(geometry().viewport.roundOut()));
     restore();
 }
+
+bool RPainter::drawImageRects(const RDrawImageInfo &image, const std::vector<RImageRect> &rects, const SkRegion *region) noexcept
+{
+    // One by one (backends may batch them, see RGLPainter)
+    RDrawImageInfo info { image };
+    bool ok { true };
+
+    for (const auto &r : rects)
+    {
+        info.src = r.src;
+        info.dst = r.dst;
+        ok &= drawImage(info, region);
+    }
+
+    return ok;
+}

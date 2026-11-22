@@ -13,6 +13,10 @@ const char *v = R"(
 uniform mat3 posProj;
 attribute vec2 pos;
 
+#ifdef VERTEX_UV
+    attribute vec2 uv;
+#endif
+
 #ifdef HAS_IMAGE
     uniform mat3 imageProj;
     varying vec2 imageCord;
@@ -28,7 +32,11 @@ void main() {
     gl_Position = vec4(pos3 * posProj, 1.0);
 
 #ifdef HAS_IMAGE
-    imageCord = (pos3 * imageProj).xy;
+    #ifdef VERTEX_UV
+        imageCord = uv;
+    #else
+        imageCord = (pos3 * imageProj).xy;
+    #endif
 
     #ifdef HAS_MASK
         maskCord = (pos3 * maskProj).xy;
@@ -351,7 +359,7 @@ bool RGLShader::build() noexcept
     UInt32 fx { UInt32((m_features.get() & 0xF0000000) >> 28) };
 
     const std::string featuresStr {
-        std::format("{}{}{}{}{}{}{}{}{}{}{}{}#define BLEND_MODE {}\n#define FX {}\n",
+        std::format("{}{}{}{}{}{}{}{}{}{}{}{}{}#define BLEND_MODE {}\n#define FX {}\n",
             !m_features.has(ImageExternal | MaskExternal) ? "" : "#extension GL_OES_EGL_image_external : require\n",
             !m_features.has(ImageExternal)                ? "#define IMAGE_SAMPLER sampler2D\n" : "#define IMAGE_SAMPLER samplerExternalOES\n",
             !m_features.has(MaskExternal)                 ? "#define MASK_SAMPLER sampler2D\n" : "#define MASK_SAMPLER samplerExternalOES\n", 
@@ -364,6 +372,7 @@ bool RGLShader::build() noexcept
             !m_features.has(HasFactorB)                   ? "" : "#define HAS_B\n",
             !m_features.has(HasFactorA)                   ? "" : "#define HAS_A\n",
             !m_features.has(HasPixelSize)                 ? "" : "#define HAS_PIXEL_SIZE\n",
+            !m_features.has(VertexUV)                     ? "" : "#define VERTEX_UV\n",
             UInt32(m_features.get() & 0x3),               // Blend Mode
             fx)                                           // Effect
     };

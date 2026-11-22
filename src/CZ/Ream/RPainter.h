@@ -11,6 +11,7 @@
 #include <CZ/Ream/RImageWrap.h>
 #include <CZ/Ream/RBlendMode.h>
 #include <CZ/Core/CZTransform.h>
+#include <vector>
 #include <CZ/Core/CZBitset.h>
 #include <memory>
 #include <array>
@@ -87,6 +88,15 @@ namespace CZ
          * @brief Wrapping mode for vertical (T-axis) texture coordinates.
          */
         RImageWrap wrapT { RImageWrap::ClampToEdge };
+    };
+
+    /**
+     * @brief One source → destination mapping of RPainter::drawImageRects().
+     */
+    struct RImageRect
+    {
+        SkRect src;  ///< Like RDrawImageInfo::src
+        SkIRect dst; ///< Like RDrawImageInfo::dst
     };
 };
 
@@ -397,6 +407,22 @@ public:
      * @return true if the image was successfully drawn, false otherwise.
      */
     virtual bool drawImage(const RDrawImageInfo& image, const SkRegion *region = nullptr, const RDrawImageInfo* mask = nullptr) noexcept = 0;
+
+    /**
+     * @brief Draws parts of the same image at once: each rect like drawImage() with `image.src` and
+     *        `image.dst` replaced by its own (e.g. the nine patches of a rounded rect).
+     *
+     * Everything else (the image, its scale, transform and filters, and the painter's state) is
+     * shared. Backends may batch them into a single draw call (GL does); by default they're drawn
+     * one by one. Rects shouldn't overlap (with blending, overlaps are drawn once per rect).
+     *
+     * @param image  The image and sampling parameters (its `src` and `dst` are ignored).
+     * @param rects  The source → destination rects.
+     * @param region Clipping region within the RSurface viewport.
+     *
+     * @return true if everything was drawn, false otherwise.
+     */
+    virtual bool drawImageRects(const RDrawImageInfo &image, const std::vector<RImageRect> &rects, const SkRegion *region = nullptr) noexcept;
 
     /**
      * @brief Fills the specified region with the current color().

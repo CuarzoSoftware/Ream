@@ -16,7 +16,9 @@
 class CZ::RGLPainter final : public RPainter
 {
 public:
+    ~RGLPainter() noexcept;
     bool drawImage(const RDrawImageInfo& image, const SkRegion *region = nullptr, const RDrawImageInfo* mask = nullptr) noexcept override;
+    bool drawImageRects(const RDrawImageInfo &image, const std::vector<RImageRect> &rects, const SkRegion *region = nullptr) noexcept override;
     bool drawImageEffect(const RDrawImageInfo &image, ImageEffect effect, const SkRegion *region = nullptr,
                          const RImageEffectParams &params = {}) noexcept override;
     bool drawColor(const SkRegion &region) noexcept override;
@@ -65,6 +67,14 @@ private:
     friend class RGLShader;
     friend class RGLProgram;
     RGLPainter(std::shared_ptr<RSurface> surface, RGLDevice *device) noexcept : RPainter(surface, (RDevice*)device) {};
+
+    // Images read by the draws (and masks): one read sync for all of them when the pass ends (see
+    // ~RGLPainter()), not one per draw (each one a fence, flushing the GL pipeline)
+    void markRead(const std::shared_ptr<RImage> &image) noexcept;
+
+    // drawImage() and drawImageRects() (with rects: one draw call, coordinates per vertex)
+    bool drawImageImpl(const RDrawImageInfo &image, const std::vector<RImageRect> *rects, const SkRegion *clip, const RDrawImageInfo *mask) noexcept;
+    std::vector<std::shared_ptr<RImage>> m_readImages;
 };
 
 #endif // RGLPAINTER_H

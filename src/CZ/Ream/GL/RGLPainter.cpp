@@ -138,6 +138,28 @@ void RGLPainter::bindTexture(RGLTexture tex, GLuint uniform, const RDrawImageInf
 
 bool RGLPainter::drawImage(const RDrawImageInfo &imageInfo, const SkRegion *clip, const RDrawImageInfo *maskInfo) noexcept
 {
+    return drawImageImpl(imageInfo, nullptr, clip, maskInfo);
+}
+
+bool RGLPainter::drawImageRects(const RDrawImageInfo &imageInfo, const std::vector<RImageRect> &rects, const SkRegion *clip) noexcept
+{
+    if (rects.empty())
+        return true;
+
+    // A single rect: the regular path (no per-vertex coordinates needed)
+    if (rects.size() == 1)
+    {
+        RDrawImageInfo info { imageInfo };
+        info.src = rects[0].src;
+        info.dst = rects[0].dst;
+        return drawImageImpl(info, nullptr, clip, nullptr);
+    }
+
+    return drawImageImpl(imageInfo, &rects, clip, nullptr);
+}
+
+bool RGLPainter::drawImageImpl(const RDrawImageInfo &imageInfo, const std::vector<RImageRect> *rects, const SkRegion *clip, const RDrawImageInfo *maskInfo) noexcept
+{
     if (blendMode() == RBlendMode::SrcOver && (factor().fA <= 0.f || opacity() <= 0.f))
         return true;
 
@@ -157,7 +179,25 @@ bool RGLPainter::drawImage(const RDrawImageInfo &imageInfo, const SkRegion *clip
         return false;
     }
 
-    const SkRegion region { calcDrawImageRegion(surface.get(), imageInfo, clip, maskInfo) };
+    // Several rects (drawImageRects()): each one clipped on its own, their union drawn at once
+    SkRegion region;
+    std::vector<SkRegion> rectRegions;
+
+    if (rects)
+    {
+        rectRegions.reserve(rects->size());
+        RDrawImageInfo info { imageInfo };
+
+        for (const auto &r : *rects)
+        {
+            info.src = r.src;
+            info.dst = r.dst;
+            rectRegions.emplace_back(calcDrawImageRegion(surface.get(), info, clip, nullptr));
+            region.op(rectRegions.back(), SkRegion::kUnion_Op);
+        }
+    }
+    else
+        region = calcDrawImageRegion(surface.get(), imageInfo, clip, maskInfo);
 
     if (region.isEmpty())
         return true; // Nothing to draw
@@ -224,7 +264,10 @@ skipMask:
 
     SyncSkiaGLState();
 
-    const auto features { calcDrawImageFeatures(image, &tex, mask ? &maskTex : nullptr) };
+    auto features { calcDrawImageFeatures(image, &tex, mask ? &maskTex : nullptr) };
+
+    if (rects)
+        features.add(RGLShader::VertexUV); // Each rect maps its own src
     const auto prog { RGLProgram::GetOrMake(device(), features) };
 
     if (!prog)
@@ -317,9 +360,12 @@ skipMask:
     calcPosProj(surface.get(), fb.value() == 0, mat);
     glUniformMatrix3fv(prog->loc().posProj, 1, GL_FALSE, mat);
 
-    // imageProj
-    calcImageProj(imageInfo, mat);
-    glUniformMatrix3fv(prog->loc().imageProj, 1, GL_FALSE, mat);
+    // imageProj (per vertex with several rects)
+    if (!rects)
+    {
+        calcImageProj(imageInfo, mat);
+        glUniformMatrix3fv(prog->loc().imageProj, 1, GL_FALSE, mat);
+    }
 
     if (mask)
     {
@@ -398,20 +444,60 @@ skipMask:
         glBlendFunc(GL_ZERO, GL_SRC_ALPHA);
     }
 
-    std::vector<GLfloat> vbo { genVBO(region) };
+    std::vector<GLfloat> vbo, uvs;
+    GLsizei vertices;
+
+    if (rects)
+    {
+        // Each rect's region with its own texture coordinates
+        for (size_t i = 0; i < rects->size(); i++)
+        {
+            const auto &r { (*rects)[i] };
+            const SkMatrix toUV { RMatrixUtils::VirtualToUV(SkRect::Make(r.dst), imageInfo.srcTransform, imageInfo.srcScale, r.src, image->size()) };
+            const std::vector<GLfloat> pos { genVBO(rectRegions[i]) };
+            vbo.insert(vbo.end(), pos.begin(), pos.end());
+
+            for (size_t v = 0; v < pos.size(); v += 2)
+            {
+                const SkPoint uv { toUV.mapXY(pos[v], pos[v + 1]) };
+                uvs.push_back(uv.x());
+                uvs.push_back(uv.y());
+            }
+        }
+
+        vertices = GLsizei(vbo.size() / 2);
+    }
+    else
+    {
+        vbo = genVBO(region);
+        vertices = GLsizei(region.computeRegionComplexity() * 6);
+    }
+
     glEnableVertexAttribArray(prog->loc().pos);
     glVertexAttribPointer(prog->loc().pos, 2, GL_FLOAT, GL_FALSE, 0, vbo.data());
+
+    if (rects)
+    {
+        glEnableVertexAttribArray(prog->loc().uv);
+        glVertexAttribPointer(prog->loc().uv, 2, GL_FLOAT, GL_FALSE, 0, uvs.data());
+    }
+
     const auto size { surface->image()->size() };
     glViewport(0, 0, size.width(), size.height());
     setScissors(surface.get(), fb == 0, region);
     glBlendEquation(GL_FUNC_ADD);
-    glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
+    glDrawArrays(GL_TRIANGLES, 0, vertices);
     glDisableVertexAttribArray(prog->loc().pos);
+
+    if (rects)
+        glDisableVertexAttribArray(prog->loc().uv);
+
     glUseProgram(0);
-    auto sync { RSync::Make(device()) };
-    image->setReadSync(sync);
+    markRead(image);
+
     if (mask)
-        mask->setReadSync(sync);
+        markRead(mask);
+
     return true;
 }
 
@@ -520,9 +606,33 @@ bool RGLPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect ef
     glDrawArrays(GL_TRIANGLES, 0, region.computeRegionComplexity() * 6);
     glDisableVertexAttribArray(prog->loc().pos);
     glUseProgram(0);
-    auto sync { RSync::Make(device()) };
-    image->setReadSync(sync);
+    markRead(image);
     return true;
+}
+
+RGLPainter::~RGLPainter() noexcept
+{
+    // The pass ended: one fence after all its draws (they run in order in this context)
+    if (m_readImages.empty())
+        return;
+
+    auto sync { RSync::Make(device()) };
+
+    for (auto &image : m_readImages)
+        image->setReadSync(sync);
+}
+
+void RGLPainter::markRead(const std::shared_ptr<RImage> &image) noexcept
+{
+    if (!image)
+        return;
+
+    // Usually a few images, many draws each (e.g. the nine patches of a rounded rect)
+    for (auto it { m_readImages.rbegin() }; it != m_readImages.rend(); ++it)
+        if (it->get() == image.get())
+            return;
+
+    m_readImages.emplace_back(image);
 }
 
 std::vector<GLfloat> RGLPainter::genVBO(const SkRegion &region) const noexcept
