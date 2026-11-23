@@ -9,7 +9,7 @@
 
 * **CZ_REAM_LOG_LEVEL**: Sets the minimum log level for runtime output. Accepts an integer from
   least to most verbose:
-  `0` Silent, `1` Fatal, `2` Error, `3` Warning, `4` Info, `5` Debug, `6` Trace.
+  `0` Silent, `1` Fatal, `2` Error (the default), `3` Warning, `4` Info, `5` Debug, `6` Trace.
 
 * **CZ_REAM_EGL_LOG_LEVEL**: Same scale as `CZ_REAM_LOG_LEVEL`, but for the OpenGL/EGL backend.
 
