@@ -55,6 +55,12 @@ public:
 private:
     friend class RCore;
     RVKCore(const Options &options) noexcept;
+    /**
+     * @brief Draws once on the main device (a color fill and an image), so the driver's first-use
+     *        setup (pipelines, command submission) happens now rather than in an app's first frame.
+     */
+    void warmUp() noexcept;
+
     virtual bool init() noexcept override;
     bool initInstanceExtensions() noexcept;
     bool initInstanceValidationLayers() noexcept;

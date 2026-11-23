@@ -1,3 +1,8 @@
+#include <drm_fourcc.h>
+#include <CZ/Ream/RImage.h>
+#include <CZ/Ream/RPainter.h>
+#include <CZ/Ream/RPass.h>
+#include <CZ/Ream/RSurface.h>
 #include <CZReamVersion.h>
 #include <CZ/Ream/RLog.h>
 #include <CZ/Ream/VK/RVKCore.h>
@@ -7,6 +12,9 @@
 #include <CZ/Core/Utils/CZVectorUtils.h>
 #include <xf86drm.h>
 #include <sys/sysmacros.h>
+#include <filesystem>
+#include <cstdlib>
+#include <cstdio>
 
 using namespace CZ;
 
@@ -56,10 +64,13 @@ RVKCore::~RVKCore() noexcept
 
 void RVKCore::clearGarbage() noexcept
 {
-    // No-op under the current synchronous submission model (see RVKDevice::clearGarbage).
+    // Called once per frame: nothing queued stays unsubmitted much longer than that
     for (auto *device : m_devices)
         if (auto *vk { static_cast<RVKDevice*>(device) })
+        {
+            vk->flushStaleBatch();
             vk->clearGarbage();
+        }
 }
 
 bool RVKCore::hasInstanceExtension(std::string_view extension) const noexcept
@@ -85,16 +96,107 @@ RVKCore::RVKCore(const Options &options) noexcept : RCore(options)
     m_options.graphicsAPI = RGraphicsAPI::VK;
 }
 
+void RVKCore::warmUp() noexcept
+{
+    // Only the main device: another one may be a dGPU asleep (runtime PM), woken up only when used
+    for (RDevice *device : { mainDevice() })
+    {
+        auto *vk { device ? device->asVK() : nullptr };
+
+        if (!vk)
+            continue;
+
+        const auto &formats { vk->textureFormats().formats() };
+        const auto format { formats.find(DRM_FORMAT_ARGB8888) };
+
+        if (format == formats.end())
+            continue;
+
+        RImageConstraints constraints {};
+        constraints.allocator = device;
+        auto target { RImage::Make(SkISize::Make(2, 2), *format, &constraints) };
+        auto source { RImage::Make(SkISize::Make(2, 2), *format, &constraints) };
+        auto surface { target ? RSurface::WrapImage(target) : nullptr };
+
+        if (!surface || !source)
+            continue;
+
+        {
+            auto pass { surface->beginPass(RPassCap_Painter, device) };
+            auto *p { pass ? pass->getPainter() : nullptr };
+
+            if (!p)
+                continue;
+
+            const SkRegion region { SkIRect::MakeWH(2, 2) };
+            p->setColor(SK_ColorTRANSPARENT);
+            p->drawColor(region);
+
+            RDrawImageInfo info {};
+            info.image = source;
+            info.src = SkRect::MakeWH(2, 2);
+            info.dst = SkIRect::MakeWH(2, 2);
+            p->drawImage(info, &region);
+        }
+
+        vk->wait();
+        vk->clearGarbage();
+    }
+}
+
+// The loader's driver glob (matched against the ICD manifest names) for the kernel driver of a
+// DRM device, empty if unknown
+static std::string DriverGlobOf(dev_t dev) noexcept
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/sys/dev/char/%u:%u/device/driver", major(dev), minor(dev));
+    std::error_code ec;
+    const auto driver { std::filesystem::read_symlink(path, ec).filename().string() };
+
+    if (ec)
+        return {};
+
+    if (driver == "i915" || driver == "xe") return "*intel*";
+    if (driver == "amdgpu" || driver == "radeon") return "*radeon*";
+    if (driver == "nvidia") return "*nvidia*";
+    if (driver == "nouveau") return "*nouveau*";
+    if (driver == "virtio-pci" || driver == "virtio_gpu") return "*virtio*";
+    return {};
+}
+
 bool RVKCore::init() noexcept
 {
     vkLog = vkLog.newWithContext("VK");
 
-    if (initInstanceExtensions() &&
+    // On Wayland only the compositor's GPU is used (see initDevices()), but every installed driver
+    // enumerates its GPUs, and NVIDIA's opens them: a runtime-suspended dGPU wakes up (seconds, and
+    // battery) for nothing. Only the compositor GPU's driver is loaded then, unless the user picks
+    // drivers. Unset afterwards so it is not inherited by launched processes.
+    bool selectedDriver { false };
+
+    if (auto *wl { options().platformHandle ? options().platformHandle->asWL() : nullptr };
+        wl && wl->mainDevice() != 0 &&
+        !getenv("VK_LOADER_DRIVERS_SELECT") && !getenv("VK_LOADER_DRIVERS_DISABLE") &&
+        !getenv("VK_DRIVER_FILES") && !getenv("VK_ICD_FILENAMES") && !getenv("VK_ADD_DRIVER_FILES"))
+    {
+        const auto glob { DriverGlobOf(wl->mainDevice()) };
+
+        if (!glob.empty())
+            selectedDriver = setenv("VK_LOADER_DRIVERS_SELECT", glob.c_str(), 1) == 0;
+    }
+
+    const bool ok {
+        initInstanceExtensions() &&
         initInstanceValidationLayers() &&
         initInstance() &&
         initInstanceProcs() &&
         initDebugger() &&
-        initDevices())
+        initDevices() };
+
+    if (selectedDriver)
+        unsetenv("VK_LOADER_DRIVERS_SELECT");
+
+    if (ok)
         return true;
 
     RLog(CZFatal, CZLN, "Failed to initialize RVKCore");

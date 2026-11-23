@@ -1,4 +1,5 @@
 #include <CZ/Ream/VK/RVKImage.h>
+#include <CZ/Ream/VK/RVKSync.h>
 #include <CZ/Ream/VK/RVKDevice.h>
 #include <CZ/Ream/VK/RVKCore.h>
 #include <CZ/Ream/VK/RVKFormat.h>
@@ -68,15 +69,12 @@ RVKImage::~RVKImage() noexcept
     if (!m_dev || m_dev->device() == VK_NULL_HANDLE)
         return;
 
-    // Skia records draw ops lazily; a wrapped SkSurface/SkImage may still have deferred work
-    // referencing this (borrowed) VkImage. Flush+submit+finish so nothing references it, then
-    // drop the views before destroying the image.
-    // NOTE: single-thread safe. Cross-thread destruction of images with views built on another
-    // thread must go through the Phase 6 fence-tracked garbage collector.
+    // Skia records draw ops lazily: a wrapped SkSurface/SkImage may still have deferred work
+    // referencing this (borrowed) VkImage. Submitted (not waited for), then the wrappers dropped.
     if (m_hasBackendTexture || m_hasBackendRT)
     {
         if (auto ctx { m_dev->skContext() })
-            ctx->flushAndSubmit(GrSyncCpu::kYes);
+            ctx->flushAndSubmit(GrSyncCpu::kNo);
     }
 
     {
@@ -86,32 +84,37 @@ RVKImage::~RVKImage() noexcept
     m_backendTexture = {};
     m_backendRT = {};
 
-    // Ensure no in-flight GPU work references the image before destroying it, then drain the
-    // deferred-destruction queue so any framebuffer/resources referencing this image's view (from
-    // an async painter pass) are freed BEFORE the view/image itself is destroyed.
-    m_dev->wait();
-    m_dev->clearGarbage();
+    // Destroyed once the GPU finished all the work submitted so far (which is all that may use it:
+    // passes hold their images until they're submitted). Waiting for the whole device here instead
+    // stalled every frame that dropped an image (a window closing, the blur resizing, re-baked
+    // text...).
+    const VkImageView view { m_view };
+    const VkImage image { m_ownsImage ? m_image : VK_NULL_HANDLE };
+    const VkDeviceMemory memory { m_ownsMemory ? m_memory : VK_NULL_HANDLE };
+    RVKDevice *device { m_dev };
 
-    const VkDevice dev { m_dev->device() };
+    m_dev->destroyWhenIdle([device, view, image, memory]{
+        const VkDevice d { device->device() };
+        if (view != VK_NULL_HANDLE) vkDestroyImageView(d, view, nullptr);
+        if (image != VK_NULL_HANDLE) vkDestroyImage(d, image, nullptr);
+        if (memory != VK_NULL_HANDLE) vkFreeMemory(d, memory, nullptr);
+    });
 
-    if (m_view != VK_NULL_HANDLE)
-        vkDestroyImageView(dev, m_view, nullptr);
-
-    if (m_image != VK_NULL_HANDLE && m_ownsImage)
-        vkDestroyImage(dev, m_image, nullptr);
-
-    if (m_memory != VK_NULL_HANDLE && m_ownsMemory)
-        vkFreeMemory(dev, m_memory, nullptr);
-
-    // Destroy cross-device imported copies (each on its own device).
+    // Cross-device imported copies, each on its own device
     for (auto &[sdev, s] : m_shared)
     {
         if (!sdev || sdev->device() == VK_NULL_HANDLE)
             continue;
-        sdev->wait();
-        if (s.view != VK_NULL_HANDLE) vkDestroyImageView(sdev->device(), s.view, nullptr);
-        if (s.image != VK_NULL_HANDLE) vkDestroyImage(sdev->device(), s.image, nullptr);
-        if (s.memory != VK_NULL_HANDLE) vkFreeMemory(sdev->device(), s.memory, nullptr);
+
+        const auto copy { s };
+        RVKDevice *other { sdev };
+
+        sdev->destroyWhenIdle([other, copy]{
+            const VkDevice d { other->device() };
+            if (copy.view != VK_NULL_HANDLE) vkDestroyImageView(d, copy.view, nullptr);
+            if (copy.image != VK_NULL_HANDLE) vkDestroyImage(d, copy.image, nullptr);
+            if (copy.memory != VK_NULL_HANDLE) vkFreeMemory(d, copy.memory, nullptr);
+        });
     }
     m_shared.clear();
 }
@@ -1109,11 +1112,14 @@ bool RVKImage::writePixels(const RPixelBufferRegion &region) noexcept
         vkUnmapMemory(dev, stagingMem);
     }
 
-    ok = m_dev->immediateSubmit([&](VkCommandBuffer cmd)
+    // Not waited for (it stalled the calling thread, and others meanwhile): the staging buffer is
+    // freed once the GPU is done, and the image's write sync orders its readers after the copy
+    ok = m_dev->immediateSubmitAsync([&](VkCommandBuffer cmd)
     {
+        // After whatever read or wrote it before
         transitionLayout(cmd, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         0, VK_ACCESS_TRANSFER_WRITE_BIT);
+                         VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
 
         vkCmdCopyBufferToImage(cmd, staging, m_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                copies.size(), copies.data());
@@ -1121,10 +1127,17 @@ bool RVKImage::writePixels(const RPixelBufferRegion &region) noexcept
         transitionLayout(cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                          VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                          VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+    }, [device = m_dev, staging, stagingMem]{
+        vkFreeMemory(device->device(), stagingMem, nullptr);
+        vkDestroyBuffer(device->device(), staging, nullptr);
     });
 
     if (ok)
+    {
         m_writeSerial++;
+        setWriteSync(RVKSync::Make(m_dev));
+        return true;
+    }
 
 cleanup:
     if (stagingMem != VK_NULL_HANDLE)

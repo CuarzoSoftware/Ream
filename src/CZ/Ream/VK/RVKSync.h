@@ -1,6 +1,9 @@
 #ifndef CZ_RVKSYNC_H
 #define CZ_RVKSYNC_H
 
+#include <atomic>
+#include <mutex>
+
 #include <CZ/Ream/RSync.h>
 #include <CZ/Ream/DRM/RDRMTimeline.h>
 #include <CZ/Core/CZSpFd.h>
@@ -48,6 +51,7 @@ public:
 private:
     RVKSync(std::shared_ptr<RCore> core, RVKDevice *device, bool isExternal) noexcept;
     RVKDevice *dev() const noexcept { return (RVKDevice*)m_device; }
+    int cpuWaitImpl(int timeoutMs) const noexcept;
 
     // Primary representation: a syncobj timeline point (NVIDIA-safe interop hub). Null on devices
     // without the Timeline capability, in which case m_fd is used instead.
@@ -64,6 +68,14 @@ private:
 
     // Make(): a point of the device's shared timeline (RVKDevice::signalSyncTimeline()), not owned
     bool m_sharedTimeline { false };
+
+    // Seen signalled once: nothing to wait for anymore (e.g. the buffer of a static window)
+    mutable std::atomic<bool> m_signaled { false };
+
+    // gpuWait(): already a wait of that device's next submission (see RVKDevice::waitsSerial())
+    mutable std::mutex m_queuedMutex;
+    mutable const RVKDevice *m_queuedOn { nullptr };
+    mutable UInt64 m_queuedSerial { 0 };
 };
 
 #endif // CZ_RVKSYNC_H

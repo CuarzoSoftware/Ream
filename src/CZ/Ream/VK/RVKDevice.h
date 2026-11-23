@@ -12,6 +12,7 @@
 #include <functional>
 #include <memory>
 #include <thread>
+#include <chrono>
 #include <mutex>
 
 /**
@@ -74,6 +75,12 @@ public:
     bool immediateSubmit(const std::function<void(VkCommandBuffer)> &record) const noexcept;
 
     /**
+     * @brief Like immediateSubmit() without waiting: @p done runs once the GPU finished it (e.g. to
+     *        free a staging buffer), from any thread's clearGarbage().
+     */
+    bool immediateSubmitAsync(const std::function<void(VkCommandBuffer)> &record, std::function<void()> done) const noexcept;
+
+    /**
      * @brief Submits an already-recorded command buffer, consuming pending waits, and blocks
      *        until it completes. Used by RVKPainter::flush.
      */
@@ -94,20 +101,58 @@ public:
                             VkSemaphore signal = VK_NULL_HANDLE) const noexcept;
 
     /**
+     * @brief Queues a recorded command buffer for the next batched submission.
+     *
+     * Each vkQueueSubmit is a driver and kernel round trip (validating every buffer object), and a
+     * frame records many passes (e.g. the blur chain), so they are sent together, in the order they
+     * were queued. Any other queue submission (immediateSubmit(), submitSignal()...), a present, a
+     * Skia submit, wait() and exporting or CPU-waiting a sync of this device send the batch first,
+     * so the queue order seen by the GPU stays the recording order (see also flushStaleBatch()).
+     *
+     * @param cleanup Runs on this thread's clearGarbage() once the GPU finished the command buffer.
+     * @param signal  Signalled after it (e.g. a swapchain present semaphore): the batch is sent now.
+     * @return false if the batch was sent and failed (the cleanup still runs).
+     */
+    bool enqueueCommand(VkCommandBuffer cmd, std::function<void()> cleanup, VkSemaphore signal = VK_NULL_HANDLE) const noexcept;
+
+    /// @brief Submits the commands queued by enqueueCommand(), if any.
+    void flushBatch() const noexcept;
+
+    /// @brief flushBatch() if its oldest command waits for 32 ms or more (e.g. nothing presented):
+    ///        called by RVKCore::clearGarbage() (each frame and main loop iteration).
+    void flushStaleBatch() const noexcept;
+
+    /**
      * @brief Registers a cleanup to run once @p fence is signalled (deferred/GPU-safe destruction).
      *
      * The fence is destroyed after the cleanup runs. Drained by clearGarbage() (called by the
      * compositor each frame) and fully flushed at device destruction.
      */
-    void deferDestroy(VkFence fence, std::function<void()> cleanup) const noexcept;
+    void deferDestroy(VkFence fence, std::function<void()> cleanup, bool anyThread = false) const noexcept;
+
+    /**
+     * @brief Runs @p cleanup once the GPU finished every command submitted so far (a fence after
+     *        them), from any thread's clearGarbage(): no CPU stall (unlike wait()).
+     *
+     * For resources without thread affinity (e.g. images). Runs right away if the fence can't be
+     * submitted, after waiting for the device.
+     */
+    void destroyWhenIdle(std::function<void()> cleanup) noexcept;
 
     /**
      * @brief Queues a semaphore for the next queue submission to wait on.
      *
      * Used by RVKSync::gpuWait so that subsequent GPU work on this device waits for the sync.
      * If @p owned is true the semaphore is destroyed once consumed by a submission.
+     * @return The waitsSerial() of the submission that will consume it.
      */
-    void queueWait(VkSemaphore semaphore, bool owned) const noexcept;
+    UInt64 queueWait(VkSemaphore semaphore, bool owned) const noexcept;
+
+    /**
+     * @brief Identifies the next submission consuming the waits of queueWait() (its return value):
+     *        while unchanged, a wait queued earlier still applies to the commands recorded now.
+     */
+    UInt64 waitsSerial() const noexcept { std::lock_guard<std::mutex> lock { m_queueMutex }; return m_waitsSerial; }
 
     /**
      * @brief Empty queue submission that signals @p semaphore (and optional @p fence) after all
@@ -156,6 +201,21 @@ private:
     // every sync of this device, a point each, instead of a new syncobj, import, fence and submit
     // per sync. Guarded by m_queueMutex (points must be signalled in increasing order).
     bool signalSyncTimeline(std::shared_ptr<RDRMTimeline> &timeline, UInt64 &point) const noexcept;
+
+    // Skia's vkQueueSubmit/vkQueueWaitIdle (see initSkia()): the batch first, under the queue lock
+    static VKAPI_ATTR VkResult VKAPI_CALL SkQueueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo *submits, VkFence fence);
+    static VKAPI_ATTR VkResult VKAPI_CALL SkQueueWaitIdle(VkQueue queue);
+    static const RVKDevice *DeviceOfQueue(VkQueue queue) noexcept;
+    static std::mutex s_skQueuesMutex;
+    static std::vector<std::pair<VkQueue, const RVKDevice*>> s_skQueues;
+
+    // enqueueCommand(): sends the batch (with m_queueMutex held), the next sync point included
+    bool flushBatchLocked(VkSemaphore signal = VK_NULL_HANDLE) const noexcept;
+    struct BatchEntry { std::function<void()> cleanup; std::thread::id owner; };
+    mutable std::vector<VkCommandBuffer> m_batchCmds;
+    mutable std::vector<BatchEntry> m_batchEntries;
+    mutable bool m_batchSignalsSync { false }; // m_syncPoint is signalled by the batch
+    mutable std::chrono::steady_clock::time_point m_batchSince; // First command queued (flushStaleBatch())
     mutable std::shared_ptr<RDRMTimeline> m_syncTimeline;
     mutable VkSemaphore m_syncSemaphore { VK_NULL_HANDLE };
     mutable UInt64 m_syncPoint { 0 };
@@ -211,6 +271,7 @@ private:
     mutable std::mutex m_queueMutex;
     // Semaphores the next queue submission must wait on (RVKSync::gpuWait). Guarded by m_queueMutex.
     mutable std::vector<std::pair<VkSemaphore, bool>> m_pendingWaits;
+    mutable UInt64 m_waitsSerial { 0 }; // Incremented each time m_pendingWaits are consumed
 
     // Fence-tracked deferred destruction: cleanup runs once its fence signals (drained by
     // clearGarbage()). Lets submissions be async without freeing in-flight resources. Each entry
@@ -218,9 +279,17 @@ private:
     // Vulkan command pools require external synchronization (NVIDIA crashes on cross-thread
     // destruction that Mesa tolerates). clearGarbage() therefore only drains the caller thread's
     // entries.
+    // Shared by the entries of a batch, destroyed with the last one
+    struct Fence
+    {
+        VkDevice device;
+        VkFence fence;
+        bool signaled { false }; // Cached: queried once per clearGarbage() until it signals
+        ~Fence() { if (fence != VK_NULL_HANDLE) vkDestroyFence(device, fence, nullptr); }
+    };
     struct Garbage
     {
-        VkFence fence;
+        std::shared_ptr<Fence> fence; // A null handle: already done
         std::function<void()> cleanup;
         std::thread::id owner;
     };

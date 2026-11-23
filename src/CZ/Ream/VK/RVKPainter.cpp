@@ -390,20 +390,14 @@ void RVKPainter::flush() noexcept
 
     const VkDevice d { dev()->device() };
 
-    // Submit WITHOUT blocking: the CPU keeps recording other passes while the GPU works. A fence
-    // tracks completion; the per-pass resources are reclaimed later by clearGarbage() (called each
-    // frame by the compositor). This CPU/GPU pipelining is the key difference vs a blocking submit.
-    // CZ_REAM_VK_SYNC_SUBMIT=1 forces the legacy blocking submit (for A/B comparison / debugging).
+    // Queued WITHOUT blocking: the CPU keeps recording other passes while the GPU works, and the
+    // device sends the frame's passes together (see RVKDevice::enqueueCommand()). The per-pass
+    // resources are recycled once the GPU is done (clearGarbage(), called each frame).
+    // CZ_REAM_VK_SYNC_SUBMIT=1 forces a blocking submit per pass (for A/B comparison / debugging).
     static const bool forceSync { [] { const char *e { std::getenv("CZ_REAM_VK_SYNC_SUBMIT") }; return e && atoi(e) != 0; }() };
 
-    VkFence fence { VK_NULL_HANDLE };
-    VkFenceCreateInfo fi {};
-    fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-
-    if (forceSync || vkCreateFence(d, &fi, nullptr, &fence) != VK_SUCCESS)
+    if (forceSync)
     {
-        if (fence != VK_NULL_HANDLE) { vkDestroyFence(d, fence, nullptr); fence = VK_NULL_HANDLE; }
-        // Blocking submit + immediate cleanup (legacy path).
         dev()->submitCommand(m_cmd);
         if (m_framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(d, m_framebuffer, nullptr);
         dev()->recycleDescPool(m_descPool);
@@ -414,30 +408,24 @@ void RVKPainter::flush() noexcept
     }
     else
     {
-        std::vector<VkSemaphore> ownedWaits;
-        dev()->submitCommandAsync(m_cmd, fence, ownedWaits);
-
-        // Hand every per-pass resource to the fence-tracked GC (freed once the GPU is done).
-        // Hand every per-pass resource back to the device once the GPU is done (recycled by the
-        // next passes, see RVKDevice::takePassCmd()). Runs on this thread (command pools).
+        // Back to the device once the GPU is done (recycled by the next passes, see
+        // RVKDevice::takePassCmd()). Runs on this thread (command pools).
         const RVKDevice::PassCmd cmd { m_pool, m_cmd };
         const Vbo vbo { m_vbo, m_vboMem, m_vboMapped, m_vboCapacity };
         const VkDescriptorPool descPool { m_descPool };
         const VkFramebuffer framebuffer { m_framebuffer };
         RVKDevice *device { dev() };
 
-        device->deferDestroy(fence, [device, cmd, vbo, descPool, framebuffer,
-                                     ow = std::move(ownedWaits), fullPools = std::move(m_fullDescPools),
-                                     fullVbos = std::move(m_fullVbos)]()
+        device->enqueueCommand(m_cmd, [device, cmd, vbo, descPool, framebuffer,
+                                       fullPools = std::move(m_fullDescPools),
+                                       fullVbos = std::move(m_fullVbos)]()
         {
-            const VkDevice dd { device->device() };
             for (VkDescriptorPool p : fullPools) device->recycleDescPool(p);
             for (const Vbo &v : fullVbos) device->recyclePassVbo(v);
-            if (framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(dd, framebuffer, nullptr);
+            if (framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(device->device(), framebuffer, nullptr);
             device->recycleDescPool(descPool);
             device->recyclePassVbo(vbo);
             device->recyclePassCmd(cmd);
-            for (VkSemaphore s : ow) vkDestroySemaphore(dd, s, nullptr);
         });
     }
 

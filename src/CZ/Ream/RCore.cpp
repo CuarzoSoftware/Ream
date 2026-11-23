@@ -111,6 +111,7 @@ std::shared_ptr<RCore> RCore::Make(const Options &options) noexcept
         if (core->init())
         {
             core->logInfo();
+            static_cast<RVKCore*>(core.get())->warmUp();
             return core;
         }
 

@@ -120,6 +120,16 @@ bool RVKDevice::signalSyncTimeline(std::shared_ptr<RDRMTimeline> &timeline, UInt
     // After all the work submitted so far (same queue)
     const UInt64 value { ++m_syncPoint };
 
+    // Commands are waiting to be sent: signalled by that submission (see flushBatchLocked()).
+    // Whoever exports or CPU-waits this point sends the batch first.
+    if (!m_batchCmds.empty())
+    {
+        m_batchSignalsSync = true;
+        timeline = m_syncTimeline;
+        point = value;
+        return true;
+    }
+
     VkTimelineSemaphoreSubmitInfo tsi {};
     tsi.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
     tsi.signalSemaphoreValueCount = 1;
@@ -254,6 +264,10 @@ std::shared_ptr<RVKSync> RVKSync::FromExternal(int fd, RVKDevice *device) noexce
 
 CZSpFd RVKSync::fd() const noexcept
 {
+    // A point of the shared timeline may still be in the device's pending batch
+    if (m_sharedTimeline)
+        dev()->flushBatch();
+
     if (m_timeline)
         return m_timeline->exportSyncFile(m_point);
 
@@ -263,6 +277,19 @@ CZSpFd RVKSync::fd() const noexcept
 }
 
 int RVKSync::cpuWait(int timeoutMs) const noexcept
+{
+    if (m_signaled.load(std::memory_order_acquire))
+        return 1;
+
+    const int ret { cpuWaitImpl(timeoutMs) };
+
+    if (ret == 1)
+        m_signaled.store(true, std::memory_order_release);
+
+    return ret;
+}
+
+int RVKSync::cpuWaitImpl(int timeoutMs) const noexcept
 {
     // Make() path: the fence tracks the signalling submit directly.
     if (m_fence != VK_NULL_HANDLE)
@@ -278,6 +305,9 @@ int RVKSync::cpuWait(int timeoutMs) const noexcept
     // not have reached the kernel yet, hence WAIT_FOR_SUBMIT): wait on the timeline point.
     if (m_timeline)
     {
+        if (m_sharedTimeline)
+            dev()->flushBatch();
+
         const Int64 ns { timeoutMs < 0 ? INT64_MAX : (Int64)timeoutMs * 1000000ll };
         return m_timeline->waitSync(m_point, m_sharedTimeline ? DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT : 0, ns);
     }
@@ -307,6 +337,21 @@ bool RVKSync::gpuWait(RDevice *waiter) const noexcept
     if (!isExternal() && w == dev() && std::this_thread::get_id() == m_threadId)
         return true;
 
+    if (m_signaled.load(std::memory_order_acquire))
+        return true;
+
+    // A client buffer's acquire sync is usually signalled long before it is drawn, and drawn many
+    // times (each frame, each pass): a poll is one ioctl, exporting and importing it many more.
+    // Not for this device's own syncs (a poll would send its pending batch).
+    if (isExternal() && cpuWait(0) == 1)
+        return true;
+
+    {
+        std::lock_guard<std::mutex> lock { m_queuedMutex };
+        if (m_queuedOn == w && m_queuedSerial == w->waitsSerial())
+            return true; // The waiter's next submission waits for it already
+    }
+
     if (!w->procs().importSemaphoreFdKHR)
         return false;
 
@@ -322,9 +367,7 @@ bool RVKSync::gpuWait(RDevice *waiter) const noexcept
         return true;
     }
 
-    const int dupFd { fcntl(fence.get(), F_DUPFD_CLOEXEC, 0) };
-    if (dupFd < 0)
-        return false;
+    const int dupFd { fence.release() }; // Ours (exported or duplicated by fd())
 
     VkSemaphore temp { MakeExportableSemaphore(w) };
     if (temp == VK_NULL_HANDLE)
@@ -350,6 +393,9 @@ bool RVKSync::gpuWait(RDevice *waiter) const noexcept
     }
 
     // The next submission on the waiter device waits on (and then destroys) this semaphore.
-    w->queueWait(temp, true);
+    const UInt64 serial { w->queueWait(temp, true) };
+    std::lock_guard<std::mutex> lock { m_queuedMutex };
+    m_queuedOn = w;
+    m_queuedSerial = serial;
     return true;
 }

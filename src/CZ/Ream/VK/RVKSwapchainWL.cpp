@@ -301,7 +301,6 @@ bool RVKSwapchainWL::present(const RSwapchainImage &image, SkRegion *) noexcept
 
     VkResult r { VK_SUCCESS };
     bool async { false };
-    VkFence fence { VK_NULL_HANDLE };
 
     if (vkAllocateCommandBuffers(dev, &ai, &cmd) == VK_SUCCESS)
     {
@@ -314,25 +313,15 @@ bool RVKSwapchainWL::present(const RSwapchainImage &image, SkRegion *) noexcept
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, 0);
         vkEndCommandBuffer(cmd);
 
-        VkFenceCreateInfo fi {};
-        fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        if (vkCreateFence(dev, &fi, nullptr, &fence) == VK_SUCCESS)
+        // Sent with the frame's passes, in a single submission, signalling buf.presentSem
+        RVKDevice *device { m_device };
+        VkCommandPool pool { m_presentPool };
+        // The command buffer is freed by the cleanup even if the submission fails
+        async = device->enqueueCommand(cmd, [device, pool, cmd]()
         {
-            std::vector<VkSemaphore> ownedWaits;
-            if (m_device->submitCommandAsync(cmd, fence, ownedWaits, buf.presentSem))
-            {
-                async = true;
-                RVKDevice *device { m_device };
-                VkCommandPool pool { m_presentPool };
-                device->deferDestroy(fence, [device, pool, cmd, ow = std::move(ownedWaits)]()
-                {
-                    vkFreeCommandBuffers(device->device(), pool, 1, &cmd);
-                    for (VkSemaphore s : ow) vkDestroySemaphore(device->device(), s, nullptr);
-                });
-            }
-            else
-                vkDestroyFence(dev, fence, nullptr);
-        }
+            vkFreeCommandBuffers(device->device(), pool, 1, &cmd);
+        }, buf.presentSem);
+        cmd = VK_NULL_HANDLE;
     }
 
     if (!async)
