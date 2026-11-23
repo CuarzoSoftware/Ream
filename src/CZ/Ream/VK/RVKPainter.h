@@ -25,6 +25,15 @@ public:
     // Ends the render pass and submits recorded work (blocking). Called by ~RVKPass.
     void flush() noexcept;
 
+    /**
+     * @brief Submits the work of every painter of this thread still recording (but @p except).
+     *
+     * Layouts are tracked as commands are recorded, so they must be submitted in that order too:
+     * a painter starting to record, or Skia about to draw (see RVKPass::getCanvas()), submits the
+     * ones recorded before. Passes nest (e.g. baking within a frame), so several may be recording.
+     */
+    static void FlushRecording(RVKPainter *except = nullptr) noexcept;
+
     ~RVKPainter() noexcept;
 private:
     friend class RVKDevice;
@@ -36,6 +45,15 @@ private:
     void endRenderPassIfActive() noexcept;
     void transitionSource(const std::shared_ptr<RImage> &img) noexcept; // -> SHADER_READ_ONLY, outside render pass
     float *reserveVertices(UInt32 vertexCount, UInt32 &firstVertex) noexcept; // returns mapped write ptr
+
+    // Per-pass resources, chained when full (a pass may draw any number of images/vertices):
+    // the full ones are kept until the pass is done with them (freed with it).
+    bool createDescPool() noexcept;
+    bool createVbo() noexcept;
+    VkDescriptorSet allocDescriptorSet(VkDescriptorSetLayout layout) noexcept;
+    struct Vbo { VkBuffer buffer; VkDeviceMemory memory; };
+    std::vector<VkDescriptorPool> m_fullDescPools;
+    std::vector<Vbo> m_fullVbos;
 
     RVKImage *m_target { nullptr };
     VkFormat m_format { VK_FORMAT_UNDEFINED };

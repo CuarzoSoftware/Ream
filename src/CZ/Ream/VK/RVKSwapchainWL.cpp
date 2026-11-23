@@ -264,8 +264,10 @@ std::optional<const RSwapchainImage> RVKSwapchainWL::acquire() noexcept
     auto &buf { m_buffers[index] };
     const UInt32 age { buf.used ? (m_frame - buf.lastFrame) : 0 };
 
-    // A freshly acquired swapchain image has undefined content.
-    buf.image->setLayout(VK_IMAGE_LAYOUT_UNDEFINED);
+    // Never presented: undefined content. Presented before: it keeps that frame (its age says how
+    // old), in PRESENT_SRC. Transitioning it from UNDEFINED instead would let the driver discard it,
+    // losing everything a partial repaint (by its age) doesn't redraw.
+    buf.image->setLayout(buf.used ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_UNDEFINED);
 
     m_acquired = true;
     m_currentIndex = index;

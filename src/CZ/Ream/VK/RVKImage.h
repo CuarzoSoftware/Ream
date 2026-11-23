@@ -135,8 +135,28 @@ public:
      */
     void syncLayoutFromSkia() const noexcept;
 
+    /**
+     * @brief Tells Skia the layout tracked here (no transition recorded).
+     *
+     * Skia keeps its own record, which goes stale once the painter transitions the image (e.g.
+     * sampled after Skia drew it). Rendering or sampling from a stale layout is undefined (e.g.
+     * re-baked text came out empty). Called before each Skia use (skSurface(), skImage(), and
+     * RVKPass switching from the painter to Skia).
+     */
+    void syncLayoutToSkia() const noexcept;
+
+    /**
+     * @brief Takes the layout Skia changed the image to (e.g. sampled by Skia after the painter
+     *        rendered into it), its pending work submitted first so the queue order matches.
+     *
+     * Ream's own transitions update Skia's record (setTrackedLayout(), transitionLayout()), so a
+     * difference means Skia transitioned it. Call before using the tracked layout.
+     */
+    void adoptSkiaLayout() const noexcept;
+
     ~RVKImage() noexcept;
 private:
+    void syncLayoutToSkiaLocked() const noexcept;
     RVKImage(std::shared_ptr<RCore> core, RVKDevice *device, SkISize size,
              const RFormatInfo *formatInfo, SkAlphaType alphaType, RModifier modifier) noexcept;
 
@@ -189,6 +209,10 @@ private:
 
     mutable std::unordered_map<std::thread::id, ThreadViews> m_views;
     mutable std::mutex m_mutex;
+
+    // skImage() of DRM-modifier images (e.g. imported DMA-bufs): Skia doesn't sample them (it wraps
+    // them as external textures), so a copy with optimal tiling, made once (see skImage())
+    mutable std::shared_ptr<RSurface> m_skCopy;
 
     // Scanout / DMA interop (GBM storage or imported buffers). m_bo lives in the base class.
     mutable std::shared_ptr<RDRMFramebuffer> m_drmFb;

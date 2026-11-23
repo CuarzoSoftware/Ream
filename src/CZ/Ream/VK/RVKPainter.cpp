@@ -9,6 +9,7 @@
 #include <CZ/Ream/RLog.h>
 
 #include <algorithm>
+#include <CZ/skia/gpu/ganesh/GrDirectContext.h>
 #include <cmath>
 #include <cstring>
 
@@ -24,15 +25,31 @@ RVKPainter::RVKPainter(std::shared_ptr<RSurface> surface, RVKDevice *device) noe
         m_format = m_target->vkFormat();
 }
 
+// The painters of this thread recording (see FlushRecording())
+static thread_local std::vector<RVKPainter*> t_recording;
+
+void RVKPainter::FlushRecording(RVKPainter *except) noexcept
+{
+    // A copy: flush() removes each one
+    const auto recording { t_recording };
+
+    for (RVKPainter *p : recording)
+        if (p != except)
+            p->flush();
+}
+
 RVKPainter::~RVKPainter() noexcept
 {
     flush();
+    std::erase(t_recording, this);
 
     const VkDevice d { dev()->device() };
     if (m_vboMem != VK_NULL_HANDLE) { vkUnmapMemory(d, m_vboMem); vkFreeMemory(d, m_vboMem, nullptr); }
     if (m_vbo != VK_NULL_HANDLE) vkDestroyBuffer(d, m_vbo, nullptr);
     if (m_framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(d, m_framebuffer, nullptr);
     if (m_descPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(d, m_descPool, nullptr);
+    for (VkDescriptorPool p : m_fullDescPools) vkDestroyDescriptorPool(d, p, nullptr);
+    for (const Vbo &v : m_fullVbos) { vkFreeMemory(d, v.memory, nullptr); vkDestroyBuffer(d, v.buffer, nullptr); }
     if (m_pool != VK_NULL_HANDLE) vkDestroyCommandPool(d, m_pool, nullptr);
 }
 
@@ -53,6 +70,13 @@ bool RVKPainter::beginRecording() noexcept
 
     if (!m_target || m_format == VK_FORMAT_UNDEFINED || m_target->vkImageView() == VK_NULL_HANDLE)
         return false;
+
+    // What was recorded before (other painters, Skia) goes first: the layouts tracked meanwhile
+    // assume that order
+    FlushRecording(this);
+
+    if (auto ctx { dev()->skContext() })
+        ctx->flushAndSubmit(GrSyncCpu::kNo);
 
     const VkDevice d { dev()->device() };
     auto *pm { dev()->pipelines() };
@@ -88,47 +112,12 @@ bool RVKPainter::beginRecording() noexcept
     if (vkCreateFramebuffer(d, &fbi, nullptr, &m_framebuffer) != VK_SUCCESS)
         return false;
 
-    if (m_vbo == VK_NULL_HANDLE)
-    {
-        VkBufferCreateInfo bi {};
-        bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bi.size = VBO_CAPACITY;
-        bi.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-        bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        if (vkCreateBuffer(d, &bi, nullptr, &m_vbo) != VK_SUCCESS)
-            return false;
+    if (m_vbo == VK_NULL_HANDLE && !createVbo())
+        return false;
 
-        VkMemoryRequirements req {};
-        vkGetBufferMemoryRequirements(d, m_vbo, &req);
-        const UInt32 mt { dev()->findMemoryType(req.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) };
-        if (mt == UINT32_MAX)
-            return false;
+    if (m_descPool == VK_NULL_HANDLE && !createDescPool())
+        return false;
 
-        VkMemoryAllocateInfo ai {};
-        ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        ai.allocationSize = req.size;
-        ai.memoryTypeIndex = mt;
-        if (vkAllocateMemory(d, &ai, nullptr, &m_vboMem) != VK_SUCCESS)
-            return false;
-        vkBindBufferMemory(d, m_vbo, m_vboMem, 0);
-        vkMapMemory(d, m_vboMem, 0, VBO_CAPACITY, 0, &m_vboMapped);
-        m_vboCapacity = req.size;
-    }
-
-    if (m_descPool == VK_NULL_HANDLE)
-    {
-        VkDescriptorPoolSize ps {};
-        ps.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        ps.descriptorCount = 512;
-        VkDescriptorPoolCreateInfo dpi {};
-        dpi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        dpi.maxSets = 256;
-        dpi.poolSizeCount = 1;
-        dpi.pPoolSizes = &ps;
-        if (vkCreateDescriptorPool(d, &dpi, nullptr, &m_descPool) != VK_SUCCESS)
-            return false;
-    }
     m_vertexCount = 0;
 
     VkCommandBufferAllocateInfo cai {};
@@ -144,12 +133,18 @@ bool RVKPainter::beginRecording() noexcept
     cbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(m_cmd, &cbi);
 
-    // Move the target into COLOR_ATTACHMENT_OPTIMAL (loadOp=LOAD preserves its content).
+    // Move the target into COLOR_ATTACHMENT_OPTIMAL (loadOp=LOAD preserves its content), from the
+    // layout it really is in (Skia may have changed it, e.g. sampled it), after whatever last
+    // wrote or read it.
+    m_target->adoptSkiaLayout();
     m_target->transitionLayout(m_cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT);
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT);
 
     m_recording = true;
+    t_recording.push_back(this);
     return true;
 }
 
@@ -195,14 +190,19 @@ void RVKPainter::transitionSource(const std::shared_ptr<RImage> &img) noexcept
     // source's dma-buf onto this device first, then transition that per-device image.
     if (dev() != vk->allocatorVK())
         vk->ensureCrossDevice(dev());
+    else
+        vk->adoptSkiaLayout(); // Skia may have changed it
 
     if (vk->layout(dev()) != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
     {
         // Layout transitions are illegal inside a render pass.
         endRenderPassIfActive();
+        // After whatever wrote it (rendered by the painter or Skia, uploaded or copied), even in
+        // earlier submissions: without this dependency it may be sampled before those writes land
+        // (e.g. text baked by Skia right before being drawn showed up empty)
         vk->transitionLayout(m_cmd, dev(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0, VK_ACCESS_SHADER_READ_BIT);
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
     }
 
     // Cross-device write->read is synchronized via the source's write sync (sync_file fence).
@@ -212,11 +212,131 @@ void RVKPainter::transitionSource(const std::shared_ptr<RImage> &img) noexcept
     m_readImages.push_back(img);
 }
 
+bool RVKPainter::createVbo() noexcept
+{
+    const VkDevice d { dev()->device() };
+    VkBufferCreateInfo bi {};
+    bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bi.size = VBO_CAPACITY;
+    bi.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (vkCreateBuffer(d, &bi, nullptr, &m_vbo) != VK_SUCCESS)
+    {
+        m_vbo = VK_NULL_HANDLE;
+        return false;
+    }
+
+    VkMemoryRequirements req {};
+    vkGetBufferMemoryRequirements(d, m_vbo, &req);
+    const UInt32 mt { dev()->findMemoryType(req.memoryTypeBits,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) };
+
+    VkMemoryAllocateInfo ai {};
+    ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    ai.allocationSize = req.size;
+    ai.memoryTypeIndex = mt;
+
+    if (mt == UINT32_MAX || vkAllocateMemory(d, &ai, nullptr, &m_vboMem) != VK_SUCCESS)
+    {
+        vkDestroyBuffer(d, m_vbo, nullptr);
+        m_vbo = VK_NULL_HANDLE;
+        m_vboMem = VK_NULL_HANDLE;
+        return false;
+    }
+
+    vkBindBufferMemory(d, m_vbo, m_vboMem, 0);
+    vkMapMemory(d, m_vboMem, 0, VBO_CAPACITY, 0, &m_vboMapped);
+    m_vboCapacity = req.size;
+    m_vertexCount = 0;
+    return true;
+}
+
+bool RVKPainter::createDescPool() noexcept
+{
+    VkDescriptorPoolSize ps {};
+    ps.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    ps.descriptorCount = 512;
+    VkDescriptorPoolCreateInfo dpi {};
+    dpi.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    dpi.maxSets = 256;
+    dpi.poolSizeCount = 1;
+    dpi.pPoolSizes = &ps;
+
+    if (vkCreateDescriptorPool(dev()->device(), &dpi, nullptr, &m_descPool) != VK_SUCCESS)
+    {
+        m_descPool = VK_NULL_HANDLE;
+        return false;
+    }
+
+    return true;
+}
+
+VkDescriptorSet RVKPainter::allocDescriptorSet(VkDescriptorSetLayout layout) noexcept
+{
+    VkDescriptorSetAllocateInfo dsa {};
+    dsa.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    dsa.descriptorPool = m_descPool;
+    dsa.descriptorSetCount = 1;
+    dsa.pSetLayouts = &layout;
+    VkDescriptorSet set { VK_NULL_HANDLE };
+
+    if (m_descPool != VK_NULL_HANDLE && vkAllocateDescriptorSets(dev()->device(), &dsa, &set) == VK_SUCCESS)
+        return set;
+
+    // Full (a pass with many images): another pool, the full one kept until the pass is done
+    if (m_descPool != VK_NULL_HANDLE)
+        m_fullDescPools.push_back(m_descPool);
+
+    m_descPool = VK_NULL_HANDLE;
+
+    if (!createDescPool())
+    {
+        dev()->log(CZError, CZLN, "Failed to create a descriptor pool");
+        return VK_NULL_HANDLE;
+    }
+
+    dsa.descriptorPool = m_descPool;
+
+    if (vkAllocateDescriptorSets(dev()->device(), &dsa, &set) != VK_SUCCESS)
+    {
+        dev()->log(CZError, CZLN, "Failed to allocate a descriptor set");
+        return VK_NULL_HANDLE;
+    }
+
+    return set;
+}
+
 float *RVKPainter::reserveVertices(UInt32 vertexCount, UInt32 &firstVertex) noexcept
 {
-    const VkDeviceSize needed { (VkDeviceSize)(m_vertexCount + vertexCount) * 6 * sizeof(float) };
+    VkDeviceSize needed { (VkDeviceSize)(m_vertexCount + vertexCount) * 6 * sizeof(float) };
+
+    // Full: another buffer (draws bind m_vbo after reserving), the full one kept until the pass is done
     if (needed > m_vboCapacity)
-        return nullptr; // overflow (should not happen for typical regions)
+    {
+        if ((VkDeviceSize)vertexCount * 6 * sizeof(float) > VBO_CAPACITY)
+        {
+            dev()->log(CZError, CZLN, "Too many vertices for one draw ({})", vertexCount);
+            return nullptr;
+        }
+
+        if (m_vbo != VK_NULL_HANDLE)
+        {
+            vkUnmapMemory(dev()->device(), m_vboMem);
+            m_fullVbos.push_back({ m_vbo, m_vboMem });
+        }
+
+        m_vbo = VK_NULL_HANDLE;
+        m_vboMem = VK_NULL_HANDLE;
+        m_vboMapped = nullptr;
+
+        if (!createVbo())
+        {
+            dev()->log(CZError, CZLN, "Failed to create a vertex buffer");
+            return nullptr;
+        }
+
+        needed = (VkDeviceSize)vertexCount * 6 * sizeof(float);
+    }
 
     firstVertex = m_vertexCount;
     float *ptr { static_cast<float*>(m_vboMapped) + (size_t)m_vertexCount * 6 };
@@ -228,6 +348,8 @@ void RVKPainter::flush() noexcept
 {
     if (!m_recording)
         return;
+
+    std::erase(t_recording, this);
 
     endRenderPassIfActive();
 
@@ -260,8 +382,10 @@ void RVKPainter::flush() noexcept
         vkFreeCommandBuffers(d, m_pool, 1, &m_cmd);
         if (m_framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(d, m_framebuffer, nullptr);
         if (m_descPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(d, m_descPool, nullptr);
+        for (VkDescriptorPool p : m_fullDescPools) vkDestroyDescriptorPool(d, p, nullptr);
         if (m_vboMem != VK_NULL_HANDLE) { vkUnmapMemory(d, m_vboMem); vkFreeMemory(d, m_vboMem, nullptr); }
         if (m_vbo != VK_NULL_HANDLE) vkDestroyBuffer(d, m_vbo, nullptr);
+        for (const Vbo &v : m_fullVbos) { vkFreeMemory(d, v.memory, nullptr); vkDestroyBuffer(d, v.buffer, nullptr); }
         if (m_pool != VK_NULL_HANDLE) vkDestroyCommandPool(d, m_pool, nullptr);
     }
     else
@@ -279,9 +403,12 @@ void RVKPainter::flush() noexcept
         RVKDevice *device { dev() };
 
         device->deferDestroy(fence, [device, pool, cmd, vbo, vboMem, descPool, framebuffer,
-                                     ow = std::move(ownedWaits)]()
+                                     ow = std::move(ownedWaits), fullPools = std::move(m_fullDescPools),
+                                     fullVbos = std::move(m_fullVbos)]()
         {
             const VkDevice dd { device->device() };
+            for (VkDescriptorPool p : fullPools) vkDestroyDescriptorPool(dd, p, nullptr);
+            for (const Vbo &v : fullVbos) { vkFreeMemory(dd, v.memory, nullptr); vkDestroyBuffer(dd, v.buffer, nullptr); }
             if (cmd != VK_NULL_HANDLE) vkFreeCommandBuffers(dd, pool, 1, &cmd);
             if (framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(dd, framebuffer, nullptr);
             if (descPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(dd, descPool, nullptr);
@@ -298,6 +425,8 @@ void RVKPainter::flush() noexcept
     m_descPool = VK_NULL_HANDLE;
     m_vbo = VK_NULL_HANDLE;
     m_vboMem = VK_NULL_HANDLE;
+    m_fullDescPools.clear();
+    m_fullVbos.clear();
     m_vboMapped = nullptr;
     m_vboCapacity = 0;
     m_pool = VK_NULL_HANDLE;
@@ -560,13 +689,8 @@ bool RVKPainter::drawImage(const RDrawImageInfo &imageInfo, const SkRegion *clip
 
     // Allocate + update a descriptor set (image + mask combined image samplers).
     VkDescriptorSetLayout setLayout { pm->imageSetLayout() };
-    VkDescriptorSetAllocateInfo dsa {};
-    dsa.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    dsa.descriptorPool = m_descPool;
-    dsa.descriptorSetCount = 1;
-    dsa.pSetLayouts = &setLayout;
-    VkDescriptorSet set { VK_NULL_HANDLE };
-    if (vkAllocateDescriptorSets(dev()->device(), &dsa, &set) != VK_SUCCESS)
+    const VkDescriptorSet set { allocDescriptorSet(setLayout) };
+    if (set == VK_NULL_HANDLE)
         return false;
 
     VkSampler imgSampler { pm->sampler(imageInfo.minFilter, imageInfo.magFilter, imageInfo.wrapS, imageInfo.wrapT) };
@@ -685,13 +809,8 @@ bool RVKPainter::drawImageEffect(const RDrawImageInfo &imageInfo, ImageEffect ef
         return false;
 
     VkDescriptorSetLayout setLayout { pm->imageSetLayout() };
-    VkDescriptorSetAllocateInfo dsa {};
-    dsa.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    dsa.descriptorPool = m_descPool;
-    dsa.descriptorSetCount = 1;
-    dsa.pSetLayouts = &setLayout;
-    VkDescriptorSet set { VK_NULL_HANDLE };
-    if (vkAllocateDescriptorSets(dev()->device(), &dsa, &set) != VK_SUCCESS)
+    const VkDescriptorSet set { allocDescriptorSet(setLayout) };
+    if (set == VK_NULL_HANDLE)
         return false;
 
     VkSampler s { pm->sampler(imageInfo.minFilter, imageInfo.magFilter, imageInfo.wrapS, imageInfo.wrapT) };

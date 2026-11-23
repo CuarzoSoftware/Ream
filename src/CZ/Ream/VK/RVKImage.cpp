@@ -8,6 +8,9 @@
 #include <CZ/Ream/GBM/RGBMBo.h>
 #include <CZ/Ream/RCore.h>
 #include <CZ/Ream/RLog.h>
+#include <CZ/Ream/RPainter.h>
+#include <CZ/Ream/RPass.h>
+#include <CZ/Ream/RSurface.h>
 #include <CZ/Core/CZBitset.h>
 
 #include <unistd.h>
@@ -17,6 +20,7 @@
 #include <CZ/skia/gpu/ganesh/GrDirectContext.h>
 #include <CZ/skia/gpu/ganesh/vk/GrVkTypes.h>
 #include <CZ/skia/gpu/ganesh/vk/GrVkBackendSurface.h>
+#include <CZ/skia/gpu/vk/VulkanMutableTextureState.h>
 #include <CZ/skia/gpu/ganesh/SkImageGanesh.h>
 #include <CZ/skia/gpu/ganesh/SkSurfaceGanesh.h>
 
@@ -768,6 +772,53 @@ sk_sp<SkImage> RVKImage::skImage(RDevice *device) const noexcept
     if (dev != m_dev) // cross-device sharing handled in a later phase
         return {};
 
+    // DRM-modifier tiling: Skia only wraps these as external textures, which it refuses to sample
+    // as images. A copy with optimal tiling instead, drawn once by the painter (which samples them
+    // fine). Fine for images not written afterwards (e.g. icons shared by a service): the copy
+    // isn't updated.
+    if (m_tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)
+    {
+        std::shared_ptr<RSurface> copy;
+
+        {
+            std::lock_guard<std::mutex> lock { m_mutex };
+            copy = m_skCopy;
+        }
+
+        if (!copy)
+        {
+            auto self { m_self.lock() };
+            copy = self ? RSurface::Make(size(), 1, alphaType() != kOpaque_SkAlphaType) : nullptr;
+
+            if (!copy)
+                return {};
+
+            {
+                auto pass { copy->beginPass(RPassCap_Painter) };
+                auto *p { pass ? pass->getPainter() : nullptr };
+
+                if (!p)
+                    return {};
+
+                RDrawImageInfo info {};
+                info.image = self;
+                info.src = SkRect::Make(size());
+                info.dst = SkIRect::MakeSize(size());
+                p->setBlendMode(RBlendMode::Src);
+                p->drawImage(info);
+            }
+
+            std::lock_guard<std::mutex> lock { m_mutex };
+
+            if (!m_skCopy)
+                m_skCopy = copy;
+
+            copy = m_skCopy;
+        }
+
+        return copy->image()->skImage(device);
+    }
+
     std::lock_guard<std::mutex> lock { m_mutex };
 
     if (!ensureBackendTexture())
@@ -777,12 +828,17 @@ sk_sp<SkImage> RVKImage::skImage(RDevice *device) const noexcept
     if (!ctx)
         return {};
 
+    syncLayoutToSkiaLocked();
+
     auto &tv { threadViews(dev) };
     if (!tv.image)
     {
         const SkColorType ct { RSKFormat::FromDRM(formatInfo().format) };
         tv.image = SkImages::BorrowTextureFrom(ctx.get(), m_backendTexture,
                                                kTopLeft_GrSurfaceOrigin, ct, alphaType(), nullptr);
+
+        if (!tv.image)
+            RLog(CZWarning, CZLN, "RVKImage: Skia couldn't wrap the image (VkFormat {}, tiling {})", int(m_vkFormat), int(m_tiling));
     }
     return tv.image;
 }
@@ -801,6 +857,8 @@ sk_sp<SkSurface> RVKImage::skSurface(RDevice *device) const noexcept
     auto ctx { m_dev->skContext() };
     if (!ctx)
         return {};
+
+    syncLayoutToSkiaLocked();
 
     auto &tv { threadViews(dev) };
     if (!tv.surface)
@@ -896,6 +954,55 @@ void RVKImage::setTrackedLayout(VkImageLayout layout) const noexcept
         GrBackendRenderTargets::SetVkImageLayout(&m_backendRT, layout);
 }
 
+void RVKImage::adoptSkiaLayout() const noexcept
+{
+    VkImageLayout skia;
+
+    {
+        std::lock_guard<std::mutex> lock { m_mutex };
+        skia = m_layout;
+        GrVkImageInfo info {};
+
+        // Both are told every layout Ream sets: whichever differs was changed by Skia
+        if (m_hasBackendRT && GrBackendRenderTargets::GetVkImageInfo(m_backendRT, &info) && info.fImageLayout != m_layout)
+            skia = info.fImageLayout;
+
+        if (m_hasBackendTexture && GrBackendTextures::GetVkImageInfo(m_backendTexture, &info) && info.fImageLayout != m_layout)
+            skia = info.fImageLayout;
+
+        if (skia == m_layout)
+            return;
+    }
+
+    // Skia's commands (recorded, maybe not submitted yet) must run before Ream's next ones on it
+    if (auto ctx { m_dev->skContext() })
+        ctx->flushAndSubmit(GrSyncCpu::kNo);
+
+    std::lock_guard<std::mutex> lock { m_mutex };
+    m_layout = skia;
+    syncLayoutToSkiaLocked();
+}
+
+void RVKImage::syncLayoutToSkia() const noexcept
+{
+    std::lock_guard<std::mutex> lock { m_mutex };
+    syncLayoutToSkiaLocked();
+}
+
+void RVKImage::syncLayoutToSkiaLocked() const noexcept
+{
+    if (m_layout == VK_IMAGE_LAYOUT_UNDEFINED)
+        return;
+
+    const auto state { skgpu::MutableTextureStates::MakeVulkan(m_layout, VK_QUEUE_FAMILY_IGNORED) };
+
+    if (m_hasBackendRT)
+        m_backendRT.setMutableState(state);
+
+    if (m_hasBackendTexture)
+        m_backendTexture.setMutableState(state);
+}
+
 void RVKImage::syncLayoutFromSkia() const noexcept
 {
     std::lock_guard<std::mutex> lock { m_mutex };
@@ -906,10 +1013,16 @@ void RVKImage::syncLayoutFromSkia() const noexcept
         m_layout = info.fImageLayout;
     else if (m_hasBackendTexture && GrBackendTextures::GetVkImageInfo(m_backendTexture, &info))
         m_layout = info.fImageLayout;
+
+    // Skia's two records (render target, texture) agree again: the other one may be stale, which
+    // adoptSkiaLayout() would take as a change by Skia
+    syncLayoutToSkiaLocked();
 }
 
 bool RVKImage::writePixels(const RPixelBufferRegion &region) noexcept
 {
+    adoptSkiaLayout(); // Skia may have changed it
+
     if (region.format != formatInfo().format)
     {
         RLog(CZError, CZLN, "RVKImage::writePixels: format mismatch");
@@ -1023,6 +1136,8 @@ cleanup:
 
 bool RVKImage::readPixels(const RPixelBufferRegion &region) noexcept
 {
+    adoptSkiaLayout(); // Skia may have changed it
+
     if (region.format != formatInfo().format)
     {
         RLog(CZError, CZLN, "RVKImage::readPixels: format mismatch");
