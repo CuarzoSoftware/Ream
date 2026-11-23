@@ -50,7 +50,6 @@ RVKPainter::~RVKPainter() noexcept
     dev()->recycleDescPool(m_descPool);
     for (VkDescriptorPool p : m_fullDescPools) dev()->recycleDescPool(p);
     for (const Vbo &v : m_fullVbos) dev()->recyclePassVbo(v);
-    dev()->recyclePassCmd({ m_pool, m_cmd });
 }
 
 RVKDevice *RVKPainter::dev() const noexcept { return (RVKDevice*)m_device; }
@@ -75,8 +74,9 @@ bool RVKPainter::beginRecording() noexcept
     // assume that order
     FlushRecording(this);
 
-    if (auto ctx { dev()->skContext() })
-        ctx->flushAndSubmit(GrSyncCpu::kNo);
+    if (RVKDevice::TakeSkiaUsed())
+        if (auto ctx { dev()->skContext() })
+            ctx->flushAndSubmit(GrSyncCpu::kNo);
 
     const VkDevice d { dev()->device() };
     auto *pm { dev()->pipelines() };
@@ -89,28 +89,6 @@ bool RVKPainter::beginRecording() noexcept
 
     const UInt32 W { (UInt32)m_target->size().width() };
     const UInt32 H { (UInt32)m_target->size().height() };
-
-    // A recycled command pool and buffer of this thread, else new ones
-    if (m_pool == VK_NULL_HANDLE)
-    {
-        RVKDevice::PassCmd recycled {};
-
-        if (dev()->takePassCmd(recycled))
-        {
-            m_pool = recycled.pool;
-            m_cmd = recycled.cmd;
-        }
-    }
-
-    if (m_pool == VK_NULL_HANDLE)
-    {
-        VkCommandPoolCreateInfo pci {};
-        pci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
-        pci.queueFamilyIndex = dev()->graphicsQueueFamily();
-        if (vkCreateCommandPool(d, &pci, nullptr, &m_pool) != VK_SUCCESS)
-            return false;
-    }
 
     VkImageView view { m_target->vkImageView() };
     VkFramebufferCreateInfo fbi {};
@@ -132,26 +110,18 @@ bool RVKPainter::beginRecording() noexcept
 
     m_vertexCount = 0;
 
-    if (m_cmd == VK_NULL_HANDLE)
-    {
-        VkCommandBufferAllocateInfo cai {};
-        cai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        cai.commandPool = m_pool;
-        cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        cai.commandBufferCount = 1;
-        if (vkAllocateCommandBuffers(d, &cai, &m_cmd) != VK_SUCCESS)
-            return false;
-    }
+    // Skia may have changed its layout (and submits its work if so): before recording
+    m_target->adoptSkiaLayout();
 
-    VkCommandBufferBeginInfo cbi {};
-    cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    vkBeginCommandBuffer(m_cmd, &cbi);
+    // This thread's stream: consecutive passes share a command buffer (see RVKDevice::beginStream())
+    m_cmd = dev()->beginStream();
+
+    if (m_cmd == VK_NULL_HANDLE)
+        return false;
 
     // Move the target into COLOR_ATTACHMENT_OPTIMAL (loadOp=LOAD preserves its content), from the
     // layout it really is in (Skia may have changed it, e.g. sampled it), after whatever last
     // wrote or read it.
-    m_target->adoptSkiaLayout();
     m_target->transitionLayout(m_cmd, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -386,48 +356,31 @@ void RVKPainter::flush() noexcept
     // SHADER_READ_ONLY, readback -> TRANSFER_SRC, present -> PRESENT_SRC).
     m_target->setTrackedLayout(VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-    vkEndCommandBuffer(m_cmd);
-
-    const VkDevice d { dev()->device() };
-
-    // Queued WITHOUT blocking: the CPU keeps recording other passes while the GPU works, and the
-    // device sends the frame's passes together (see RVKDevice::enqueueCommand()). The per-pass
-    // resources are recycled once the GPU is done (clearGarbage(), called each frame).
-    // CZ_REAM_VK_SYNC_SUBMIT=1 forces a blocking submit per pass (for A/B comparison / debugging).
-    static const bool forceSync { [] { const char *e { std::getenv("CZ_REAM_VK_SYNC_SUBMIT") }; return e && atoi(e) != 0; }() };
-
-    if (forceSync)
+    // The pass stays in this thread's stream (sent with the next ones, see RVKDevice::beginStream()).
+    // Its resources are recycled once the GPU is done (clearGarbage(), on this thread).
     {
-        dev()->submitCommand(m_cmd);
-        if (m_framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(d, m_framebuffer, nullptr);
-        dev()->recycleDescPool(m_descPool);
-        for (VkDescriptorPool p : m_fullDescPools) dev()->recycleDescPool(p);
-        dev()->recyclePassVbo({ m_vbo, m_vboMem, m_vboMapped, m_vboCapacity });
-        for (const Vbo &v : m_fullVbos) dev()->recyclePassVbo(v);
-        dev()->recyclePassCmd({ m_pool, m_cmd });
-    }
-    else
-    {
-        // Back to the device once the GPU is done (recycled by the next passes, see
-        // RVKDevice::takePassCmd()). Runs on this thread (command pools).
-        const RVKDevice::PassCmd cmd { m_pool, m_cmd };
         const Vbo vbo { m_vbo, m_vboMem, m_vboMapped, m_vboCapacity };
         const VkDescriptorPool descPool { m_descPool };
         const VkFramebuffer framebuffer { m_framebuffer };
         RVKDevice *device { dev() };
 
-        device->enqueueCommand(m_cmd, [device, cmd, vbo, descPool, framebuffer,
-                                       fullPools = std::move(m_fullDescPools),
-                                       fullVbos = std::move(m_fullVbos)]()
+        device->endStream([device, vbo, descPool, framebuffer,
+                           fullPools = std::move(m_fullDescPools),
+                           fullVbos = std::move(m_fullVbos)]()
         {
             for (VkDescriptorPool p : fullPools) device->recycleDescPool(p);
             for (const Vbo &v : fullVbos) device->recyclePassVbo(v);
             if (framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(device->device(), framebuffer, nullptr);
             device->recycleDescPool(descPool);
             device->recyclePassVbo(vbo);
-            device->recyclePassCmd(cmd);
         });
     }
+
+    // CZ_REAM_VK_SYNC_SUBMIT=1: each pass submitted and waited for (A/B comparison / debugging)
+    static const bool forceSync { [] { const char *e { std::getenv("CZ_REAM_VK_SYNC_SUBMIT") }; return e && atoi(e) != 0; }() };
+
+    if (forceSync)
+        dev()->wait();
 
     // These resources now belong to the GC (or were freed on the fallback path).
     m_cmd = VK_NULL_HANDLE;
@@ -439,7 +392,6 @@ void RVKPainter::flush() noexcept
     m_fullVbos.clear();
     m_vboMapped = nullptr;
     m_vboCapacity = 0;
-    m_pool = VK_NULL_HANDLE;
 
     // Publish a read sync for source images (ordered after this submit on the same queue).
     if (!m_readImages.empty())

@@ -771,6 +771,7 @@ static SkColorType SurfaceColorType(VkFormat fmt, SkColorType fallback) noexcept
 
 sk_sp<SkImage> RVKImage::skImage(RDevice *device) const noexcept
 {
+    RVKDevice::MarkSkiaUsed(); // It may record work with it
     RVKDevice *dev { device ? device->asVK() : m_dev };
     if (dev != m_dev) // cross-device sharing handled in a later phase
         return {};
@@ -848,6 +849,7 @@ sk_sp<SkImage> RVKImage::skImage(RDevice *device) const noexcept
 
 sk_sp<SkSurface> RVKImage::skSurface(RDevice *device) const noexcept
 {
+    RVKDevice::MarkSkiaUsed(); // It may record work with it
     RVKDevice *dev { device ? device->asVK() : m_dev };
     if (dev != m_dev)
         return {};

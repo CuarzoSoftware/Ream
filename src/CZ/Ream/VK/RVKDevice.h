@@ -14,6 +14,8 @@
 #include <thread>
 #include <chrono>
 #include <mutex>
+#include <atomic>
+#include <condition_variable>
 
 /**
  * @brief Vulkan backend implementation of RDevice.
@@ -115,8 +117,47 @@ public:
      */
     bool enqueueCommand(VkCommandBuffer cmd, std::function<void()> cleanup, VkSemaphore signal = VK_NULL_HANDLE) const noexcept;
 
-    /// @brief Submits the commands queued by enqueueCommand(), if any.
+    /// @name Skia work of this thread
+    /// Flushing Skia when it has nothing to do still costs (it walks its tasks and buffer pools):
+    /// RVKPainter flushes it before recording only if Skia was handed something since (a canvas,
+    /// an SkSurface or an SkImage of an image: the only ways to make it record work).
+    /// @{
+    static void MarkSkiaUsed() noexcept;
+    static bool TakeSkiaUsed() noexcept; ///< And clears it
+    /// @}
+
+    /// @brief Submits the commands queued by enqueueCommand(), if any (this thread's stream too).
     void flushBatch() const noexcept;
+
+    /// @name Command streams (RVKPainter)
+    /// Each thread records its consecutive passes into a single command buffer (its stream) instead
+    /// of one per pass: each command buffer costs the driver a reset and a submission entry. The
+    /// stream is queued (see enqueueCommand()) by its thread before any other submission of that
+    /// thread (present, uploads, readbacks, Skia, wait()...) and by RVKCore::clearGarbage(), or by
+    /// another thread needing a sync made while it was open (see resolvePoint()).
+    /// @{
+
+    /// @brief This thread's stream, begun if needed, to record a pass into until endStream().
+    ///        VK_NULL_HANDLE on failure.
+    VkCommandBuffer beginStream() const noexcept;
+
+    /// @brief Ends recording a pass into this thread's stream. @p cleanup runs once the GPU is done.
+    void endStream(std::function<void()> cleanup) const noexcept;
+
+    /// @brief Queues this thread's stream for the next batched submission (unless recording a pass).
+    void sendOwnStream() const noexcept;
+
+    /// A sync made while its thread's stream was open: its timeline value, once the stream is queued
+    struct SyncPoint { std::atomic<UInt64> value { 0 }; };
+
+    /**
+     * @brief The timeline value of @p point, queueing the stream of @p owner if still open.
+     *
+     * From another thread, waits for @p owner to end the pass it may be recording (bounded).
+     * @return 0 if it couldn't be queued (e.g. @p owner is this thread, recording a pass).
+     */
+    UInt64 resolvePoint(const std::shared_ptr<SyncPoint> &point, std::thread::id owner) const noexcept;
+    /// @}
 
     /// @brief flushBatch() if its oldest command waits for 32 ms or more (e.g. nothing presented):
     ///        called by RVKCore::clearGarbage() (each frame and main loop iteration).
@@ -142,17 +183,19 @@ public:
     /**
      * @brief Queues a semaphore for the next queue submission to wait on.
      *
-     * Used by RVKSync::gpuWait so that subsequent GPU work on this device waits for the sync.
+     * Used by RVKSync::gpuWait so that subsequent GPU work of this thread waits for the sync: kept
+     * with its stream, handed to the submission of its next work (never another thread's).
      * If @p owned is true the semaphore is destroyed once consumed by a submission.
      * @return The waitsSerial() of the submission that will consume it.
      */
     UInt64 queueWait(VkSemaphore semaphore, bool owned) const noexcept;
 
     /**
-     * @brief Identifies the next submission consuming the waits of queueWait() (its return value):
-     *        while unchanged, a wait queued earlier still applies to the commands recorded now.
+     * @brief Identifies the next submission of this thread's work, which takes the waits of its
+     *        queueWait() calls (their return value): while unchanged, a wait queued earlier by this
+     *        thread still applies to the commands it records now.
      */
-    UInt64 waitsSerial() const noexcept { std::lock_guard<std::mutex> lock { m_queueMutex }; return m_waitsSerial; }
+    UInt64 waitsSerial() const noexcept;
 
     /**
      * @brief Empty queue submission that signals @p semaphore (and optional @p fence) after all
@@ -200,7 +243,67 @@ private:
     // RVKSync::Make(): a timeline (drm_syncobj imported as a Vulkan timeline semaphore) shared by
     // every sync of this device, a point each, instead of a new syncobj, import, fence and submit
     // per sync. Guarded by m_queueMutex (points must be signalled in increasing order).
-    bool signalSyncTimeline(std::shared_ptr<RDRMTimeline> &timeline, UInt64 &point) const noexcept;
+    bool initSyncTimeline() const noexcept; // The shared timeline, created once
+    // @p pending: set instead of @p point if this thread's stream is open (see SyncPoint)
+    bool signalSyncTimeline(std::shared_ptr<RDRMTimeline> &timeline, UInt64 &point, std::shared_ptr<SyncPoint> &pending) const noexcept;
+
+    // Fence-tracked deferred destruction: cleanup runs once its fence signals (drained by
+    // clearGarbage()). Lets submissions be async without freeing in-flight resources. Each entry
+    // records the thread that created the resources; cleanup MUST run on that same thread because
+    // Vulkan command pools require external synchronization (NVIDIA crashes on cross-thread
+    // destruction that Mesa tolerates). Hence a list per thread (in its Stream), drained by its
+    // clearGarbage(), and one for entries any thread can drain (m_anyGarbage).
+
+    // Shared by the entries of a batch, destroyed with the last one
+    struct Fence
+    {
+        Fence(VkDevice d, VkFence f) noexcept;
+        ~Fence() { if (fence != VK_NULL_HANDLE) vkDestroyFence(device, fence, nullptr); }
+        VkDevice device;
+        VkFence fence; // VK_NULL_HANDLE: already done
+        UInt64 serial; // Creation order, ~submission order (see GarbageList::blocking)
+        bool signaled { false }; // Cached, queried until it signals
+    };
+    struct Garbage
+    {
+        std::shared_ptr<Fence> fence;
+        std::function<void()> cleanup;
+        std::thread::id owner;
+    };
+    struct GarbageList
+    {
+        std::mutex mutex; // Never held while taking another lock
+        std::vector<Garbage> items;
+        // Its oldest fence not signalled yet: fences of a queue signal in submission order, so while
+        // it is pending nothing newer can be done either (one status query, no scan)
+        std::shared_ptr<Fence> blocking;
+    };
+    void pushGarbage(Garbage &&garbage) const noexcept;
+    void drainGarbage(GarbageList &list) const noexcept;
+    mutable GarbageList m_anyGarbage;
+
+    struct Stream
+    {
+        GarbageList garbage; // Entries owned by its thread
+        std::mutex mutex; // Held by its thread while recording a pass, by whoever queues it
+        std::thread::id owner;
+        PassCmd cmd {}; // Null pool: not open
+        std::vector<std::function<void()>> cleanups;
+        std::shared_ptr<SyncPoint> point; // Syncs made while open
+        bool recording { false }; // Read and written by its thread only
+        std::atomic<bool> sendRequested { false };
+        std::mutex waitsMutex; // After m_queueMutex
+        std::vector<std::pair<VkSemaphore, bool>> waits; // queueWait() calls of its thread
+        UInt64 waitsSerial { 0 }; // Incremented when handed over (see waitsSerial())
+    };
+    void handOverWaitsLocked(Stream &stream) const noexcept; // m_queueMutex held
+    Stream *findStream(std::thread::id thread, bool create) const noexcept;
+    void sendStreamLocked(Stream &stream) const noexcept; // stream.mutex held, not m_queueMutex
+    UInt64 m_uid { 0 }; // Unique among devices, even with a reused address (findStream())
+    mutable std::mutex m_streamsMutex;
+    mutable std::unordered_map<std::thread::id, std::unique_ptr<Stream>> m_streams;
+    mutable std::mutex m_streamSentMutex;
+    mutable std::condition_variable m_streamSent;
 
     // Skia's vkQueueSubmit/vkQueueWaitIdle (see initSkia()): the batch first, under the queue lock
     static VKAPI_ATTR VkResult VKAPI_CALL SkQueueSubmit(VkQueue queue, uint32_t count, const VkSubmitInfo *submits, VkFence fence);
@@ -271,36 +374,13 @@ private:
     mutable std::mutex m_queueMutex;
     // Semaphores the next queue submission must wait on (RVKSync::gpuWait). Guarded by m_queueMutex.
     mutable std::vector<std::pair<VkSemaphore, bool>> m_pendingWaits;
-    mutable UInt64 m_waitsSerial { 0 }; // Incremented each time m_pendingWaits are consumed
 
-    // Fence-tracked deferred destruction: cleanup runs once its fence signals (drained by
-    // clearGarbage()). Lets submissions be async without freeing in-flight resources. Each entry
-    // records the thread that created the resources; cleanup MUST run on that same thread because
-    // Vulkan command pools require external synchronization (NVIDIA crashes on cross-thread
-    // destruction that Mesa tolerates). clearGarbage() therefore only drains the caller thread's
-    // entries.
-    // Shared by the entries of a batch, destroyed with the last one
-    struct Fence
-    {
-        VkDevice device;
-        VkFence fence;
-        bool signaled { false }; // Cached: queried once per clearGarbage() until it signals
-        ~Fence() { if (fence != VK_NULL_HANDLE) vkDestroyFence(device, fence, nullptr); }
-    };
-    struct Garbage
-    {
-        std::shared_ptr<Fence> fence; // A null handle: already done
-        std::function<void()> cleanup;
-        std::thread::id owner;
-    };
-    mutable std::mutex m_garbageMutex;
 
     // See takePassCmd()
     mutable std::mutex m_recycleMutex;
     mutable std::unordered_map<std::thread::id, std::vector<PassCmd>> m_freeCmds;
     mutable std::vector<PassVbo> m_freeVbos;
     mutable std::vector<VkDescriptorPool> m_freeDescPools;
-    mutable std::vector<Garbage> m_garbage;
 
     std::unique_ptr<RVKPipeline> m_pipelines;
     std::mutex m_pipelinesMutex;

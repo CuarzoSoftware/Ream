@@ -86,7 +86,7 @@ static VkSemaphore ImportSyncobjTimeline(RVKDevice *device, int syncobjFd) noexc
     return sem;
 }
 
-bool RVKDevice::signalSyncTimeline(std::shared_ptr<RDRMTimeline> &timeline, UInt64 &point) const noexcept
+bool RVKDevice::initSyncTimeline() const noexcept
 {
     std::lock_guard<std::mutex> lock { m_queueMutex };
 
@@ -116,6 +116,50 @@ bool RVKDevice::signalSyncTimeline(std::shared_ptr<RDRMTimeline> &timeline, UInt
         m_syncSemaphore = sem;
         m_syncTimelineState = 1;
     }
+
+    return true;
+}
+
+bool RVKDevice::signalSyncTimeline(std::shared_ptr<RDRMTimeline> &timeline, UInt64 &point, std::shared_ptr<SyncPoint> &pending) const noexcept
+{
+    if (!initSyncTimeline())
+        return false;
+
+    // This thread's stream is open: the sync covers it, its value is assigned when it is queued
+    if (Stream *s { findStream(std::this_thread::get_id(), false) })
+    {
+        const auto attach = [&]() -> bool
+        {
+            if (s->cmd.pool == VK_NULL_HANDLE)
+                return false;
+
+            if (!s->point)
+                s->point = std::make_shared<SyncPoint>();
+
+            pending = s->point;
+            return true;
+        };
+
+        bool attached;
+
+        if (s->recording) // This thread holds its mutex
+            attached = attach();
+        else
+        {
+            std::lock_guard<std::mutex> lock { s->mutex };
+            attached = attach();
+        }
+
+        if (attached)
+        {
+            std::lock_guard<std::mutex> lock { m_queueMutex };
+            timeline = m_syncTimeline;
+            point = 0;
+            return true;
+        }
+    }
+
+    std::lock_guard<std::mutex> lock { m_queueMutex };
 
     // After all the work submitted so far (same queue)
     const UInt64 value { ++m_syncPoint };
@@ -166,10 +210,13 @@ std::shared_ptr<RVKSync> RVKSync::Make(RVKDevice *device) noexcept
         std::shared_ptr<RDRMTimeline> tl;
         UInt64 point;
 
-        if (device->signalSyncTimeline(tl, point))
+        std::shared_ptr<RVKDevice::SyncPoint> pending;
+
+        if (device->signalSyncTimeline(tl, point, pending))
         {
             sync->m_timeline = tl;
             sync->m_point = point;
+            sync->m_pendingPoint = std::move(pending);
             sync->m_sharedTimeline = true;
             return sync;
         }
@@ -262,6 +309,14 @@ std::shared_ptr<RVKSync> RVKSync::FromExternal(int fd, RVKDevice *device) noexce
     return sync;
 }
 
+UInt64 RVKSync::point() const noexcept
+{
+    if (!m_pendingPoint)
+        return m_point;
+
+    return dev()->resolvePoint(m_pendingPoint, threadId());
+}
+
 CZSpFd RVKSync::fd() const noexcept
 {
     // A point of the shared timeline may still be in the device's pending batch
@@ -269,7 +324,10 @@ CZSpFd RVKSync::fd() const noexcept
         dev()->flushBatch();
 
     if (m_timeline)
-        return m_timeline->exportSyncFile(m_point);
+    {
+        const UInt64 p { point() };
+        return p ? m_timeline->exportSyncFile(p) : CZSpFd { -1 };
+    }
 
     if (m_fd.get() < 0)
         return CZSpFd { -1 };
@@ -308,8 +366,13 @@ int RVKSync::cpuWaitImpl(int timeoutMs) const noexcept
         if (m_sharedTimeline)
             dev()->flushBatch();
 
+        const UInt64 p { point() };
+
+        if (!p)
+            return 0; // Its thread is still recording it
+
         const Int64 ns { timeoutMs < 0 ? INT64_MAX : (Int64)timeoutMs * 1000000ll };
-        return m_timeline->waitSync(m_point, m_sharedTimeline ? DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT : 0, ns);
+        return m_timeline->waitSync(p, m_sharedTimeline ? DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT : 0, ns);
     }
 
     if (m_fd.get() < 0)
@@ -348,7 +411,7 @@ bool RVKSync::gpuWait(RDevice *waiter) const noexcept
 
     {
         std::lock_guard<std::mutex> lock { m_queuedMutex };
-        if (m_queuedOn == w && m_queuedSerial == w->waitsSerial())
+        if (m_queuedOn == w && m_queuedThread == std::this_thread::get_id() && m_queuedSerial == w->waitsSerial())
             return true; // The waiter's next submission waits for it already
     }
 
@@ -396,6 +459,7 @@ bool RVKSync::gpuWait(RDevice *waiter) const noexcept
     const UInt64 serial { w->queueWait(temp, true) };
     std::lock_guard<std::mutex> lock { m_queuedMutex };
     m_queuedOn = w;
+    m_queuedThread = std::this_thread::get_id();
     m_queuedSerial = serial;
     return true;
 }

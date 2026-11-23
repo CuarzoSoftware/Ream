@@ -16,12 +16,6 @@ RVKPass::RVKPass(std::shared_ptr<RSurface> surface, std::shared_ptr<RImage> imag
                  sk_sp<SkSurface> skSurface, RDevice *device, CZBitset<RPassCap> caps) noexcept :
     RPass(surface, image, painter, skSurface, device, caps)
 {
-    // Reclaim this thread's finished deferred resources here (runs on the render thread each frame),
-    // so command pools are always destroyed on the thread that created them (Vulkan external-sync
-    // requirement; cross-thread destruction crashes the NVIDIA driver).
-    if (auto *vk { device->asVK() })
-        vk->clearGarbage();
-
     resetGeometry();
 }
 
@@ -57,6 +51,7 @@ RVKPass::~RVKPass() noexcept
 
 SkCanvas *RVKPass::getCanvas(bool sync) const noexcept
 {
+    RVKDevice::MarkSkiaUsed();
     if (!m_skSurface)
         return nullptr;
 

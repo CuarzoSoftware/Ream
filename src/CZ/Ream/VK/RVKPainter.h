@@ -60,8 +60,7 @@ private:
     VkFormat m_format { VK_FORMAT_UNDEFINED };
     VkRenderPass m_rp { VK_NULL_HANDLE };
     VkFramebuffer m_framebuffer { VK_NULL_HANDLE };
-    VkCommandPool m_pool { VK_NULL_HANDLE };
-    VkCommandBuffer m_cmd { VK_NULL_HANDLE };
+    VkCommandBuffer m_cmd { VK_NULL_HANDLE }; // This thread's stream, while recording
     VkDescriptorPool m_descPool { VK_NULL_HANDLE };
     bool m_recording { false };
     bool m_renderPassActive { false };

@@ -6,6 +6,7 @@
 
 #include <CZ/Ream/RSync.h>
 #include <CZ/Ream/DRM/RDRMTimeline.h>
+#include <CZ/Ream/VK/RVKDevice.h>
 #include <CZ/Core/CZSpFd.h>
 #include <vulkan/vulkan.h>
 #include <memory>
@@ -69,6 +70,10 @@ private:
     // Make(): a point of the device's shared timeline (RVKDevice::signalSyncTimeline()), not owned
     bool m_sharedTimeline { false };
 
+    // Made while its thread's stream was open: m_point is assigned once the stream is queued
+    std::shared_ptr<RVKDevice::SyncPoint> m_pendingPoint;
+    UInt64 point() const noexcept;
+
     // Seen signalled once: nothing to wait for anymore (e.g. the buffer of a static window)
     mutable std::atomic<bool> m_signaled { false };
 
@@ -76,6 +81,7 @@ private:
     mutable std::mutex m_queuedMutex;
     mutable const RVKDevice *m_queuedOn { nullptr };
     mutable UInt64 m_queuedSerial { 0 };
+    mutable std::thread::id m_queuedThread;
 };
 
 #endif // CZ_RVKSYNC_H

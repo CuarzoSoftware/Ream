@@ -23,6 +23,8 @@
 
 using namespace CZ;
 
+static std::atomic<UInt64> s_deviceIds { 0 }; // See findStream()
+
 // -----------------------------------------------------------------------------
 // Skia helper that is compiled into libcz-skia but whose header is not exposed.
 // skgpu::VulkanMemoryAllocators::Make() builds an AMD-VMA-backed allocator from a
@@ -62,12 +64,22 @@ RVKDevice::RVKDevice(RVKCore &core, VkPhysicalDevice physicalDevice) noexcept :
     m_physicalDevice(physicalDevice)
 {
     m_mainThread = std::this_thread::get_id();
+    m_uid = ++s_deviceIds;
 }
 
 RVKDevice::~RVKDevice() noexcept
 {
     if (m_device != VK_NULL_HANDLE)
     {
+        // Render threads are stopped: every stream can be sent
+        for (auto &[thread, stream] : m_streams)
+        {
+            std::lock_guard<std::mutex> lock { stream->mutex };
+            sendStreamLocked(*stream);
+            std::lock_guard<std::mutex> queueLock { m_queueMutex };
+            handOverWaitsLocked(*stream); // Consumed (and destroyed) by the last submission
+        }
+
         flushBatch();
         vkDeviceWaitIdle(m_device);
 
@@ -76,10 +88,18 @@ RVKDevice::~RVKDevice() noexcept
             // Device teardown: render threads are stopped, so draining every thread's entries from
             // here is safe (no concurrent pool access).
             std::vector<Garbage> garbage;
+            const auto take = [&](GarbageList &list)
             {
-                std::lock_guard<std::mutex> lock { m_garbageMutex };
-                garbage.swap(m_garbage);
-            }
+                std::lock_guard<std::mutex> lock { list.mutex };
+                for (auto &g : list.items)
+                    garbage.emplace_back(std::move(g));
+                list.items.clear();
+                list.blocking.reset();
+            };
+
+            take(m_anyGarbage);
+            for (auto &[thread, stream] : m_streams)
+                take(stream->garbage);
 
             for (auto &g : garbage)
                 g.cleanup();
@@ -159,9 +179,95 @@ void RVKDevice::wait() noexcept
     if (m_device == VK_NULL_HANDLE)
         return;
 
+    // Everything recorded so far: every stream not recording a pass
+    {
+        std::vector<Stream*> streams;
+        {
+            std::lock_guard<std::mutex> lock { m_streamsMutex };
+            for (auto &[thread, stream] : m_streams)
+                streams.push_back(stream.get());
+        }
+
+        for (Stream *s : streams)
+        {
+            if (s->owner == std::this_thread::get_id())
+            {
+                sendOwnStream();
+                continue;
+            }
+
+            std::unique_lock<std::mutex> lock { s->mutex, std::try_to_lock };
+            if (lock.owns_lock())
+                sendStreamLocked(*s);
+        }
+    }
+
     std::lock_guard<std::mutex> lock { m_queueMutex };
     flushBatchLocked();
     vkDeviceWaitIdle(m_device);
+}
+
+static std::atomic<UInt64> s_fenceSerials { 0 };
+
+RVKDevice::Fence::Fence(VkDevice d, VkFence f) noexcept :
+    device(d), fence(f), serial(++s_fenceSerials) {}
+
+void RVKDevice::pushGarbage(Garbage &&garbage) const noexcept
+{
+    GarbageList &list { garbage.owner == std::thread::id {} ? m_anyGarbage : findStream(garbage.owner, true)->garbage };
+    std::lock_guard<std::mutex> lock { list.mutex };
+    list.items.emplace_back(std::move(garbage));
+}
+
+void RVKDevice::drainGarbage(GarbageList &list) const noexcept
+{
+    const auto done = [this](Fence *f) -> bool
+    {
+        if (!f || f->fence == VK_NULL_HANDLE || f->signaled)
+            return true;
+
+        if (vkGetFenceStatus(m_device, f->fence) == VK_SUCCESS)
+            return f->signaled = true;
+
+        return false;
+    };
+
+    std::vector<Garbage> ready;
+
+    {
+        std::lock_guard<std::mutex> lock { list.mutex };
+
+        if (list.items.empty())
+            return;
+
+        // Nothing newer than a pending fence can be done
+        if (list.blocking && !done(list.blocking.get()))
+            return;
+
+        list.blocking.reset();
+
+        for (size_t i = 0; i < list.items.size();)
+        {
+            auto &g { list.items[i] };
+
+            if (done(g.fence.get()))
+            {
+                ready.emplace_back(std::move(g));
+                list.items[i] = std::move(list.items.back());
+                list.items.pop_back();
+            }
+            else
+            {
+                if (!list.blocking || g.fence->serial < list.blocking->serial)
+                    list.blocking = g.fence;
+                i++;
+            }
+        }
+    }
+
+    // Outside the lock: cleanups may take other locks (e.g. the queue's)
+    for (auto &g : ready)
+        g.cleanup();
 }
 
 void RVKDevice::clearGarbage() noexcept
@@ -169,48 +275,11 @@ void RVKDevice::clearGarbage() noexcept
     if (m_device == VK_NULL_HANDLE)
         return;
 
-    const auto self { std::this_thread::get_id() };
-    std::vector<Garbage> ready;
+    // Only free resources on the thread that created them (command-pool external-sync rule)
+    if (Stream *s { findStream(std::this_thread::get_id(), false) })
+        drainGarbage(s->garbage);
 
-    {
-        std::lock_guard<std::mutex> lock { m_garbageMutex };
-
-        // Each status query is an ioctl, and the entries of a batch share their fence: each fence
-        // is queried once per call (pending ones remembered here), signalled ones never again
-        std::vector<const Fence*> pending;
-        const auto done = [&](Fence *f) -> bool
-        {
-            if (!f || f->fence == VK_NULL_HANDLE || f->signaled)
-                return true;
-
-            if (std::find(pending.begin(), pending.end(), f) != pending.end())
-                return false;
-
-            if (vkGetFenceStatus(m_device, f->fence) == VK_SUCCESS)
-                return f->signaled = true;
-
-            pending.push_back(f);
-            return false;
-        };
-
-        for (size_t i = 0; i < m_garbage.size();)
-        {
-            auto &g { m_garbage[i] };
-            // Only free resources on the thread that created them (command-pool external-sync rule).
-            if ((g.owner == self || g.owner == std::thread::id {}) && done(g.fence.get()))
-            {
-                ready.emplace_back(std::move(g));
-                m_garbage[i] = std::move(m_garbage.back());
-                m_garbage.pop_back();
-            }
-            else
-                i++;
-        }
-    }
-
-    // Outside the lock: cleanups may take other locks (e.g. the queue's)
-    for (auto &g : ready)
-        g.cleanup();
+    drainGarbage(m_anyGarbage);
 }
 
 UInt32 RVKDevice::findMemoryType(UInt32 typeBits, VkMemoryPropertyFlags props) const noexcept
@@ -303,10 +372,10 @@ bool RVKDevice::immediateSubmit(const std::function<void(VkCommandBuffer)> &reco
     ImmediateSubmission sub;
 
     {
+        sendOwnStream();
         std::lock_guard<std::mutex> lock { m_queueMutex };
         flushBatchLocked();
 
-        m_waitsSerial++;
         if (!RecordAndSubmit(m_device, m_graphicsQueue, m_commandPool, m_pendingWaits, record, sub))
             return false;
     }
@@ -331,10 +400,10 @@ bool RVKDevice::immediateSubmitAsync(const std::function<void(VkCommandBuffer)> 
     ImmediateSubmission sub;
 
     {
+        sendOwnStream();
         std::lock_guard<std::mutex> lock { m_queueMutex };
         flushBatchLocked();
 
-        m_waitsSerial++;
         if (!RecordAndSubmit(m_device, m_graphicsQueue, m_commandPool, m_pendingWaits, record, sub))
             return false;
     }
@@ -358,6 +427,7 @@ bool RVKDevice::immediateSubmitAsync(const std::function<void(VkCommandBuffer)> 
 
 bool RVKDevice::submitCommand(VkCommandBuffer cmd) const noexcept
 {
+    sendOwnStream();
     std::lock_guard<std::mutex> lock { m_queueMutex };
     flushBatchLocked();
 
@@ -372,7 +442,6 @@ bool RVKDevice::submitCommand(VkCommandBuffer cmd) const noexcept
             ownedWaits.push_back(pw.first);
     }
     m_pendingWaits.clear();
-    m_waitsSerial++;
 
     VkFence fence { VK_NULL_HANDLE };
     VkFenceCreateInfo fi {};
@@ -401,6 +470,7 @@ bool RVKDevice::submitCommand(VkCommandBuffer cmd) const noexcept
 bool RVKDevice::submitCommandAsync(VkCommandBuffer cmd, VkFence fence, std::vector<VkSemaphore> &ownedWaitsOut,
                                    VkSemaphore signal) const noexcept
 {
+    sendOwnStream();
     std::lock_guard<std::mutex> lock { m_queueMutex };
     flushBatchLocked();
 
@@ -414,7 +484,6 @@ bool RVKDevice::submitCommandAsync(VkCommandBuffer cmd, VkFence fence, std::vect
             ownedWaitsOut.push_back(pw.first); // caller destroys these once `fence` signals
     }
     m_pendingWaits.clear();
-    m_waitsSerial++;
 
     VkSubmitInfo submit {};
     submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -534,9 +603,8 @@ void RVKDevice::recycleDescPool(VkDescriptorPool pool) const noexcept
 
 void RVKDevice::deferDestroy(VkFence fence, std::function<void()> cleanup, bool anyThread) const noexcept
 {
-    std::lock_guard<std::mutex> lock { m_garbageMutex };
     // A default id: drained by any thread (see clearGarbage())
-    m_garbage.push_back({ std::shared_ptr<Fence>(new Fence { m_device, fence }), std::move(cleanup), anyThread ? std::thread::id {} : std::this_thread::get_id() });
+    pushGarbage({ std::make_shared<Fence>(m_device, fence), std::move(cleanup), anyThread ? std::thread::id {} : std::this_thread::get_id() });
 }
 
 std::mutex RVKDevice::s_skQueuesMutex;
@@ -558,6 +626,7 @@ VKAPI_ATTR VkResult VKAPI_CALL RVKDevice::SkQueueSubmit(VkQueue queue, uint32_t 
     if (!dev)
         return vkQueueSubmit(queue, count, submits, fence);
 
+    dev->sendOwnStream();
     std::lock_guard<std::mutex> lock { dev->m_queueMutex };
     dev->flushBatchLocked();
     return vkQueueSubmit(queue, count, submits, fence);
@@ -570,13 +639,252 @@ VKAPI_ATTR VkResult VKAPI_CALL RVKDevice::SkQueueWaitIdle(VkQueue queue)
     if (!dev)
         return vkQueueWaitIdle(queue);
 
+    dev->sendOwnStream();
     std::lock_guard<std::mutex> lock { dev->m_queueMutex };
     dev->flushBatchLocked();
     return vkQueueWaitIdle(queue);
 }
 
+static thread_local bool t_skiaUsed { true };
+
+void RVKDevice::MarkSkiaUsed() noexcept
+{
+    t_skiaUsed = true;
+}
+
+bool RVKDevice::TakeSkiaUsed() noexcept
+{
+    const bool used { t_skiaUsed };
+    t_skiaUsed = false;
+    return used;
+}
+
+RVKDevice::Stream *RVKDevice::findStream(std::thread::id thread, bool create) const noexcept
+{
+    // This thread's, looked up very often: cached (devices by id, an address may be reused)
+    struct Cache { UInt64 device { 0 }; Stream *stream { nullptr }; };
+    static thread_local Cache t_cache;
+    const bool self { thread == std::this_thread::get_id() };
+
+    if (self && t_cache.device == m_uid)
+        return t_cache.stream;
+
+    std::lock_guard<std::mutex> lock { m_streamsMutex };
+    auto it { m_streams.find(thread) };
+
+    if (it != m_streams.end())
+    {
+        if (self)
+            t_cache = { m_uid, it->second.get() };
+        return it->second.get();
+    }
+
+    if (!create)
+        return nullptr;
+
+    auto stream { std::make_unique<Stream>() };
+    stream->owner = thread;
+    auto *ret { stream.get() };
+    m_streams.emplace(thread, std::move(stream));
+
+    if (self)
+        t_cache = { m_uid, ret };
+
+    return ret;
+}
+
+VkCommandBuffer RVKDevice::beginStream() const noexcept
+{
+    Stream *s { findStream(std::this_thread::get_id(), true) };
+    s->mutex.lock();
+
+    if (s->cmd.pool == VK_NULL_HANDLE)
+    {
+        // A recycled command pool and buffer of this thread, else new ones
+        PassCmd cmd {};
+
+        if (!takePassCmd(cmd))
+        {
+            VkCommandPoolCreateInfo pci {};
+            pci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+            pci.queueFamilyIndex = m_graphicsQueueFamily;
+
+            if (vkCreateCommandPool(m_device, &pci, nullptr, &cmd.pool) != VK_SUCCESS)
+            {
+                s->mutex.unlock();
+                return VK_NULL_HANDLE;
+            }
+
+            VkCommandBufferAllocateInfo cai {};
+            cai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+            cai.commandPool = cmd.pool;
+            cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+            cai.commandBufferCount = 1;
+
+            if (vkAllocateCommandBuffers(m_device, &cai, &cmd.cmd) != VK_SUCCESS)
+            {
+                vkDestroyCommandPool(m_device, cmd.pool, nullptr);
+                s->mutex.unlock();
+                return VK_NULL_HANDLE;
+            }
+        }
+
+        VkCommandBufferBeginInfo cbi {};
+        cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        cbi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(cmd.cmd, &cbi);
+        s->cmd = cmd;
+    }
+
+    s->recording = true;
+    return s->cmd.cmd;
+}
+
+void RVKDevice::endStream(std::function<void()> cleanup) const noexcept
+{
+    Stream *s { findStream(std::this_thread::get_id(), false) };
+
+    if (!s || !s->recording)
+        return;
+
+    if (cleanup)
+        s->cleanups.emplace_back(std::move(cleanup));
+
+    s->recording = false;
+
+    // Another thread needs a sync made while it was open (see resolvePoint())
+    if (s->sendRequested.exchange(false))
+        sendStreamLocked(*s);
+
+    s->mutex.unlock();
+}
+
+void RVKDevice::sendOwnStream() const noexcept
+{
+    Stream *s { findStream(std::this_thread::get_id(), false) };
+
+    if (!s)
+        return;
+
+    // Its waits go with this thread's next submission (e.g. a copy of the client buffer waited for)
+    bool waits;
+    {
+        std::lock_guard<std::mutex> lock { s->waitsMutex };
+        waits = !s->waits.empty(); // Only this thread adds them
+    }
+
+    if (waits)
+    {
+        std::lock_guard<std::mutex> lock { m_queueMutex };
+        handOverWaitsLocked(*s);
+    }
+
+    // Recording a pass: it can't be ended yet (sent later, when the thread is done)
+    if (s->recording)
+        return;
+
+    std::lock_guard<std::mutex> lock { s->mutex };
+    sendStreamLocked(*s);
+}
+
+void RVKDevice::sendStreamLocked(Stream &s) const noexcept
+{
+    if (s.cmd.pool == VK_NULL_HANDLE)
+        return;
+
+    vkEndCommandBuffer(s.cmd.cmd);
+
+    {
+        std::lock_guard<std::mutex> lock { m_queueMutex };
+
+        if (m_batchCmds.empty())
+            m_batchSince = std::chrono::steady_clock::now();
+
+        m_batchCmds.push_back(s.cmd.cmd);
+        handOverWaitsLocked(s); // In the same submission
+
+        // Per-pass resources, then the command buffer: back to its thread once the GPU is done
+        for (auto &cleanup : s.cleanups)
+            m_batchEntries.push_back({ std::move(cleanup), s.owner });
+
+        m_batchEntries.push_back({ [this, cmd = s.cmd] { recyclePassCmd(cmd); }, s.owner });
+
+        // Points are assigned in submission order (a timeline only moves forward)
+        if (s.point)
+        {
+            s.point->value.store(++m_syncPoint, std::memory_order_release);
+            m_batchSignalsSync = true;
+        }
+    }
+
+    s.cmd = {};
+    s.cleanups.clear();
+
+    if (s.point)
+    {
+        s.point.reset();
+        std::lock_guard<std::mutex> lock { m_streamSentMutex };
+        m_streamSent.notify_all();
+    }
+}
+
+UInt64 RVKDevice::resolvePoint(const std::shared_ptr<SyncPoint> &point, std::thread::id owner) const noexcept
+{
+    if (!point)
+        return 0;
+
+    if (const UInt64 value { point->value.load(std::memory_order_acquire) })
+        return value;
+
+    Stream *s { findStream(owner, false) };
+
+    if (!s)
+        return 0;
+
+    if (owner == std::this_thread::get_id())
+    {
+        sendOwnStream();
+        return point->value.load(std::memory_order_acquire);
+    }
+
+    // Queued by whoever gets the stream first: here if its thread isn't recording a pass, else
+    // by its thread once the pass ends (bounded, in case it waits for something held here)
+    const auto deadline { std::chrono::steady_clock::now() + std::chrono::seconds(1) };
+
+    while (true)
+    {
+        {
+            std::unique_lock<std::mutex> lock { s->mutex, std::try_to_lock };
+
+            if (lock.owns_lock())
+            {
+                if (!point->value.load(std::memory_order_acquire))
+                    sendStreamLocked(*s);
+                break;
+            }
+        }
+
+        s->sendRequested = true;
+
+        std::unique_lock<std::mutex> lock { m_streamSentMutex };
+        m_streamSent.wait_for(lock, std::chrono::milliseconds(5), [&] { return point->value.load(std::memory_order_acquire) != 0; });
+
+        if (point->value.load(std::memory_order_acquire) || std::chrono::steady_clock::now() >= deadline)
+            break;
+    }
+
+    const UInt64 value { point->value.load(std::memory_order_acquire) };
+
+    if (!value)
+        RLog(CZWarning, CZLN, "A sync of another thread could not be submitted in time, its work may be unordered");
+
+    return value;
+}
+
 bool RVKDevice::enqueueCommand(VkCommandBuffer cmd, std::function<void()> cleanup, VkSemaphore signal) const noexcept
 {
+    sendOwnStream(); // Recorded before
     std::lock_guard<std::mutex> lock { m_queueMutex };
 
     if (m_batchCmds.empty())
@@ -589,12 +897,14 @@ bool RVKDevice::enqueueCommand(VkCommandBuffer cmd, std::function<void()> cleanu
 
 void RVKDevice::flushBatch() const noexcept
 {
+    sendOwnStream();
     std::lock_guard<std::mutex> lock { m_queueMutex };
     flushBatchLocked();
 }
 
 void RVKDevice::flushStaleBatch() const noexcept
 {
+    sendOwnStream(); // Once per frame or main loop iteration at least
     std::lock_guard<std::mutex> lock { m_queueMutex };
 
     if (!m_batchCmds.empty() && std::chrono::steady_clock::now() - m_batchSince >= std::chrono::milliseconds(32))
@@ -629,7 +939,6 @@ bool RVKDevice::flushBatchLocked(VkSemaphore signal) const noexcept
             ownedWaits.push_back(pw.first);
     }
     m_pendingWaits.clear();
-    m_waitsSerial++;
 
     if (signal != VK_NULL_HANDLE)
     {
@@ -676,19 +985,15 @@ bool RVKDevice::flushBatchLocked(VkSemaphore signal) const noexcept
     }
 
     m_batchCmds.clear();
-    auto batchFence { std::shared_ptr<Fence>(new Fence { m_device, fence }) };
+    auto batchFence { std::make_shared<Fence>(m_device, fence) };
 
-    {
-        std::lock_guard<std::mutex> lock { m_garbageMutex };
+    for (auto &e : m_batchEntries)
+        pushGarbage({ batchFence, std::move(e.cleanup), e.owner });
 
-        for (auto &e : m_batchEntries)
-            m_garbage.push_back({ batchFence, std::move(e.cleanup), e.owner });
-
-        if (!ownedWaits.empty())
-            m_garbage.push_back({ batchFence, [this, ow = std::move(ownedWaits)] {
-                for (VkSemaphore s : ow) vkDestroySemaphore(m_device, s, nullptr);
-            }, std::thread::id {} });
-    }
+    if (!ownedWaits.empty())
+        pushGarbage({ batchFence, [this, ow = std::move(ownedWaits)] {
+            for (VkSemaphore s : ow) vkDestroySemaphore(m_device, s, nullptr);
+        }, std::thread::id {} });
 
     m_batchEntries.clear();
     return ok;
@@ -718,14 +1023,36 @@ void RVKDevice::destroyWhenIdle(std::function<void()> cleanup) noexcept
 
 UInt64 RVKDevice::queueWait(VkSemaphore semaphore, bool owned) const noexcept
 {
-    std::lock_guard<std::mutex> lock { m_queueMutex };
+    // Kept with this thread's work: another thread's submission must not take it
+    Stream *s { findStream(std::this_thread::get_id(), true) };
+    std::lock_guard<std::mutex> lock { s->waitsMutex };
     if (semaphore != VK_NULL_HANDLE)
-        m_pendingWaits.emplace_back(semaphore, owned);
-    return m_waitsSerial;
+        s->waits.emplace_back(semaphore, owned);
+    return s->waitsSerial;
+}
+
+UInt64 RVKDevice::waitsSerial() const noexcept
+{
+    Stream *s { findStream(std::this_thread::get_id(), true) };
+    std::lock_guard<std::mutex> lock { s->waitsMutex };
+    return s->waitsSerial;
+}
+
+void RVKDevice::handOverWaitsLocked(Stream &s) const noexcept
+{
+    std::lock_guard<std::mutex> lock { s.waitsMutex };
+
+    if (s.waits.empty())
+        return;
+
+    m_pendingWaits.insert(m_pendingWaits.end(), s.waits.begin(), s.waits.end());
+    s.waits.clear();
+    s.waitsSerial++;
 }
 
 bool RVKDevice::submitSignal(VkSemaphore semaphore, VkFence fence) const noexcept
 {
+    sendOwnStream();
     std::lock_guard<std::mutex> lock { m_queueMutex };
     flushBatchLocked();
 
@@ -740,6 +1067,7 @@ bool RVKDevice::submitSignal(VkSemaphore semaphore, VkFence fence) const noexcep
 
 bool RVKDevice::submitSignalTimeline(VkSemaphore semaphore, UInt64 value, VkFence fence) const noexcept
 {
+    sendOwnStream();
     std::lock_guard<std::mutex> lock { m_queueMutex };
     flushBatchLocked();
 
