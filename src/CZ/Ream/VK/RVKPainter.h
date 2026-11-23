@@ -2,6 +2,7 @@
 #define CZ_RVKPAINTER_H
 
 #include <CZ/Ream/RPainter.h>
+#include <CZ/Ream/VK/RVKDevice.h>
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <memory>
@@ -51,7 +52,7 @@ private:
     bool createDescPool() noexcept;
     bool createVbo() noexcept;
     VkDescriptorSet allocDescriptorSet(VkDescriptorSetLayout layout) noexcept;
-    struct Vbo { VkBuffer buffer; VkDeviceMemory memory; };
+    using Vbo = RVKDevice::PassVbo;
     std::vector<VkDescriptorPool> m_fullDescPools;
     std::vector<Vbo> m_fullVbos;
 

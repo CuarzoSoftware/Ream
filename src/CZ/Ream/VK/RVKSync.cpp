@@ -5,6 +5,7 @@
 #include <CZ/Ream/RLog.h>
 
 #include <poll.h>
+#include <xf86drm.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdint>
@@ -85,6 +86,59 @@ static VkSemaphore ImportSyncobjTimeline(RVKDevice *device, int syncobjFd) noexc
     return sem;
 }
 
+bool RVKDevice::signalSyncTimeline(std::shared_ptr<RDRMTimeline> &timeline, UInt64 &point) const noexcept
+{
+    std::lock_guard<std::mutex> lock { m_queueMutex };
+
+    if (m_syncTimelineState < 0)
+        return false;
+
+    if (m_syncTimelineState == 0)
+    {
+        m_syncTimelineState = -1;
+        auto tl { RDRMTimeline::Make(const_cast<RVKDevice*>(this)) };
+
+        if (!tl)
+            return false;
+
+        CZSpFd soFd { tl->exportTimeline() };
+
+        if (soFd.get() < 0)
+            return false;
+
+        const VkSemaphore sem { ImportSyncobjTimeline(const_cast<RVKDevice*>(this), soFd.get()) };
+
+        if (sem == VK_NULL_HANDLE)
+            return false; // e.g. NVIDIA: each sync falls back to its own fence
+
+        (void)soFd.release(); // Consumed by the import
+        m_syncTimeline = tl;
+        m_syncSemaphore = sem;
+        m_syncTimelineState = 1;
+    }
+
+    // After all the work submitted so far (same queue)
+    const UInt64 value { ++m_syncPoint };
+
+    VkTimelineSemaphoreSubmitInfo tsi {};
+    tsi.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+    tsi.signalSemaphoreValueCount = 1;
+    tsi.pSignalSemaphoreValues = &value;
+
+    VkSubmitInfo submit {};
+    submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit.pNext = &tsi;
+    submit.signalSemaphoreCount = 1;
+    submit.pSignalSemaphores = &m_syncSemaphore;
+
+    if (vkQueueSubmit(m_graphicsQueue, 1, &submit, VK_NULL_HANDLE) != VK_SUCCESS)
+        return false;
+
+    timeline = m_syncTimeline;
+    point = value;
+    return true;
+}
+
 std::shared_ptr<RVKSync> RVKSync::Make(RVKDevice *device) noexcept
 {
     auto core { RCore::Get() };
@@ -95,6 +149,21 @@ std::shared_ptr<RVKSync> RVKSync::Make(RVKDevice *device) noexcept
     }
 
     auto sync { std::shared_ptr<RVKSync>(new RVKSync(core, device, false)) };
+
+    // A point of the device's shared timeline (cheap: no syncobj, import or fence per sync)
+    if (device->caps().Timeline)
+    {
+        std::shared_ptr<RDRMTimeline> tl;
+        UInt64 point;
+
+        if (device->signalSyncTimeline(tl, point))
+        {
+            sync->m_timeline = tl;
+            sync->m_point = point;
+            sync->m_sharedTimeline = true;
+            return sync;
+        }
+    }
 
     // Preferred (NVIDIA-safe) path: a drm_syncobj timeline point signalled by the GPU via a
     // timeline semaphore imported from the syncobj (OPAQUE_FD). The sync_file is later exported
@@ -205,11 +274,12 @@ int RVKSync::cpuWait(int timeoutMs) const noexcept
         return -1;
     }
 
-    // Imported syncobj (FromExternal): wait on the timeline point.
+    // Imported syncobj (FromExternal), or a point of the shared timeline (Make(): its signal may
+    // not have reached the kernel yet, hence WAIT_FOR_SUBMIT): wait on the timeline point.
     if (m_timeline)
     {
         const Int64 ns { timeoutMs < 0 ? INT64_MAX : (Int64)timeoutMs * 1000000ll };
-        return m_timeline->waitSync(m_point, 0, ns);
+        return m_timeline->waitSync(m_point, m_sharedTimeline ? DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT : 0, ns);
     }
 
     if (m_fd.get() < 0)

@@ -97,6 +97,33 @@ RVKDevice::~RVKDevice() noexcept
         if (m_commandPool != VK_NULL_HANDLE)
             vkDestroyCommandPool(m_device, m_commandPool, nullptr);
 
+        if (m_syncSemaphore != VK_NULL_HANDLE)
+            vkDestroySemaphore(m_device, m_syncSemaphore, nullptr);
+        m_syncTimeline.reset();
+
+        // Recycled per-pass resources (render threads stopped)
+        {
+            std::lock_guard<std::mutex> lock { m_recycleMutex };
+
+            for (auto &[thread, cmds] : m_freeCmds)
+                for (const auto &c : cmds)
+                    vkDestroyCommandPool(m_device, c.pool, nullptr); // Frees its command buffer too
+
+            for (const auto &v : m_freeVbos)
+            {
+                vkUnmapMemory(m_device, v.memory);
+                vkFreeMemory(m_device, v.memory, nullptr);
+                vkDestroyBuffer(m_device, v.buffer, nullptr);
+            }
+
+            for (VkDescriptorPool p : m_freeDescPools)
+                vkDestroyDescriptorPool(m_device, p, nullptr);
+
+            m_freeCmds.clear();
+            m_freeVbos.clear();
+            m_freeDescPools.clear();
+        }
+
         vkDestroyDevice(m_device, nullptr);
         m_device = VK_NULL_HANDLE;
     }
@@ -299,6 +326,109 @@ bool RVKDevice::submitCommandAsync(VkCommandBuffer cmd, VkFence fence, std::vect
     submit.pSignalSemaphores = (signal != VK_NULL_HANDLE) ? &signal : nullptr;
 
     return vkQueueSubmit(m_graphicsQueue, 1, &submit, fence) == VK_SUCCESS;
+}
+
+static constexpr size_t MaxFreeCmdsPerThread { 16 }, MaxFreeVbos { 16 }, MaxFreeDescPools { 32 };
+
+bool RVKDevice::takePassCmd(PassCmd &out) const noexcept
+{
+    std::lock_guard<std::mutex> lock { m_recycleMutex };
+    auto it { m_freeCmds.find(std::this_thread::get_id()) };
+
+    if (it == m_freeCmds.end() || it->second.empty())
+        return false;
+
+    out = it->second.back();
+    it->second.pop_back();
+    return true;
+}
+
+void RVKDevice::recyclePassCmd(const PassCmd &cmd) const noexcept
+{
+    if (cmd.pool == VK_NULL_HANDLE)
+        return;
+
+    // Its command buffer back to the initial state, kept allocated
+    vkResetCommandPool(m_device, cmd.pool, 0);
+
+    {
+        std::lock_guard<std::mutex> lock { m_recycleMutex };
+        auto &list { m_freeCmds[std::this_thread::get_id()] };
+
+        if (list.size() < MaxFreeCmdsPerThread && cmd.cmd != VK_NULL_HANDLE)
+        {
+            list.push_back(cmd);
+            return;
+        }
+    }
+
+    vkDestroyCommandPool(m_device, cmd.pool, nullptr);
+}
+
+bool RVKDevice::takePassVbo(PassVbo &out) const noexcept
+{
+    std::lock_guard<std::mutex> lock { m_recycleMutex };
+
+    if (m_freeVbos.empty())
+        return false;
+
+    out = m_freeVbos.back();
+    m_freeVbos.pop_back();
+    return true;
+}
+
+void RVKDevice::recyclePassVbo(const PassVbo &vbo) const noexcept
+{
+    if (vbo.buffer == VK_NULL_HANDLE)
+        return;
+
+    {
+        std::lock_guard<std::mutex> lock { m_recycleMutex };
+
+        if (m_freeVbos.size() < MaxFreeVbos && vbo.mapped)
+        {
+            m_freeVbos.push_back(vbo);
+            return;
+        }
+    }
+
+    if (vbo.mapped)
+        vkUnmapMemory(m_device, vbo.memory);
+
+    vkFreeMemory(m_device, vbo.memory, nullptr);
+    vkDestroyBuffer(m_device, vbo.buffer, nullptr);
+}
+
+VkDescriptorPool RVKDevice::takeDescPool() const noexcept
+{
+    std::lock_guard<std::mutex> lock { m_recycleMutex };
+
+    if (m_freeDescPools.empty())
+        return VK_NULL_HANDLE;
+
+    const VkDescriptorPool pool { m_freeDescPools.back() };
+    m_freeDescPools.pop_back();
+    return pool;
+}
+
+void RVKDevice::recycleDescPool(VkDescriptorPool pool) const noexcept
+{
+    if (pool == VK_NULL_HANDLE)
+        return;
+
+    vkResetDescriptorPool(m_device, pool, 0);
+
+    {
+        std::lock_guard<std::mutex> lock { m_recycleMutex };
+
+        if (m_freeDescPools.size() < MaxFreeDescPools)
+        {
+            m_freeDescPools.push_back(pool);
+            return;
+        }
+    }
+
+    vkDestroyDescriptorPool(m_device, pool, nullptr);
 }
 
 void RVKDevice::deferDestroy(VkFence fence, std::function<void()> cleanup) const noexcept

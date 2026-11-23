@@ -61,6 +61,9 @@ private:
     // submit completes (tracked by m_fence so no full device wait is needed).
     VkSemaphore m_semaphore { VK_NULL_HANDLE };
     VkFence m_fence { VK_NULL_HANDLE };
+
+    // Make(): a point of the device's shared timeline (RVKDevice::signalSyncTimeline()), not owned
+    bool m_sharedTimeline { false };
 };
 
 #endif // CZ_RVKSYNC_H

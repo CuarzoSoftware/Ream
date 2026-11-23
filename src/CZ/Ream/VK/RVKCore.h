@@ -58,6 +58,7 @@ private:
     virtual bool init() noexcept override;
     bool initInstanceExtensions() noexcept;
     bool initInstanceValidationLayers() noexcept;
+    bool ValidationEnabled() const noexcept;
     bool initInstance() noexcept;
     bool initInstanceProcs() noexcept;
     bool initDebugger() noexcept;

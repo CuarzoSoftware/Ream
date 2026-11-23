@@ -159,15 +159,22 @@ bool RVKCore::initInstanceExtensions() noexcept
         }
     }
 
-    if (vkLog.level() > CZSilent && hasInstanceExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
+    if (ValidationEnabled() && hasInstanceExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
         m_requiredInstanceExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
     return true;
 }
 
+// The validation layers (and their messages) only when CZ_REAM_VK_LOG_LEVEL is raised to warnings or
+// more: they slow every Vulkan call down a lot, far too much to be on by default (errors only)
+bool RVKCore::ValidationEnabled() const noexcept
+{
+    return vkLog.level() >= CZWarning;
+}
+
 bool RVKCore::initInstanceValidationLayers() noexcept
 {
-    if (vkLog.level() <= CZSilent)
+    if (!ValidationEnabled())
         return true;
 
     uint32_t count { 0 };
@@ -217,7 +224,7 @@ bool RVKCore::initInstanceValidationLayers() noexcept
 
 bool RVKCore::initDebugger() noexcept
 {
-    if (vkLog.level() <= CZSilent || !m_instanceProcs.createDebugUtilsMessengerEXT || !hasInstanceExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
+    if (!ValidationEnabled() || !m_instanceProcs.createDebugUtilsMessengerEXT || !hasInstanceExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME))
         return true;
 
     VkDebugUtilsMessengerCreateInfoEXT info {};

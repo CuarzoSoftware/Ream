@@ -6,6 +6,7 @@
 #include <CZ/skia/gpu/vk/VulkanMemoryAllocator.h>
 #include <CZ/Ream/VK/RVKExtensions.h>
 #include <CZ/Ream/RDevice.h>
+#include <CZ/Ream/DRM/RDRMTimeline.h>
 #include <vulkan/vulkan.h>
 #include <unordered_map>
 #include <functional>
@@ -130,10 +131,35 @@ public:
     // Drains this device's fence-tracked deferred-destruction queue (Phase 6).
     void clearGarbage() noexcept;
 
+    /// @name Recycled per-pass resources (RVKPainter)
+    /// Creating them for every pass was a large part of a frame's CPU time. Returned once the GPU
+    /// is done with them (from deferDestroy() cleanups), reset, then taken by the next passes.
+    /// Command pools only by the thread that created them (external synchronization).
+    /// @{
+    struct PassCmd { VkCommandPool pool; VkCommandBuffer cmd; };
+    struct PassVbo { VkBuffer buffer; VkDeviceMemory memory; void *mapped; VkDeviceSize capacity; };
+    bool takePassCmd(PassCmd &out) const noexcept;
+    void recyclePassCmd(const PassCmd &cmd) const noexcept;  ///< Resets it
+    bool takePassVbo(PassVbo &out) const noexcept;
+    void recyclePassVbo(const PassVbo &vbo) const noexcept;
+    VkDescriptorPool takeDescPool() const noexcept;           ///< VK_NULL_HANDLE if none
+    void recycleDescPool(VkDescriptorPool pool) const noexcept; ///< Resets it
+    /// @}
+
     // Lazily-created shared painter pipeline/render-pass cache.
     RVKPipeline *pipelines() noexcept;
 private:
     friend class RVKCore;
+    friend class RVKSync;
+
+    // RVKSync::Make(): a timeline (drm_syncobj imported as a Vulkan timeline semaphore) shared by
+    // every sync of this device, a point each, instead of a new syncobj, import, fence and submit
+    // per sync. Guarded by m_queueMutex (points must be signalled in increasing order).
+    bool signalSyncTimeline(std::shared_ptr<RDRMTimeline> &timeline, UInt64 &point) const noexcept;
+    mutable std::shared_ptr<RDRMTimeline> m_syncTimeline;
+    mutable VkSemaphore m_syncSemaphore { VK_NULL_HANDLE };
+    mutable UInt64 m_syncPoint { 0 };
+    mutable int m_syncTimelineState { 0 }; // 0: not tried, 1: ready, -1: unsupported (e.g. NVIDIA)
     static RVKDevice *Make(RVKCore &core, VkPhysicalDevice physicalDevice) noexcept;
     RVKDevice(RVKCore &core, VkPhysicalDevice physicalDevice) noexcept;
     ~RVKDevice() noexcept;
@@ -199,6 +225,12 @@ private:
         std::thread::id owner;
     };
     mutable std::mutex m_garbageMutex;
+
+    // See takePassCmd()
+    mutable std::mutex m_recycleMutex;
+    mutable std::unordered_map<std::thread::id, std::vector<PassCmd>> m_freeCmds;
+    mutable std::vector<PassVbo> m_freeVbos;
+    mutable std::vector<VkDescriptorPool> m_freeDescPools;
     mutable std::vector<Garbage> m_garbage;
 
     std::unique_ptr<RVKPipeline> m_pipelines;

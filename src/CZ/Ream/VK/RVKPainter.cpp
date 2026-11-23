@@ -43,14 +43,14 @@ RVKPainter::~RVKPainter() noexcept
     flush();
     std::erase(t_recording, this);
 
+    // Taken but never submitted (flush() hands them over otherwise): back to the device
     const VkDevice d { dev()->device() };
-    if (m_vboMem != VK_NULL_HANDLE) { vkUnmapMemory(d, m_vboMem); vkFreeMemory(d, m_vboMem, nullptr); }
-    if (m_vbo != VK_NULL_HANDLE) vkDestroyBuffer(d, m_vbo, nullptr);
     if (m_framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(d, m_framebuffer, nullptr);
-    if (m_descPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(d, m_descPool, nullptr);
-    for (VkDescriptorPool p : m_fullDescPools) vkDestroyDescriptorPool(d, p, nullptr);
-    for (const Vbo &v : m_fullVbos) { vkFreeMemory(d, v.memory, nullptr); vkDestroyBuffer(d, v.buffer, nullptr); }
-    if (m_pool != VK_NULL_HANDLE) vkDestroyCommandPool(d, m_pool, nullptr);
+    dev()->recyclePassVbo({ m_vbo, m_vboMem, m_vboMapped, m_vboCapacity });
+    dev()->recycleDescPool(m_descPool);
+    for (VkDescriptorPool p : m_fullDescPools) dev()->recycleDescPool(p);
+    for (const Vbo &v : m_fullVbos) dev()->recyclePassVbo(v);
+    dev()->recyclePassCmd({ m_pool, m_cmd });
 }
 
 RVKDevice *RVKPainter::dev() const noexcept { return (RVKDevice*)m_device; }
@@ -90,6 +90,18 @@ bool RVKPainter::beginRecording() noexcept
     const UInt32 W { (UInt32)m_target->size().width() };
     const UInt32 H { (UInt32)m_target->size().height() };
 
+    // A recycled command pool and buffer of this thread, else new ones
+    if (m_pool == VK_NULL_HANDLE)
+    {
+        RVKDevice::PassCmd recycled {};
+
+        if (dev()->takePassCmd(recycled))
+        {
+            m_pool = recycled.pool;
+            m_cmd = recycled.cmd;
+        }
+    }
+
     if (m_pool == VK_NULL_HANDLE)
     {
         VkCommandPoolCreateInfo pci {};
@@ -120,13 +132,16 @@ bool RVKPainter::beginRecording() noexcept
 
     m_vertexCount = 0;
 
-    VkCommandBufferAllocateInfo cai {};
-    cai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cai.commandPool = m_pool;
-    cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cai.commandBufferCount = 1;
-    if (vkAllocateCommandBuffers(d, &cai, &m_cmd) != VK_SUCCESS)
-        return false;
+    if (m_cmd == VK_NULL_HANDLE)
+    {
+        VkCommandBufferAllocateInfo cai {};
+        cai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        cai.commandPool = m_pool;
+        cai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        cai.commandBufferCount = 1;
+        if (vkAllocateCommandBuffers(d, &cai, &m_cmd) != VK_SUCCESS)
+            return false;
+    }
 
     VkCommandBufferBeginInfo cbi {};
     cbi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -214,6 +229,17 @@ void RVKPainter::transitionSource(const std::shared_ptr<RImage> &img) noexcept
 
 bool RVKPainter::createVbo() noexcept
 {
+    // A recycled one (still mapped)
+    if (RVKDevice::PassVbo recycled {}; dev()->takePassVbo(recycled))
+    {
+        m_vbo = recycled.buffer;
+        m_vboMem = recycled.memory;
+        m_vboMapped = recycled.mapped;
+        m_vboCapacity = recycled.capacity;
+        m_vertexCount = 0;
+        return true;
+    }
+
     const VkDevice d { dev()->device() };
     VkBufferCreateInfo bi {};
     bi.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -253,6 +279,9 @@ bool RVKPainter::createVbo() noexcept
 
 bool RVKPainter::createDescPool() noexcept
 {
+    if ((m_descPool = dev()->takeDescPool()) != VK_NULL_HANDLE)
+        return true;
+
     VkDescriptorPoolSize ps {};
     ps.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     ps.descriptorCount = 512;
@@ -320,10 +349,7 @@ float *RVKPainter::reserveVertices(UInt32 vertexCount, UInt32 &firstVertex) noex
         }
 
         if (m_vbo != VK_NULL_HANDLE)
-        {
-            vkUnmapMemory(dev()->device(), m_vboMem);
-            m_fullVbos.push_back({ m_vbo, m_vboMem });
-        }
+            m_fullVbos.push_back({ m_vbo, m_vboMem, m_vboMapped, m_vboCapacity }); // Recycled with the pass
 
         m_vbo = VK_NULL_HANDLE;
         m_vboMem = VK_NULL_HANDLE;
@@ -379,14 +405,12 @@ void RVKPainter::flush() noexcept
         if (fence != VK_NULL_HANDLE) { vkDestroyFence(d, fence, nullptr); fence = VK_NULL_HANDLE; }
         // Blocking submit + immediate cleanup (legacy path).
         dev()->submitCommand(m_cmd);
-        vkFreeCommandBuffers(d, m_pool, 1, &m_cmd);
         if (m_framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(d, m_framebuffer, nullptr);
-        if (m_descPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(d, m_descPool, nullptr);
-        for (VkDescriptorPool p : m_fullDescPools) vkDestroyDescriptorPool(d, p, nullptr);
-        if (m_vboMem != VK_NULL_HANDLE) { vkUnmapMemory(d, m_vboMem); vkFreeMemory(d, m_vboMem, nullptr); }
-        if (m_vbo != VK_NULL_HANDLE) vkDestroyBuffer(d, m_vbo, nullptr);
-        for (const Vbo &v : m_fullVbos) { vkFreeMemory(d, v.memory, nullptr); vkDestroyBuffer(d, v.buffer, nullptr); }
-        if (m_pool != VK_NULL_HANDLE) vkDestroyCommandPool(d, m_pool, nullptr);
+        dev()->recycleDescPool(m_descPool);
+        for (VkDescriptorPool p : m_fullDescPools) dev()->recycleDescPool(p);
+        dev()->recyclePassVbo({ m_vbo, m_vboMem, m_vboMapped, m_vboCapacity });
+        for (const Vbo &v : m_fullVbos) dev()->recyclePassVbo(v);
+        dev()->recyclePassCmd({ m_pool, m_cmd });
     }
     else
     {
@@ -394,27 +418,25 @@ void RVKPainter::flush() noexcept
         dev()->submitCommandAsync(m_cmd, fence, ownedWaits);
 
         // Hand every per-pass resource to the fence-tracked GC (freed once the GPU is done).
-        const VkCommandPool pool { m_pool };
-        const VkCommandBuffer cmd { m_cmd };
-        const VkBuffer vbo { m_vbo };
-        const VkDeviceMemory vboMem { m_vboMem };
+        // Hand every per-pass resource back to the device once the GPU is done (recycled by the
+        // next passes, see RVKDevice::takePassCmd()). Runs on this thread (command pools).
+        const RVKDevice::PassCmd cmd { m_pool, m_cmd };
+        const Vbo vbo { m_vbo, m_vboMem, m_vboMapped, m_vboCapacity };
         const VkDescriptorPool descPool { m_descPool };
         const VkFramebuffer framebuffer { m_framebuffer };
         RVKDevice *device { dev() };
 
-        device->deferDestroy(fence, [device, pool, cmd, vbo, vboMem, descPool, framebuffer,
+        device->deferDestroy(fence, [device, cmd, vbo, descPool, framebuffer,
                                      ow = std::move(ownedWaits), fullPools = std::move(m_fullDescPools),
                                      fullVbos = std::move(m_fullVbos)]()
         {
             const VkDevice dd { device->device() };
-            for (VkDescriptorPool p : fullPools) vkDestroyDescriptorPool(dd, p, nullptr);
-            for (const Vbo &v : fullVbos) { vkFreeMemory(dd, v.memory, nullptr); vkDestroyBuffer(dd, v.buffer, nullptr); }
-            if (cmd != VK_NULL_HANDLE) vkFreeCommandBuffers(dd, pool, 1, &cmd);
+            for (VkDescriptorPool p : fullPools) device->recycleDescPool(p);
+            for (const Vbo &v : fullVbos) device->recyclePassVbo(v);
             if (framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(dd, framebuffer, nullptr);
-            if (descPool != VK_NULL_HANDLE) vkDestroyDescriptorPool(dd, descPool, nullptr);
-            if (vboMem != VK_NULL_HANDLE) { vkUnmapMemory(dd, vboMem); vkFreeMemory(dd, vboMem, nullptr); }
-            if (vbo != VK_NULL_HANDLE) vkDestroyBuffer(dd, vbo, nullptr);
-            if (pool != VK_NULL_HANDLE) vkDestroyCommandPool(dd, pool, nullptr);
+            device->recycleDescPool(descPool);
+            device->recyclePassVbo(vbo);
+            device->recyclePassCmd(cmd);
             for (VkSemaphore s : ow) vkDestroySemaphore(dd, s, nullptr);
         });
     }
