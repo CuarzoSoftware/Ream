@@ -70,9 +70,24 @@ std::shared_ptr<RGLSwapchainWL> RGLSwapchainWL::Make(wl_surface *surface, SkISiz
     return std::shared_ptr<RGLSwapchainWL>(new RGLSwapchainWL(core->asGL(), device, image, window, surface, eglSurface, size));
 }
 
+// Unbinds eglSurface if current on this thread before destroying it: otherwise it lingers bound
+// (destroyed for EGL), and making it current again (e.g. an RGLMakeCurrent restoring it) fails
+// with EGL_BAD_SURFACE
+static void DestroySurface(EGLDisplay display, EGLSurface eglSurface) noexcept
+{
+    if (eglSurface == EGL_NO_SURFACE)
+        return;
+
+    if (eglGetCurrentDisplay() == display &&
+        (eglGetCurrentSurface(EGL_DRAW) == eglSurface || eglGetCurrentSurface(EGL_READ) == eglSurface))
+        eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, eglGetCurrentContext());
+
+    eglDestroySurface(display, eglSurface);
+}
+
 RGLSwapchainWL::~RGLSwapchainWL() noexcept
 {
-    eglDestroySurface(m_device->eglDisplay(), m_eglSurface);
+    DestroySurface(m_device->eglDisplay(), m_eglSurface);
     wl_egl_window_destroy(m_window);
 }
 
@@ -176,26 +191,30 @@ bool RGLSwapchainWL::resize(SkISize size) noexcept
         return false;
     }
 
-    auto current { RGLMakeCurrent(device->eglDisplay(), eglSurface, eglSurface, device->eglContext()) };
+    std::shared_ptr<RGLImage> image;
 
-    REGLSurfaceInfo info {};
-    info.size = size;
-    info.surface = eglSurface;
-    info.alphaType = kUnpremul_SkAlphaType;
-    info.format = DRM_FORMAT_ABGR8888;
+    {
+        // Restored before prevSurface is destroyed (it may be the one it restores)
+        auto current { RGLMakeCurrent(device->eglDisplay(), eglSurface, eglSurface, device->eglContext()) };
 
-    auto image { RGLImage::FromEGLSurface(info, CZOwn::Borrow, device) };
+        REGLSurfaceInfo info {};
+        info.size = size;
+        info.surface = eglSurface;
+        info.alphaType = kUnpremul_SkAlphaType;
+        info.format = DRM_FORMAT_ABGR8888;
+
+        image = RGLImage::FromEGLSurface(info, CZOwn::Borrow, device);
+    }
 
     if (!image)
     {
         device->log(CZError, CZLN, "Failed to create RImage from EGLSurface");
-        eglDestroySurface(device->eglDisplay(), eglSurface);
+        DestroySurface(device->eglDisplay(), eglSurface);
         wl_egl_window_destroy(window);
         return false;
     }
 
-    if (prevSurface != EGL_NO_SURFACE)
-        eglDestroySurface(m_device->eglDisplay(), prevSurface);
+    DestroySurface(m_device->eglDisplay(), prevSurface);
 
     if (prevWindow)
         wl_egl_window_destroy(prevWindow);
