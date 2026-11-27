@@ -162,6 +162,10 @@ private:
 
     bool writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept;
     bool writePixelsNative(const RPixelBufferRegion &region) noexcept;
+
+    /* GBM storage on a device whose buffers can't be mapped (e.g. NVIDIA's GBM has no gbm_bo_map):
+     * the pixels are uploaded to a temporary texture and drawn into the image's framebuffer */
+    bool writePixelsGLDraw(const RPixelBufferRegion &region) noexcept;
     bool readPixelsGBMmapRead(const RPixelBufferRegion &region) noexcept;
     bool readPixelsNative(const RPixelBufferRegion &region) noexcept;
 

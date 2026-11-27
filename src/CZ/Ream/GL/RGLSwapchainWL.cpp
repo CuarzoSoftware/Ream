@@ -88,12 +88,15 @@ static void DestroySurface(EGLDisplay display, EGLSurface eglSurface) noexcept
 RGLSwapchainWL::~RGLSwapchainWL() noexcept
 {
     DestroySurface(m_device->eglDisplay(), m_eglSurface);
-    wl_egl_window_destroy(m_window);
+
+    if (m_window)
+        wl_egl_window_destroy(m_window);
 }
 
 std::optional<const RSwapchainImage> RGLSwapchainWL::acquire() noexcept
 {
-    if (m_acquired)
+    // No surface: a resize failed (see resize())
+    if (m_acquired || m_eglSurface == EGL_NO_SURFACE)
         return {};
 
     m_acquired = true;
@@ -119,7 +122,6 @@ bool RGLSwapchainWL::present(const RSwapchainImage &image, SkRegion *damage) noe
     m_acquired = false;
     auto current { RGLMakeCurrent(m_device->eglDisplay(), m_eglSurface, m_eglSurface, m_device->eglContext()) };
     eglSwapInterval(m_device->eglDisplay(), 0);
-
     if (!damage || !m_device->eglDisplayProcs().eglSwapBuffersWithDamageKHR)
         return eglSwapBuffers(m_device->eglDisplay(), m_eglSurface);
     else
@@ -184,10 +186,37 @@ bool RGLSwapchainWL::resize(SkISize size) noexcept
 
     auto eglSurface { eglCreateWindowSurface(device->eglDisplay(), eglConfig,(EGLNativeWindowType) window, NULL) };
 
+    /* Some drivers only allow one EGLSurface per wl_surface at a time (NVIDIA's fails with
+     * EGL_BAD_ALLOC): the previous one goes first then. Not by default: if the new one can't be
+     * created the previous one keeps working. */
+    if (eglSurface == EGL_NO_SURFACE && prevSurface != EGL_NO_SURFACE)
+    {
+        DestroySurface(m_device->eglDisplay(), prevSurface);
+        prevSurface = EGL_NO_SURFACE;
+        m_eglSurface = EGL_NO_SURFACE;
+        m_acquired = false;
+
+        if (prevWindow)
+            wl_egl_window_destroy(prevWindow);
+
+        prevWindow = nullptr;
+        m_window = nullptr;
+
+        // Its own window: the failed attempt may have left this one unusable
+        wl_egl_window_destroy(window);
+        window = wl_egl_window_create(surface(), size.width(), size.height());
+
+        if (window)
+            eglSurface = eglCreateWindowSurface(device->eglDisplay(), eglConfig,(EGLNativeWindowType) window, NULL);
+    }
+
     if (eglSurface == EGL_NO_SURFACE)
     {
         device->log(CZError, CZLN, "Failed to create EGLSurface from wl_egl_window");
-        wl_egl_window_destroy(window);
+
+        if (window)
+            wl_egl_window_destroy(window);
+
         return false;
     }
 
@@ -215,6 +244,7 @@ bool RGLSwapchainWL::resize(SkISize size) noexcept
     }
 
     DestroySurface(m_device->eglDisplay(), prevSurface);
+    m_acquired = false; // Of the previous surface, if any
 
     if (prevWindow)
         wl_egl_window_destroy(prevWindow);
@@ -229,4 +259,3 @@ bool RGLSwapchainWL::resize(SkISize size) noexcept
 RGLSwapchainWL::RGLSwapchainWL(std::shared_ptr<RGLCore> core, RGLDevice *device, std::shared_ptr<RGLImage> image, wl_egl_window *window, wl_surface *surface, EGLSurface eglSurface, SkISize size) noexcept :
     RWLSwapchain(size, surface), m_core(core), m_device(device), m_image(image), m_eglSurface(eglSurface), m_window(window)
 {}
-

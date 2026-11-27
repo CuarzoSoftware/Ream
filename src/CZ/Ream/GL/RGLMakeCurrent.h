@@ -54,7 +54,7 @@ public:
         prevRead(eglGetCurrentSurface(EGL_READ)),
         prevContext(eglGetCurrentContext())
     {
-        eglMakeCurrent(display, draw, read, context);
+        Bind(display, draw, read, context);
     }
 
     /**
@@ -73,6 +73,16 @@ public:
      * @return `true` if the state was restored by this call, `false` if it had already been restored.
      */
     bool restore() noexcept;
+
+    /**
+     * @brief eglMakeCurrent(), then selects the back buffer of the default framebuffer if a surface
+     *        was bound after none (or after another context).
+     *
+     * In OpenGL ES 3 the default framebuffer's draw and read buffers are GL_NONE while the context
+     * is current without a surface, and drivers following the spec (NVIDIA's) leave them like that
+     * once a window surface is bound: nothing drawn to it lands. Mesa selects GL_BACK by itself.
+     */
+    static EGLBoolean Bind(EGLDisplay display, EGLSurface draw, EGLSurface read, EGLContext context) noexcept;
 
 private:
     EGLDisplay prevDisplay;

@@ -8,6 +8,9 @@
 #include <CZ/Ream/DRM/RDRMFramebuffer.h>
 #include <CZ/Ream/RLockGuard.h>
 #include <CZ/Ream/RSync.h>
+#include <CZ/Ream/RSurface.h>
+#include <CZ/Ream/RPass.h>
+#include <CZ/Ream/RPainter.h>
 #include <CZ/Ream/RLog.h>
 
 #include <CZ/skia/gpu/ganesh/gl/GrGLTypes.h>
@@ -676,7 +679,14 @@ bool RGLImage::writePixels(const RPixelBufferRegion &region) noexcept
         return true;
     }
 
-    if (writePixelsGBMMapWrite(region))
+    // Only if it can be mapped (not an error otherwise: drawn below)
+    if (region.format == formatInfo().format && writePixelsGBMMapWrite(region))
+    {
+        m_writeSerial++;
+        return true;
+    }
+
+    if (writePixelsGLDraw(region))
     {
         m_writeSerial++;
         return true;
@@ -862,11 +872,9 @@ bool RGLImage::writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept
             }
         }
 
+        // Not supported by any device (e.g. NVIDIA): see writePixelsGLDraw()
         if (!bo)
-        {
-            RLog(CZError, CZLN, "Failed to write pixels using gbm_bo_map");
             return false;
-        }
     }
 
     UInt32 stride;
@@ -913,6 +921,109 @@ bool RGLImage::writePixelsGBMMapWrite(const RPixelBufferRegion &region) noexcept
     gbm_bo_unmap(bo->bo(), mapData);
     setWriteSync(RSync::Make(bo->allocator()));
     return true;
+}
+
+// The formats pixels can be uploaded with to a texture of @p device (see MakeWithNativeStorage())
+static bool CanUpload(RGLDevice *device, RFormat format) noexcept
+{
+    switch (format)
+    {
+    case DRM_FORMAT_ABGR8888:
+    case DRM_FORMAT_XBGR8888:
+        return true;
+    case DRM_FORMAT_ARGB8888:
+    case DRM_FORMAT_XRGB8888:
+        return device->glExtensions().EXT_texture_format_BGRA8888;
+    default:
+        return false;
+    }
+}
+
+bool RGLImage::writePixelsGLDraw(const RPixelBufferRegion &region) noexcept
+{
+    RLockGuard lock {};
+
+    if (m_pf.has(PFStorageNative) || region.region.isEmpty())
+        return false;
+
+    auto self { std::static_pointer_cast<RGLImage>(m_self.lock()) };
+
+    if (!self)
+        return false;
+
+    /* A device that can render into it: the allocator, else any other */
+
+    RGLDevice *dev { nullptr };
+
+    if (CanUpload(allocator(), region.format) && glFb(allocator()).has_value())
+        dev = allocator();
+    else
+        for (auto *device : m_core->devices())
+            if (auto *glDev { static_cast<RGLDevice*>(device) }; glDev != allocator() && CanUpload(glDev, region.format) && glFb(glDev).has_value())
+            {
+                dev = glDev;
+                break;
+            }
+
+    if (!dev)
+        return false;
+
+    const auto *srcInfo { RDRMFormat::GetInfo(region.format) };
+
+    if (!srcInfo || srcInfo->pixelsPerBlock() != 1 || region.stride % srcInfo->bytesPerBlock != 0)
+        return false;
+
+    /* The pixels of the region's bounds, in a texture of that device (native storage: this path
+     * is never taken for it) */
+
+    const SkIRect bounds { region.region.getBounds() };
+    RImageConstraints cons {};
+    cons.allocator = dev;
+    auto source { MakeWithNativeStorage(bounds.size(), RDRMFormat(region.format, { DRM_FORMAT_MOD_INVALID }), &cons) };
+
+    if (!source)
+        return false;
+
+    RPixelBufferRegion upload {};
+    upload.pixels = region.pixels;
+    upload.stride = region.stride;
+    upload.format = region.format;
+    upload.offset = region.offset + bounds.topLeft(); // Source of (0, 0) in the texture
+    upload.region.setRect(SkIRect::MakeSize(bounds.size()));
+
+    if (!source->writePixelsNative(upload))
+        return false;
+
+    /* Copied as they are (no blending, scaling or filtering) into the rects of the region */
+
+    auto surface { RSurface::WrapImage(self) };
+    auto pass { surface ? surface->beginPass(RPassCap_Painter, dev) : nullptr };
+
+    if (!pass)
+        return false;
+
+    auto *painter { pass->getPainter() };
+
+    if (!painter)
+        return false;
+
+    painter->setBlendMode(RBlendMode::Src);
+    painter->setOpacity(1.f);
+    painter->setFactor();
+    painter->setOptions();
+
+    RDrawImageInfo draw {};
+    draw.image = source;
+    draw.src = SkRect::Make(SkIRect::MakeSize(bounds.size()));
+    draw.dst = bounds;
+    draw.minFilter = draw.magFilter = RImageFilter::Nearest;
+    const bool ok { painter->drawImage(draw, &region.region) };
+    pass.reset();
+
+    if (ok)
+        setWriteSync(RSync::Make(dev));
+
+    return ok;
 }
 
 bool RGLImage::writePixelsNative(const RPixelBufferRegion &region) noexcept
@@ -1202,6 +1313,12 @@ void RGLImage::probeDeviceReadWriteFormats(RGLDevice *glDev) noexcept
 {
     if (glFb(glDev).has_value())
     {
+        // Pixels can be drawn into it too (GBM storage that can't be mapped, see writePixelsGLDraw())
+        if (!m_pf.has(PFStorageNative))
+            for (const RFormat format : { DRM_FORMAT_ABGR8888, DRM_FORMAT_XBGR8888, DRM_FORMAT_ARGB8888, DRM_FORMAT_XRGB8888 })
+                if (CanUpload(glDev, format))
+                    m_writeFormats.emplace(format);
+
         m_readFormats.emplace(DRM_FORMAT_ABGR8888);
         m_readFormats.emplace(DRM_FORMAT_XBGR8888);
 
